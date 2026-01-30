@@ -1,0 +1,135 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==================== */
+/* Base tipográfica RAFC */
+/* ==================== */
+@layer base {
+  /* Usa la familia definida en tailwind.config (Bebas Neue como sans) */
+  html {
+    /* Bump leve global (~17px) para mejor legibilidad */
+    font-size: 16.25px;
+    @apply font-sans tracking-wideish;
+  }
+
+  /* Bebas luce mejor con tracking un poco más cerrado en headings */
+  h1, h2, h3, h4 {
+    @apply tracking-tightish;
+  }
+
+  /* Previene overflow horizontal global */
+  html, body {
+    overflow-x: hidden;
+  }
+}
+
+/* ==================== */
+/* Ajustes globales base */
+/* ==================== */
+* {
+  box-sizing: border-box;
+}
+
+/* Normalización de tablas global */
+table {
+  @apply w-full border-collapse text-xs sm:text-sm table-fixed sm:table-auto;
+}
+
+th, td {
+  @apply border p-2 text-center;
+}
+
+/* Permitir scroll horizontal en tablas para móviles */
+.table-wrapper,
+.responsive-table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+}
+
+/* Breadcrumb responsive */
+.breadcrumb {
+  @apply text-sm flex flex-wrap items-center gap-1;
+}
+
+.breadcrumb li {
+  @apply text-ra-fucsia font-semibold;
+}
+
+
+/* ============================== */
+/* Inputs y selects (light/dark)  */
+/* ============================== */
+.input-clase-light {
+  background-color: #ffffff;
+  color: #000000;
+  border: 1px solid #d1d5db; /* gray-300 */
+}
+
+.input-clase-light::placeholder {
+  color: #6b7280; /* gray-500 */
+}
+
+.input-clase-dark {
+  background-color: #1f2937; /* gray-800 */
+  color: #ffffff;
+  border: 1px solid #4b5563; /* gray-600 */
+}
+
+.input-clase-dark::placeholder {
+  color: #9ca3af; /* gray-400 */
+}
+
+/* Estilo general para selects/inputs deshabilitados */
+select:disabled,
+input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ==================== */
+/* Big Calendar tuning  */
+/* ==================== */
+.rbc-month-row .rbc-event {
+  max-height: 20px !important;
+  overflow: hidden;
+  font-size: 0.7rem !important;
+  margin-bottom: 1px;
+  padding: 2px 4px !important;
+  border-radius: 6px;
+}
+
+.rbc-row-segment {
+  max-height: 20px !important;
+  overflow: hidden;
+}
+
+.rbc-event-content {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.custom-calendar-day {
+  transition: background-color 0.3s;
+}
+
+.custom-calendar-day:hover {
+  background-color: rgba(232, 45, 137, 0.3); /* fucsia-ra con alpha */
+  cursor: pointer;
+}
+
+/* Botones de navegación del calendario (Ant - Hoy - Sig) */
+.calendar-button {
+  @apply px-5 py-2 rounded-lg shadow transition-all duration-300 transform hover:scale-105 w-full sm:w-auto;
+}
+
+/* ==================== */
+/* Containers principales */
+/* ==================== */
+.container-main {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}

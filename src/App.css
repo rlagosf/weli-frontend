@@ -1,0 +1,169 @@
+/* ======================== */
+/* Contenedor general de la app */
+/* ======================== */
+
+#root {
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ======================== */
+/* Dashboard principal */
+/* ======================== */
+
+.dashboard-container {
+  display: flex;
+  flex-direction: row;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+/* Sidebar lateral */
+.sidebar {
+  width: 64px;
+  min-width: 64px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1rem 0;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 50;
+  transition: all 0.3s ease;
+}
+
+/* Contenido principal (lado derecho) */
+.main-content {
+  margin-left: 64px;
+  flex: 1;
+  padding: 1rem 1.5rem 4rem 1.5rem;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ======================== */
+/* Sidebar interno */
+/* ======================== */
+
+.sidebar-top {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  align-items: center;
+}
+
+.sidebar-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  align-items: center;
+  padding-bottom: 1rem;
+}
+
+.sidebar-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.sidebar-button:hover {
+  transform: scale(1.15);
+}
+
+/* ======================== */
+/* Ajustes de transición */
+/* ======================== */
+
+.transition-soft {
+  transition: all 0.3s ease;
+}
+
+/* ======================== */
+/* Responsividad avanzada */
+/* ======================== */
+
+@media (max-width: 640px) {
+  .main-content {
+    padding: 1rem 1rem 3rem 1rem;
+  }
+
+  .sidebar {
+    width: 56px;
+    min-width: 56px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sidebar-top {
+    gap: 1.5rem;
+  }
+}
+
+/* ======================== */
+/* Calendario específico para móviles */
+/* ======================== */
+
+.calendar-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  padding-bottom: 1rem;
+}
+
+/* ======================== */
+/* Logo RAFC ajustado (preservamos tus efectos) */
+/* ======================== */
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
+}
+
+/* ======================== */
+/* Logo en sidebar adaptado */
+/* ======================== */
+
+.logo-sidebar {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
