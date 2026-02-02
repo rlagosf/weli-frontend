@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Link as ScrollLink } from 'react-scroll';
-import { Link as RouterLink } from 'react-router-dom';
-import logoRAFC from '../statics/logos/logo-sin-fondo.png';
+import React, { useState, useEffect } from "react";
+import { Link as ScrollLink } from "react-scroll";
+import { Link as RouterLink } from "react-router-dom";
+
+// ✅ Logo
+import logoWeli from "../statics/logo/logo-weli-blanco.png";
 
 export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -18,11 +20,11 @@ export default function Navbar() {
   const toggleLogin = () => setIsLoginOpen((v) => !v);
 
   const navLinks = [
-    { name: 'Inicio', target: 'inicio' },
-    { name: 'Nosotros', target: 'nosotros' },
-    { name: 'Servicios', target: 'servicios' },
-    { name: 'Ubicacion', target: 'ubicacion' },
-    { name: 'Contacto', target: 'contacto' },
+    { name: "Inicio", target: "inicio" },
+    { name: "Nosotros", target: "nosotros" },
+    { name: "Servicios", target: "servicios" },
+    { name: "Ubicacion", target: "ubicacion" },
+    { name: "Contacto", target: "contacto" },
   ];
 
   useEffect(() => {
@@ -36,8 +38,8 @@ export default function Navbar() {
       { threshold: 0.1 }
     );
 
-    const hero = document.getElementById('inicio');
-    const difuminadoTrigger = document.getElementById('trigger-difuminado');
+    const hero = document.getElementById("inicio");
+    const difuminadoTrigger = document.getElementById("trigger-difuminado");
 
     if (hero) observerHero.observe(hero);
     if (difuminadoTrigger) observerDifuminado.observe(difuminadoTrigger);
@@ -65,27 +67,27 @@ export default function Navbar() {
       lastScrollY = window.scrollY;
     };
 
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   // ✅ cerrar dropdown login al click fuera (desktop + mobile)
   useEffect(() => {
     const onClick = (e) => {
-      if (!e.target.closest?.('#login-dropdown')) setIsLoginOpen(false);
+      if (!e.target.closest?.("#login-dropdown")) setIsLoginOpen(false);
     };
-    document.addEventListener('click', onClick);
-    return () => document.removeEventListener('click', onClick);
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
   }, []);
 
   const topBarBackground = scrolledPastHero
-    ? 'bg-black/80 backdrop-blur-md'
-    : 'bg-transparent backdrop-blur-md';
+    ? "bg-black/80 backdrop-blur-md"
+    : "bg-transparent backdrop-blur-md";
 
   const menuMobileBackground =
     isMenuOpen && tocaDifuminado
-      ? 'bg-[#1d0b0b] backdrop-blur-md'
-      : 'bg-transparent';
+      ? "bg-[#1d0b0b] backdrop-blur-md"
+      : "bg-transparent";
 
   // ✅ paths desde /public
   const ADMIN_ICON = "/LOGO_SIN_FONDO_ROSA.png";
@@ -94,9 +96,32 @@ export default function Navbar() {
   return (
     <nav
       className={`fixed top-0 left-0 w-full z-50 font-sans text-white transition-all duration-500 ease-in-out transform ${
-        showNavbar ? 'translate-y-0' : '-translate-y-full'
+        showNavbar ? "translate-y-0" : "-translate-y-full"
       }`}
     >
+      {/* ✅ Estilo del efecto rainbow (local al componente) */}
+      <style>{`
+        @keyframes rotate {
+          100% { transform: rotate(1turn); }
+        }
+
+        .rainbow::before {
+          content: '';
+          position: absolute;
+          z-index: -2;
+          left: -50%;
+          top: -50%;
+          width: 200%;
+          height: 200%;
+          background-position: 100% 50%;
+          background-repeat: no-repeat;
+          background-size: 50% 30%;
+          filter: blur(6px);
+          background-image: linear-gradient(#FFF);
+          animation: rotate 4s linear infinite;
+        }
+      `}</style>
+
       <div
         className={`w-full px-8 lg:px-40 py-4 flex justify-between items-center transition-all duration-500 ease-in-out ${topBarBackground}`}
       >
@@ -112,7 +137,7 @@ export default function Navbar() {
               setIsLoginOpen(false);
             }}
           >
-            <img src={logoRAFC} alt="Real Academy FC" className="h-12 w-auto" />
+            <img src={logoWeli} alt="WELI" className="h-5 w-auto" />
           </ScrollLink>
 
           <div className="hidden lg:flex space-x-5 text-xl">
@@ -171,13 +196,16 @@ export default function Navbar() {
 
           {/* ✅ Dropdown login DESKTOP */}
           <li className="relative" id="login-dropdown">
-            <button
-              type="button"
-              onClick={toggleLogin}
-              className="hover:text-[#e82d89] transition"
-            >
-              Iniciar sesión
-            </button>
+            {/* ✅ Botón con efecto rainbow */}
+            <div className="rainbow relative z-0 bg-white/15 overflow-hidden p-0.5 flex items-center justify-center rounded-full hover:scale-105 transition duration-300 active:scale-100">
+              <button
+                type="button"
+                onClick={toggleLogin}
+                className="px-6 text-sm py-2 text-white rounded-full font-medium bg-gray-900/80 backdrop-blur hover:text-[#e82d89] transition"
+              >
+                Iniciar sesión
+              </button>
+            </div>
 
             {isLoginOpen && (
               <div className="absolute right-0 mt-3 w-64 rounded-xl bg-black/90 backdrop-blur-md border border-white/10 shadow-xl overflow-hidden">
@@ -224,9 +252,19 @@ export default function Navbar() {
             viewBox="0 0 24 24"
           >
             {isMenuOpen ? (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             ) : (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 8h16M4 16h16"
+              />
             )}
           </svg>
         </button>
@@ -236,7 +274,7 @@ export default function Navbar() {
       {isMenuOpen && (
         <div
           className={`md:hidden px-4 py-4 space-y-4 text-sm font-medium transition-all duration-300 ${menuMobileBackground}`}
-          id="login-dropdown" // ✅ CLAVE: ahora el click fuera no lo mata
+          id="login-dropdown"
         >
           {navLinks.map(({ name, target }) => (
             <ScrollLink
@@ -253,15 +291,17 @@ export default function Navbar() {
             </ScrollLink>
           ))}
 
-          {/* ✅ Login móvil con 2 opciones (ahora sí despliega) */}
+          {/* ✅ Login móvil con efecto rainbow */}
           <div className="space-y-3">
-            <button
-              type="button"
-              onClick={() => setIsLoginOpen((v) => !v)}
-              className="w-full text-left hover:text-[#e82d89]"
-            >
-              Iniciar Sesión
-            </button>
+            <div className="rainbow relative z-0 bg-white/15 overflow-hidden p-0.5 flex items-center justify-center rounded-full hover:scale-105 transition duration-300 active:scale-100">
+              <button
+                type="button"
+                onClick={() => setIsLoginOpen((v) => !v)}
+                className="w-full px-6 text-sm py-3 text-white rounded-full font-medium bg-gray-900/80 backdrop-blur hover:text-[#e82d89] transition"
+              >
+                Iniciar Sesión
+              </button>
+            </div>
 
             {isLoginOpen && (
               <div className="space-y-2 pl-3 border-l border-white/20">
@@ -301,16 +341,36 @@ export default function Navbar() {
           </div>
 
           <div className="flex justify-center pt-4 space-x-5 text-xl border-t border-white/20 mt-4">
-            <a href="https://wa.me/56967438184" target="_blank" rel="noopener noreferrer" className="hover:text-green-400 transition">
+            <a
+              href="https://wa.me/56967438184"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-green-400 transition"
+            >
               <i className="fab fa-whatsapp"></i>
             </a>
-            <a href="https://www.facebook.com/realacademyfc" target="_blank" rel="noopener noreferrer" className="hover:text-blue-500 transition">
+            <a
+              href="https://www.facebook.com/realacademyfc"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-blue-500 transition"
+            >
               <i className="fab fa-facebook-f"></i>
             </a>
-            <a href="https://www.instagram.com/realacademyfc" target="_blank" rel="noopener noreferrer" className="hover:text-pink-400 transition">
+            <a
+              href="https://www.instagram.com/realacademyfc"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-pink-400 transition"
+            >
               <i className="fab fa-instagram"></i>
             </a>
-            <a href="https://www.linkedin.com/company/realacademyfc" target="_blank" rel="noopener noreferrer" className="hover:text-blue-300 transition">
+            <a
+              href="https://www.linkedin.com/company/realacademyfc"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-blue-300 transition"
+            >
               <i className="fab fa-linkedin-in"></i>
             </a>
           </div>

@@ -82,9 +82,6 @@ function Home() {
       <section id="servicios" className="scroll-mt-16">
         <Servicios />
       </section>
-      <section id="ubicacion" className="scroll-mt-16">
-        <Ubicacion />
-      </section>
       <section id="contacto" className="scroll-mt-16">
         <Contacto />
       </section>

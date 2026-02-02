@@ -1,155 +1,107 @@
 import { motion } from "framer-motion";
-import { FileText } from "lucide-react";
+import { MessageCircle, Mail } from "lucide-react";
 
 const NUMERO_WHATSAPP = "56967438184";
+
 const MENSAJE_WHATSAPP =
-  "Hola, me gustaría recibir información sobre cupos, horarios y valores en Real Academy FC. ¿Podemos coordinar una evaluación inicial?";
+  "Hola, me gustaría solicitar una DEMO de WELI. Me interesa gestionar jugadores, pagos/estados de cuenta, asistencia, agenda y estadísticas. ¿Podemos coordinar una breve reunión y ver planes?";
 
 const WHATSAPP_LINK = `https://wa.me/${NUMERO_WHATSAPP}?text=${encodeURIComponent(
   MENSAJE_WHATSAPP
 )}`;
 
-// Variantes reutilizables (fuera del componente para no recrearlas)
-const fadeUp = {
-  hidden: { opacity: 0, y: 24 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
+const SECTION_VARIANTS = {
+  hidden: { opacity: 0, y: 40 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.7, ease: "easeOut" } },
 };
-
-const fadeTiltLeft = {
-  hidden: { opacity: 0, rotate: -4, y: -6 },
-  visible: { opacity: 1, rotate: -2, y: 0, transition: { duration: 0.6 } },
-};
-
-const fadeTiltRight = {
-  hidden: { opacity: 0, rotate: 2, y: 8 },
-  visible: { opacity: 1, rotate: 1, y: 0, transition: { duration: 0.6, delay: 0.08 } },
-};
-
-const EQUIPAMIENTO = [
-  { src: "CONTACTO_BOTELLA.png", alt: "Botella deportiva RAFC", label: "Botella deportiva" },
-  { src: "CONTACTO_MORRAL.png", alt: "Morral RAFC", label: "Morral oficial" },
-  { src: "CONTACTO_UNIFORME_ENTRENAMIENTO.png", alt: "Uniforme de entrenamiento RAFC", label: "Uniforme de entrenamiento" },
-  { src: "CONTACTO_UNIFORME_OFICIAL.png", alt: "Uniforme oficial RAFC", label: "Uniforme oficial" },
-];
 
 export default function Contacto() {
   return (
-    <section id="contacto" className="min-h-[80vh] text-white flex items-center justify-center font-sans">
-      <div className="w-full max-w-6xl px-6 py-16 mx-auto flex flex-col items-center text-center">
-        {/* Imagen principal */}
-        <motion.div
-          variants={fadeUp}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.3 }}
-          className="w-full flex justify-center mb-8"
-        >
-          <img
-            src="PROHIBIDO_RENDIRSE.png"
-            alt="Prohibido rendirse — Real Academy FC"
-            loading="eager"
-            className="w-full max-w-5xl md:max-w-3xl h-auto object-contain drop-shadow-[0_10px_25px_rgba(232,45,137,0.25)]"
-          />
-        </motion.div>
+    <section
+      id="contacto"
+      className="text-white font-sans py-16 px-6 bg-transparent flex items-center justify-center"
+    >
+      {/* ✅ Animación aplicada a la tarjeta (más confiable en scroll) */}
+      <motion.div
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: false, amount: 0.25, margin: "-80px" }}
+        variants={SECTION_VARIANTS}
+        className="
+          w-full max-w-4xl mx-auto overflow-hidden rounded-2xl
+          bg-white/10 backdrop-blur-md border border-white/10
+          shadow-[0_0_30px_rgba(0,0,0,0.35)]
+        "
+      >
+        <div className="md:grid md:grid-cols-2">
+          {/* Imagen izquierda (solo desktop) */}
+          <div className="hidden md:block relative">
+            <img
+              src="/image/demo-3.jpg"
+              alt="WELI - Gestión deportiva inteligente"
+              className="w-full h-full object-cover"
+              loading="lazy"
+              decoding="async"
+            />
+            <div className="absolute inset-0 bg-black/30" />
+          </div>
 
-        {/* Letreros inclinados */}
-        <div className="relative mb-10 select-none">
-          <motion.div
-            variants={fadeTiltLeft}
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, amount: 0.4 }}
-            className="inline-block -rotate-2"
-          >
-            <span className="block text-2xl md:text-3xl font-extrabold uppercase tracking-wider px-6 py-3 rounded leading-tight backdrop-blur-sm">
-              <span className="text-[#e82d89] drop-shadow-[0_0_15px_#e82d89aa]">
-                Vive la experiencia
-              </span>
-            </span>
-          </motion.div>
+          {/* Contenido derecha */}
+          <div className="relative flex items-center justify-center">
+            <div className="w-full text-center px-7 sm:px-10 md:px-12 py-14 md:py-16">
+              <h2 className="text-3xl md:text-4xl font-bold leading-tight">
+                Lleva tu academia a otro nivel con{" "}
+                <span className="text-[#e82d89] drop-shadow-[0_0_10px_#e82d89aa]">
+                  WELI
+                </span>
+              </h2>
 
-          <motion.div
-            variants={fadeTiltRight}
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, amount: 0.4 }}
-            className="mt-3 inline-block rotate-1"
-          >
-            <span className="block text-xl md:text-2xl font-black uppercase tracking-widest px-6 py-3 rounded">
-              ¡Reserva tu cupo!
-            </span>
-          </motion.div>
-        </div>
+              <p className="mt-4 text-gray-200/90 text-sm md:text-base leading-relaxed max-w-md mx-auto">
+                Gestiona jugadores, pagos y estados de cuenta, asistencia, agenda y
+                estadísticas en un solo lugar. Orden para el staff, claridad para
+                administración y continuidad para el proceso del jugador.
+              </p>
 
-        {/* Botón WhatsApp */}
-        <motion.a
-          variants={fadeUp}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: "-80px" }}
-          href={WHATSAPP_LINK}
-          target="_blank"
-          rel="noopener noreferrer"
-          whileHover={{ scale: 1.06 }}
-          whileTap={{ scale: 0.96 }}
-          aria-label="Contactar por WhatsApp"
-          className="group inline-flex items-center gap-3 rounded-full px-6 py-3 text-lg font-bold uppercase tracking-wide
-                     bg-[#25D366] hover:bg-[#1ebe57] text-white shadow-lg transition"
-        >
-          <i className="fab fa-whatsapp text-2xl"></i>
-          <span className="text-base md:text-lg">
-            Escríbenos por <span className="font-extrabold">WhatsApp</span>
-          </span>
-        </motion.a>
+              {/* CTAs */}
+              <div className="mt-7 flex flex-col items-center gap-3">
+                <a
+                  href={WHATSAPP_LINK}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="
+                    inline-flex items-center justify-center gap-2
+                    rounded-full px-8 py-3 text-sm md:text-base font-semibold
+                    bg-[#e82d89] hover:bg-[#c9206e] transition
+                    shadow-lg hover:shadow-[0_0_25px_rgba(232,45,137,0.45)]
+                    w-full sm:w-auto
+                  "
+                >
+                  <MessageCircle className="w-5 h-5" />
+                  Solicitar demo por WhatsApp
+                </a>
 
-        {/* Equipamiento */}
-        <div className="w-full mt-16">
-          <div className="mb-6">
-            <div className="inline-block -rotate-1">
-              <span className="inline-block px-6 py-3 rounded backdrop-blur-sm text-lg md:text-xl font-bold uppercase tracking-wide">
-                Al ser parte de{" "}
-                <span className="text-[#e82d89]">Real Academy FC</span>, tendrás este equipamiento:
-              </span>
+                <a
+                  href="mailto:contacto@tudominio.cl?subject=Solicitud%20DEMO%20WELI&body=Hola,%20quisiera%20solicitar%20una%20demo%20de%20WELI.%20Me%20interesa%20conocer%20planes%20y%20puesta%20en%20marcha."
+                  className="
+                    inline-flex items-center justify-center gap-2
+                    px-6 py-3 text-sm md:text-base font-medium
+                    text-white/90 hover:text-white transition
+                    w-full sm:w-auto
+                  "
+                >
+                  <Mail className="w-5 h-5 text-white/80" />
+                  Prefiero que me contacten por correo
+                </a>
+
+                <p className="text-xs text-white/60 mt-2 max-w-md">
+                  Te responderemos con opciones de implementación y un recorrido por
+                  módulos: administración, portal apoderados, pagos y métricas.
+                </p>
+              </div>
             </div>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {EQUIPAMIENTO.map((item, i) => (
-              <motion.article
-                key={item.src}
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-80px" }}
-                transition={{ duration: 0.4, delay: i * 0.05 }}
-                className="rounded-xl backdrop-blur-sm flex flex-col items-center text-center p-4"
-              >
-                <img
-                  src={item.src}
-                  alt={item.alt}
-                  loading="lazy"
-                  className="w-full h-48 object-contain transition-all duration-300 drop-shadow-[0_10px_25px_rgba(232,45,137,0.35)] hover:translate-y-[-2px] hover:drop-shadow-[0_14px_28px_rgba(232,45,137,0.45)]"
-                />
-                <div className="mt-4">
-                  <h3 className="text-lg font-semibold drop-shadow-[0_0_8px_#000000aa]">
-                    {item.label}
-                  </h3>
-                </div>
-              </motion.article>
-            ))}
-          </div>
         </div>
-
-        {/* Reglamento */}
-        <a
-          href="/REGLAMENTO_INTERNO.pdf"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-12 flex flex-col items-center justify-center text-white text-xl font-semibold hover:text-[#e82d89] transition"
-        >
-          <span className="mb-6">Mira nuestro reglamento interno</span>
-          <FileText size={100} className="text-[#e82d89] transition duration-300 hover:scale-105" />
-        </a>
-      </div>
+      </motion.div>
     </section>
   );
 }
