@@ -1,9 +1,14 @@
+// src/components/Navbar.jsx
 import React, { useState, useEffect } from "react";
 import { Link as ScrollLink } from "react-scroll";
 import { Link as RouterLink } from "react-router-dom";
 
-// ✅ Logo
+// ✅ Logo principal
 import logoWeli from "../statics/logo/logo-weli-blanco.png";
+
+// ✅ Logos accesos (desde /src/statics/logo)
+import logoAdmin from "../statics/logo/logo-w-blanco.png";
+import logoApoderado from "../statics/logo/logo-w-cafe.png";
 
 export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -13,7 +18,7 @@ export default function Navbar() {
   const [showNavbar, setShowNavbar] = useState(true);
 
   const toggleMenu = () => {
-    setIsMenuOpen(!isMenuOpen);
+    setIsMenuOpen((v) => !v);
     setIsLoginOpen(false);
   };
 
@@ -23,7 +28,7 @@ export default function Navbar() {
     { name: "Inicio", target: "inicio" },
     { name: "Nosotros", target: "nosotros" },
     { name: "Servicios", target: "servicios" },
-    { name: "Ubicacion", target: "ubicacion" },
+    { name: "Ubicación", target: "ubicacion" },
     { name: "Contacto", target: "contacto" },
   ];
 
@@ -55,6 +60,7 @@ export default function Navbar() {
 
     const handleScroll = () => {
       const isMobile = window.innerWidth < 768;
+
       if (!isMobile) {
         setShowNavbar(true);
         return;
@@ -80,18 +86,15 @@ export default function Navbar() {
     return () => document.removeEventListener("click", onClick);
   }, []);
 
+  // ✅ Barra superior: cuando baja, usa marrón cálido (no negro puro)
   const topBarBackground = scrolledPastHero
-    ? "bg-black/80 backdrop-blur-md"
+    ? "bg-ra-marron/80 backdrop-blur-md"
     : "bg-transparent backdrop-blur-md";
 
   const menuMobileBackground =
     isMenuOpen && tocaDifuminado
-      ? "bg-[#1d0b0b] backdrop-blur-md"
+      ? "bg-ra-marron/90 backdrop-blur-md"
       : "bg-transparent";
-
-  // ✅ paths desde /public
-  const ADMIN_ICON = "/LOGO_SIN_FONDO_ROSA.png";
-  const APODERADO_ICON = "/logo-en-blanco.png";
 
   return (
     <nav
@@ -99,26 +102,23 @@ export default function Navbar() {
         showNavbar ? "translate-y-0" : "-translate-y-full"
       }`}
     >
-      {/* ✅ Estilo del efecto rainbow (local al componente) */}
+      {/* ✅ Estilo rainbow (scope: solo clase .rainbow) */}
       <style>{`
-        @keyframes rotate {
-          100% { transform: rotate(1turn); }
-        }
-
-        .rainbow::before {
-          content: '';
-          position: absolute;
-          z-index: -2;
-          left: -50%;
-          top: -50%;
-          width: 200%;
-          height: 200%;
-          background-position: 100% 50%;
-          background-repeat: no-repeat;
-          background-size: 50% 30%;
-          filter: blur(6px);
+        @keyframes weli-rotate { 100% { transform: rotate(1turn); } }
+        .rainbow::before{
+          content:'';
+          position:absolute;
+          z-index:-2;
+          left:-50%;
+          top:-50%;
+          width:200%;
+          height:200%;
+          background-position:100% 50%;
+          background-repeat:no-repeat;
+          background-size:50% 30%;
+          filter:blur(6px);
           background-image: linear-gradient(#FFF);
-          animation: rotate 4s linear infinite;
+          animation:weli-rotate 4s linear infinite;
         }
       `}</style>
 
@@ -137,46 +137,52 @@ export default function Navbar() {
               setIsLoginOpen(false);
             }}
           >
-            <img src={logoWeli} alt="WELI" className="h-5 w-auto" />
+            <img src={logoWeli} alt="WELI" className="h-6 md:h-7 w-auto" />
           </ScrollLink>
 
+          {/* Redes (Desktop) - colores de marca se mantienen */}
           <div className="hidden lg:flex space-x-5 text-xl">
             <a
               href="https://wa.me/56967438184"
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-green-400 transition"
+              aria-label="WhatsApp"
+              title="WhatsApp"
             >
-              <i className="fab fa-whatsapp"></i>
+              <i className="fab fa-whatsapp" />
             </a>
+
             <a
-              href="https://www.facebook.com/realacademyfc"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="#"
               className="hover:text-blue-500 transition"
+              aria-label="Facebook"
+              title="Facebook"
             >
-              <i className="fab fa-facebook-f"></i>
+              <i className="fab fa-facebook-f" />
             </a>
+
             <a
-              href="https://www.instagram.com/realacademyfc"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="#"
               className="hover:text-pink-400 transition"
+              aria-label="Instagram"
+              title="Instagram"
             >
-              <i className="fab fa-instagram"></i>
+              <i className="fab fa-instagram" />
             </a>
+
             <a
-              href="https://www.linkedin.com/company/realacademyfc"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="#"
               className="hover:text-blue-300 transition"
+              aria-label="LinkedIn"
+              title="LinkedIn"
             >
-              <i className="fab fa-linkedin-in"></i>
+              <i className="fab fa-linkedin-in" />
             </a>
           </div>
         </div>
 
-        {/* 🔹 Links menú desktop */}
+        {/* Links menú desktop */}
         <ul className="hidden md:flex space-x-6 text-sm font-medium items-center">
           {navLinks.map(({ name, target }) => (
             <li key={target}>
@@ -186,7 +192,7 @@ export default function Navbar() {
                 duration={600}
                 offset={-64}
                 spy={true}
-                className="cursor-pointer hover:text-[#e82d89] transition"
+                className="cursor-pointer text-white/90 hover:text-ra-sand transition"
                 onClick={() => setIsLoginOpen(false)}
               >
                 {name}
@@ -194,32 +200,35 @@ export default function Navbar() {
             </li>
           ))}
 
-          {/* ✅ Dropdown login DESKTOP */}
+          {/* Dropdown login DESKTOP */}
           <li className="relative" id="login-dropdown">
-            {/* ✅ Botón con efecto rainbow */}
             <div className="rainbow relative z-0 bg-white/15 overflow-hidden p-0.5 flex items-center justify-center rounded-full hover:scale-105 transition duration-300 active:scale-100">
               <button
                 type="button"
                 onClick={toggleLogin}
-                className="px-6 text-sm py-2 text-white rounded-full font-medium bg-gray-900/80 backdrop-blur hover:text-[#e82d89] transition"
+                className="
+                  px-6 text-sm py-2 rounded-full font-medium
+                  text-white bg-gray-900/80 backdrop-blur
+                  hover:text-ra-sand transition
+                "
               >
                 Iniciar sesión
               </button>
             </div>
 
             {isLoginOpen && (
-              <div className="absolute right-0 mt-3 w-64 rounded-xl bg-black/90 backdrop-blur-md border border-white/10 shadow-xl overflow-hidden">
+              <div className="absolute right-0 mt-3 w-64 rounded-xl bg-ra-marron/90 backdrop-blur-md border border-white/10 shadow-xl overflow-hidden">
                 <RouterLink
                   to="/login"
                   className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-white/10 transition"
                   onClick={() => setIsLoginOpen(false)}
                 >
                   <img
-                    src={ADMIN_ICON}
-                    alt="Admin"
+                    src={logoAdmin}
+                    alt="Panel Administración"
                     className="w-6 h-6 object-contain"
                   />
-                  <span>Panel Administración</span>
+                  <span className="text-white/90">Panel Administración</span>
                 </RouterLink>
 
                 <RouterLink
@@ -228,18 +237,21 @@ export default function Navbar() {
                   onClick={() => setIsLoginOpen(false)}
                 >
                   <img
-                    src={APODERADO_ICON}
-                    alt="Apoderados"
+                    src={logoApoderado}
+                    alt="Portal Apoderados"
                     className="w-6 h-6 object-contain"
                   />
-                  <span>Portal Apoderados</span>
+                  <span className="text-white/90">Portal Apoderados</span>
                 </RouterLink>
+
+                {/* mini acento WELI */}
+                <div className="h-[2px] bg-gradient-to-r from-ra-fucsia via-ra-terracotta to-ra-sand opacity-80" />
               </div>
             )}
           </li>
         </ul>
 
-        {/* 🔹 Botón hamburguesa */}
+        {/* Botón hamburguesa */}
         <button
           onClick={toggleMenu}
           aria-label="Menu"
@@ -270,7 +282,7 @@ export default function Navbar() {
         </button>
       </div>
 
-      {/* 🔸 Menú móvil */}
+      {/* Menú móvil */}
       {isMenuOpen && (
         <div
           className={`md:hidden px-4 py-4 space-y-4 text-sm font-medium transition-all duration-300 ${menuMobileBackground}`}
@@ -285,21 +297,25 @@ export default function Navbar() {
               offset={-64}
               spy={true}
               onClick={toggleMenu}
-              className="block cursor-pointer hover:text-[#e82d89]"
+              className="block cursor-pointer text-white/90 hover:text-ra-sand transition"
             >
               {name}
             </ScrollLink>
           ))}
 
-          {/* ✅ Login móvil con efecto rainbow */}
+          {/* Login móvil con efecto rainbow */}
           <div className="space-y-3">
             <div className="rainbow relative z-0 bg-white/15 overflow-hidden p-0.5 flex items-center justify-center rounded-full hover:scale-105 transition duration-300 active:scale-100">
               <button
                 type="button"
                 onClick={() => setIsLoginOpen((v) => !v)}
-                className="w-full px-6 text-sm py-3 text-white rounded-full font-medium bg-gray-900/80 backdrop-blur hover:text-[#e82d89] transition"
+                className="
+                  w-full px-6 text-sm py-3 rounded-full font-medium
+                  text-white bg-gray-900/80 backdrop-blur
+                  hover:text-ra-sand transition
+                "
               >
-                Iniciar Sesión
+                Iniciar sesión
               </button>
             </div>
 
@@ -307,15 +323,15 @@ export default function Navbar() {
               <div className="space-y-2 pl-3 border-l border-white/20">
                 <RouterLink
                   to="/login"
-                  className="flex items-center gap-3 py-2 hover:text-[#e82d89]"
+                  className="flex items-center gap-3 py-2 text-white/90 hover:text-ra-sand transition"
                   onClick={() => {
                     setIsLoginOpen(false);
                     toggleMenu();
                   }}
                 >
                   <img
-                    src={ADMIN_ICON}
-                    alt="Admin"
+                    src={logoAdmin}
+                    alt="Panel Administración"
                     className="w-6 h-6 object-contain"
                   />
                   <span>Panel Administración</span>
@@ -323,15 +339,15 @@ export default function Navbar() {
 
                 <RouterLink
                   to="/login-apoderado"
-                  className="flex items-center gap-3 py-2 hover:text-[#e82d89]"
+                  className="flex items-center gap-3 py-2 text-white/90 hover:text-ra-sand transition"
                   onClick={() => {
                     setIsLoginOpen(false);
                     toggleMenu();
                   }}
                 >
                   <img
-                    src={APODERADO_ICON}
-                    alt="Apoderados"
+                    src={logoApoderado}
+                    alt="Portal Apoderados"
                     className="w-6 h-6 object-contain"
                   />
                   <span>Portal Apoderados</span>
@@ -340,38 +356,26 @@ export default function Navbar() {
             )}
           </div>
 
+          {/* Redes móvil - colores de marca se mantienen */}
           <div className="flex justify-center pt-4 space-x-5 text-xl border-t border-white/20 mt-4">
             <a
               href="https://wa.me/56967438184"
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-green-400 transition"
+              aria-label="WhatsApp"
+              title="WhatsApp"
             >
-              <i className="fab fa-whatsapp"></i>
+              <i className="fab fa-whatsapp" />
             </a>
-            <a
-              href="https://www.facebook.com/realacademyfc"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-blue-500 transition"
-            >
-              <i className="fab fa-facebook-f"></i>
+            <a href="#" className="hover:text-blue-500 transition" aria-label="Facebook" title="Facebook">
+              <i className="fab fa-facebook-f" />
             </a>
-            <a
-              href="https://www.instagram.com/realacademyfc"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-pink-400 transition"
-            >
-              <i className="fab fa-instagram"></i>
+            <a href="#" className="hover:text-pink-400 transition" aria-label="Instagram" title="Instagram">
+              <i className="fab fa-instagram" />
             </a>
-            <a
-              href="https://www.linkedin.com/company/realacademyfc"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-blue-300 transition"
-            >
-              <i className="fab fa-linkedin-in"></i>
+            <a href="#" className="hover:text-blue-300 transition" aria-label="LinkedIn" title="LinkedIn">
+              <i className="fab fa-linkedin-in" />
             </a>
           </div>
         </div>

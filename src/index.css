@@ -3,23 +3,23 @@
 @tailwind utilities;
 
 /* ==================== */
-/* Base tipográfica RAFC */
+/* Base tipográfica WELI */
 /* ==================== */
 @layer base {
-  /* Usa la familia definida en tailwind.config (Bebas Neue como sans) */
   html {
-    /* Bump leve global (~17px) para mejor legibilidad */
     font-size: 16.25px;
     @apply font-sans tracking-wideish;
   }
 
-  /* Bebas luce mejor con tracking un poco más cerrado en headings */
-  h1, h2, h3, h4 {
+  h1,
+  h2,
+  h3,
+  h4 {
     @apply tracking-tightish;
   }
 
-  /* Previene overflow horizontal global */
-  html, body {
+  html,
+  body {
     overflow-x: hidden;
   }
 }
@@ -36,7 +36,8 @@ table {
   @apply w-full border-collapse text-xs sm:text-sm table-fixed sm:table-auto;
 }
 
-th, td {
+th,
+td {
   @apply border p-2 text-center;
 }
 
@@ -52,10 +53,10 @@ th, td {
   @apply text-sm flex flex-wrap items-center gap-1;
 }
 
+/* ✅ Acento WELI usando alias ra.fucsia (#aa5013) */
 .breadcrumb li {
   @apply text-ra-fucsia font-semibold;
 }
-
 
 /* ============================== */
 /* Inputs y selects (light/dark)  */
@@ -115,7 +116,8 @@ input:disabled {
 }
 
 .custom-calendar-day:hover {
-  background-color: rgba(232, 45, 137, 0.3); /* fucsia-ra con alpha */
+  /* ✅ cobre WELI #aa5013 => rgba(170,80,19,0.22) */
+  background-color: rgba(170, 80, 19, 0.22);
   cursor: pointer;
 }
 

@@ -40,32 +40,47 @@ export default function Nosotros() {
       variants={SECTION_VARIANTS}
       className="text-white font-sans px-6 pt-16 pb-12 flex flex-col items-center"
     >
+      {/* Frase destacada (WELI) */}
       <div className="max-w-4xl text-center mb-10">
-        <p className="text-2xl md:text-3xl font-bold italic text-[#e82d89] transform rotate-[-2deg] scale-105 drop-shadow-[0_0_15px_#e82d89aa]">
+        <p className="text-2xl md:text-3xl font-bold italic text-ra-sand transform rotate-[-2deg] scale-105 drop-shadow-[0_0_14px_rgba(170,80,19,0.28)]">
           “El talento se demuestra. La constancia se registra.”
         </p>
       </div>
 
+      {/* Tarjetas */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-6xl w-full items-stretch">
         {TARJETAS.map((t, i) => (
-          <motion.div
+          <motion.article
             key={t.titulo}
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.1 }}
             transition={{ duration: 0.6, delay: i * 0.1 }}
-            className="relative p-4 md:p-6 rounded-2xl flex flex-col justify-start"
+            className="
+              relative rounded-2xl p-5 md:p-7 overflow-hidden
+              bg-white/5 backdrop-blur-lg
+              border border-ra-fucsia/20
+              shadow-[0_0_26px_rgba(0,0,0,0.35)]
+              hover:shadow-[0_0_28px_rgba(170,80,19,0.16)]
+              transition-all duration-300
+            "
           >
+            {/* Glow sutil WELI */}
+            <div className="absolute -top-24 -right-24 w-56 h-56 rounded-full bg-ra-terracotta/15 blur-3xl pointer-events-none" />
+
             <h3
-              className={`text-2xl font-bold mb-4 uppercase tracking-wide ${t.align}`}
+              className={`text-2xl font-bold mb-4 uppercase tracking-wide text-ra-sand ${t.align}`}
             >
               {t.titulo}
             </h3>
 
-            <p className="text-gray-200 text-sm md:text-base leading-relaxed text-justify whitespace-pre-line">
+            <p className="text-white/70 text-sm md:text-base leading-relaxed text-justify whitespace-pre-line">
               {t.texto}
             </p>
-          </motion.div>
+
+            {/* Línea inferior de acento (opcional, queda pro) */}
+            <div className="mt-6 h-[2px] w-full bg-gradient-to-r from-ra-fucsia via-ra-terracotta to-ra-sand opacity-70" />
+          </motion.article>
         ))}
       </div>
     </motion.section>

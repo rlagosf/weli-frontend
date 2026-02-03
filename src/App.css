@@ -70,11 +70,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s ease;
+  transition: transform 0.3s ease;
 }
 
 .sidebar-button:hover {
-  transform: scale(1.15);
+  transform: scale(1.12);
 }
 
 /* ======================== */
@@ -117,7 +117,7 @@
 }
 
 /* ======================== */
-/* Logo RAFC ajustado (preservamos tus efectos) */
+/* Logo (neutral, sin colores “demo” de Vite) */
 /* ======================== */
 
 .logo {
@@ -127,14 +127,16 @@
   transition: filter 300ms;
 }
 
+/* ✅ Eliminamos el azul/púrpura demo */
 .logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
+  filter: none;
 }
 
 .logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+  filter: none;
 }
 
+/* ✅ Si no lo usas, igual no molesta */
 @keyframes logo-spin {
   from {
     transform: rotate(0deg);
@@ -144,9 +146,10 @@
   }
 }
 
+/* ✅ No animar logos por defecto (evita “estilo demo”) */
 @media (prefers-reduced-motion: no-preference) {
   a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
+    animation: none;
   }
 }
 

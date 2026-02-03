@@ -1,3 +1,4 @@
+// src/pages/Servicios.jsx
 import { motion } from "framer-motion";
 import {
   LayoutDashboard,
@@ -68,10 +69,10 @@ export default function Servicios() {
     >
       {/* Header */}
       <div className="max-w-4xl text-center mb-10">
-        <h2 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight text-[#e82d89]">
-          Características de WELI
+        <h2 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight text-ra-sand drop-shadow-[0_0_12px_rgba(170,80,19,0.25)]">
+          ¿Qué ofrece WELI?
         </h2>
-        <p className="text-gray-300 text-lg">
+        <p className="text-white/70 text-lg">
           Gestión deportiva inteligente: orden, trazabilidad y rendimiento para
           elevar el estándar del fútbol amateur.
         </p>
@@ -88,39 +89,49 @@ export default function Servicios() {
             transition={{ duration: 0.6, delay: i * 0.08 }}
             className="
               relative rounded-2xl p-6 overflow-hidden
-              bg-marron-ra/80
-              border border-white/10
-              shadow-lg
-              hover:shadow-[0_0_25px_rgba(232,45,137,0.45)]
+              bg-white/5 backdrop-blur-lg
+              border border-ra-fucsia/20
+              shadow-[0_0_26px_rgba(0,0,0,0.35)]
+              hover:shadow-[0_0_28px_rgba(170,80,19,0.18)]
               transition-all duration-300
+              flex flex-col
+              min-h-[260px]
             "
           >
-            {/* Glow sutil */}
-            <div className="absolute -top-24 -right-24 w-56 h-56 rounded-full bg-[#e82d89]/10 blur-3xl pointer-events-none" />
+            {/* Glow sutil WELI */}
+            <div className="absolute -top-24 -right-24 w-56 h-56 rounded-full bg-ra-fucsia/15 blur-3xl pointer-events-none" />
 
-            <div className="flex items-start gap-4">
-              <div
-                className="
-                  flex items-center justify-center
-                  w-12 h-12 rounded-xl
-                  bg-black/30 border border-[#e82d89]/40
-                  shadow-[0_0_20px_rgba(232,45,137,0.15)]
-                  shrink-0
-                "
-                aria-hidden="true"
-              >
-                <f.Icon className="w-6 h-6 text-[#e82d89]" />
-              </div>
+            {/* Contenido (flex-1 para empujar la línea abajo) */}
+            <div className="flex-1">
+              <div className="flex items-start gap-4">
+                <div
+                  className="
+                    flex items-center justify-center
+                    w-12 h-12 rounded-xl
+                    bg-black/20
+                    border border-ra-fucsia/30
+                    shadow-[0_0_18px_rgba(170,80,19,0.12)]
+                    shrink-0
+                  "
+                  aria-hidden="true"
+                >
+                  <f.Icon className="w-6 h-6 text-ra-sand" />
+                </div>
 
-              <div className="flex-1">
-                <h3 className="text-xl font-bold text-[#e82d89] mb-2">
-                  {f.titulo}
-                </h3>
-                <p className="text-gray-300 text-sm md:text-base leading-relaxed text-justify">
-                  {f.descripcion}
-                </p>
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold text-ra-sand mb-2">
+                    {f.titulo}
+                  </h3>
+
+                  <p className="text-white/70 text-sm md:text-base leading-relaxed text-justify">
+                    {f.descripcion}
+                  </p>
+                </div>
               </div>
             </div>
+
+            {/* Línea inferior SIEMPRE alineada */}
+            <div className="mt-6 h-[2px] w-full bg-gradient-to-r from-ra-fucsia via-ra-terracotta to-ra-sand opacity-75" />
           </motion.div>
         ))}
       </div>

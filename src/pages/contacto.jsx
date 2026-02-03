@@ -1,3 +1,4 @@
+// src/pages/contacto.jsx  (o donde tengas este componente)
 import { motion } from "framer-motion";
 import { MessageCircle, Mail } from "lucide-react";
 
@@ -21,7 +22,6 @@ export default function Contacto() {
       id="contacto"
       className="text-white font-sans py-16 px-6 bg-transparent flex items-center justify-center"
     >
-      {/* ✅ Animación aplicada a la tarjeta (más confiable en scroll) */}
       <motion.div
         initial="hidden"
         whileInView="visible"
@@ -51,19 +51,20 @@ export default function Contacto() {
             <div className="w-full text-center px-7 sm:px-10 md:px-12 py-14 md:py-16">
               <h2 className="text-3xl md:text-4xl font-bold leading-tight">
                 Lleva tu academia a otro nivel con{" "}
-                <span className="text-[#e82d89] drop-shadow-[0_0_10px_#e82d89aa]">
+                <span className="text-ra-fucsia drop-shadow-[0_0_10px_rgba(170,80,19,0.65)]">
                   WELI
                 </span>
               </h2>
 
               <p className="mt-4 text-gray-200/90 text-sm md:text-base leading-relaxed max-w-md mx-auto">
-                Gestiona jugadores, pagos y estados de cuenta, asistencia, agenda y
-                estadísticas en un solo lugar. Orden para el staff, claridad para
+                Gestiona jugadores, pagos y estados de cuenta, asistencia, agenda
+                y estadísticas en un solo lugar. Orden para el staff, claridad para
                 administración y continuidad para el proceso del jugador.
               </p>
 
               {/* CTAs */}
               <div className="mt-7 flex flex-col items-center gap-3">
+                {/* ✅ WhatsApp: verde de marca (no RAFC) */}
                 <a
                   href={WHATSAPP_LINK}
                   target="_blank"
@@ -71,8 +72,8 @@ export default function Contacto() {
                   className="
                     inline-flex items-center justify-center gap-2
                     rounded-full px-8 py-3 text-sm md:text-base font-semibold
-                    bg-[#e82d89] hover:bg-[#c9206e] transition
-                    shadow-lg hover:shadow-[0_0_25px_rgba(232,45,137,0.45)]
+                    bg-[#25D366] hover:bg-[#1ebe57] transition
+                    shadow-lg hover:shadow-[0_0_25px_rgba(37,211,102,0.45)]
                     w-full sm:w-auto
                   "
                 >
@@ -80,12 +81,13 @@ export default function Contacto() {
                   Solicitar demo por WhatsApp
                 </a>
 
+                {/* ✅ Correo: neutro, con acento WELI al hover */}
                 <a
                   href="mailto:contacto@tudominio.cl?subject=Solicitud%20DEMO%20WELI&body=Hola,%20quisiera%20solicitar%20una%20demo%20de%20WELI.%20Me%20interesa%20conocer%20planes%20y%20puesta%20en%20marcha."
                   className="
                     inline-flex items-center justify-center gap-2
                     px-6 py-3 text-sm md:text-base font-medium
-                    text-white/90 hover:text-white transition
+                    text-white/90 hover:text-ra-cream transition
                     w-full sm:w-auto
                   "
                 >

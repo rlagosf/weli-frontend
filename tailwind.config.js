@@ -1,44 +1,40 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  // ✅ Dark mode nativo (reemplaza tailwindcss-dark-mode)
-  // Usa 'class' para que tú lo controles (ThemeContext / botón toggle)
-  darkMode: 'class',
+  darkMode: "class",
 
-  content: [
-    "./index.html",
-    "./src/**/*.{js,jsx,ts,tsx}",
-  ],
+  content: ["./index.html", "./src/**/*.{js,jsx,ts,tsx}"],
 
   theme: {
     extend: {
-      // 🎨 Marca RAFC
+      // 🎨 Marca (mantengo namespace ra para no romper el proyecto)
       colors: {
         ra: {
-          fucsia: '#e82d89',
-          marron: '#1d0b0b',
+          fucsia: "#aa5013", // cobre (acento principal)
+          marron: "#6d5829", // base oscura cálida
+          gold: "#b79f69",
+          cream: "#e8dac4",
+          sand: "#ffdda1",
+          caramel: "#dda272",
+          terracotta: "#e2773b",
         },
       },
 
-      // ✍️ Tipografía
       fontFamily: {
-        sans: ['"Bebas Neue"', 'Helvetica Neue', 'Helvetica', 'Arial', 'sans-serif'],
+        sans: ['"Bebas Neue"', "Helvetica Neue", "Helvetica", "Arial", "sans-serif"],
       },
 
-      // 🔡 Espaciado tipográfico
       letterSpacing: {
-        tightish: '-0.01em',
-        wideish: '0.02em',
+        tightish: "-0.01em",
+        wideish: "0.02em",
       },
 
-      // 🔠 Base un pelín más grande
       fontSize: {
-        base: ['1.07rem', { lineHeight: '1.6' }],
+        base: ["1.07rem", { lineHeight: "1.6" }],
       },
 
-      // 🌑 Sombras/bordes suaves (ayudan a estética sin “aparatosidad”)
       borderRadius: {
-        xl: '0.9rem',
-        '2xl': '1.25rem',
+        xl: "0.9rem",
+        "2xl": "1.25rem",
       },
     },
   },
