@@ -1,4 +1,5 @@
-import { motion } from "framer-motion";
+// src/pages/nosotros.jsx
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const TARJETAS = [
   {
@@ -21,68 +22,71 @@ WELI EXISTE PARA QUE EL POTENCIAL INFRAVALORADO TENGA RESPALDO, PARA QUE LA INFO
   },
 ];
 
-const SECTION_VARIANTS = {
-  hidden: { opacity: 0, y: 50 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.8, ease: "easeOut" },
-  },
-};
-
 export default function Nosotros() {
+  const rootRef = useRef(null);
+  const [inView, setInView] = useState(false);
+
+  // opciones estables para no recrear observer
+  const ioOptions = useMemo(
+    () => ({
+      root: null,
+      threshold: 0.18,
+      // dispara un poco antes para que "se note" al llegar desde navbar/footer
+      rootMargin: "-10% 0px -10% 0px",
+    }),
+    []
+  );
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+
+    const obs = new IntersectionObserver(([entry]) => {
+      // ✅ entra => aparece; sale => desaparece
+      setInView(entry.isIntersecting);
+    }, ioOptions);
+
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [ioOptions]);
+
   return (
-    <motion.section
+    <section
       id="nosotros"
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: false, amount: 0.2 }}
-      variants={SECTION_VARIANTS}
-      className="text-white font-sans px-6 pt-16 pb-12 flex flex-col items-center"
+      ref={rootRef}
+      className={[
+        "text-white font-sans px-6 pt-16 pb-12 flex flex-col items-center",
+        // ✅ animación barata: opacity + translate (GPU)
+        "transition-all duration-500 ease-out transform-gpu will-change-transform will-change-opacity",
+        inView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6",
+      ].join(" ")}
     >
-      {/* Frase destacada (WELI) */}
+      {/* Frase destacada */}
       <div className="max-w-4xl text-center mb-10">
-        <p className="text-2xl md:text-3xl font-bold italic text-ra-sand transform rotate-[-2deg] scale-105 drop-shadow-[0_0_14px_rgba(170,80,19,0.28)]">
+        <p className="text-2xl md:text-3xl font-bold italic text-ra-sand">
           “El talento se demuestra. La constancia se registra.”
         </p>
       </div>
 
-      {/* Tarjetas */}
+      {/* Contenedor: “tarjetas invisibles” (solo layout) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-6xl w-full items-stretch">
-        {TARJETAS.map((t, i) => (
-          <motion.article
+        {TARJETAS.map((t) => (
+          <article
             key={t.titulo}
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.1 }}
-            transition={{ duration: 0.6, delay: i * 0.1 }}
-            className="
-              relative rounded-2xl p-5 md:p-7 overflow-hidden
-              bg-white/5 backdrop-blur-lg
-              border border-ra-fucsia/20
-              shadow-[0_0_26px_rgba(0,0,0,0.35)]
-              hover:shadow-[0_0_28px_rgba(170,80,19,0.16)]
-              transition-all duration-300
-            "
+            className="p-0 md:p-2 bg-transparent border-0 shadow-none rounded-none"
           >
-            {/* Glow sutil WELI */}
-            <div className="absolute -top-24 -right-24 w-56 h-56 rounded-full bg-ra-terracotta/15 blur-3xl pointer-events-none" />
-
             <h3
               className={`text-2xl font-bold mb-4 uppercase tracking-wide text-ra-sand ${t.align}`}
             >
               {t.titulo}
             </h3>
 
-            <p className="text-white/70 text-sm md:text-base leading-relaxed text-justify whitespace-pre-line">
+            <p className="text-white/75 text-sm md:text-base leading-relaxed text-justify whitespace-pre-line">
               {t.texto}
             </p>
-
-            {/* Línea inferior de acento (opcional, queda pro) */}
-            <div className="mt-6 h-[2px] w-full bg-gradient-to-r from-ra-fucsia via-ra-terracotta to-ra-sand opacity-70" />
-          </motion.article>
+          </article>
         ))}
       </div>
-    </motion.section>
+    </section>
   );
 }

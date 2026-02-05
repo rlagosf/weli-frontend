@@ -15,19 +15,70 @@ function normalizeRut(rut) {
   return String(rut ?? "").replace(/\D/g, "").slice(0, 8);
 }
 
-/** Wrapper para medir tiempos y cortar requests colgados */
+/**
+ * Une un signal externo con un timeout.
+ * Si se aborta cualquiera, abortamos el request.
+ */
+function buildAbortSignal({ signal, timeoutMs }) {
+  const controller = new AbortController();
+  const ms = Number(timeoutMs ?? DEFAULT_TIMEOUT_MS);
+
+  let timer = null;
+  let onAbort = null;
+
+  if (ms > 0 && Number.isFinite(ms)) {
+    timer = setTimeout(() => {
+      try {
+        controller.abort();
+      } catch {}
+    }, ms);
+  }
+
+  if (signal) {
+    // Si el signal ya viene abortado, abortamos al toque.
+    if (signal.aborted) {
+      try {
+        controller.abort();
+      } catch {}
+    } else {
+      onAbort = () => {
+        try {
+          controller.abort();
+        } catch {}
+      };
+      try {
+        signal.addEventListener("abort", onAbort, { once: true });
+      } catch {
+        // nada
+      }
+    }
+  }
+
+  const cleanup = () => {
+    if (timer) clearTimeout(timer);
+    if (signal && onAbort) {
+      try {
+        signal.removeEventListener("abort", onAbort);
+      } catch {}
+    }
+  };
+
+  return { signal: controller.signal, cleanup };
+}
+
+/** Wrapper para medir tiempos + timeout + abort externo */
 async function postWithTimeout(path, body, opts = {}) {
   const timeoutMs = Number(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   const isPublic = Boolean(opts.isPublic);
+  const externalSignal = opts.signal;
 
   const t0 = performance.now();
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const { signal, cleanup } = buildAbortSignal({ signal: externalSignal, timeoutMs });
 
   try {
     const res = await api.post(path, body, {
-      signal: controller.signal,
+      signal,
       meta: { isPublic },
     });
 
@@ -35,15 +86,15 @@ async function postWithTimeout(path, body, opts = {}) {
     if (AUTH_DEBUG) {
       console.log("[WELI AUTH]", path, "OK", {
         ms: Math.round(t1 - t0),
+        status: res?.status,
         baseURL: res?.config?.baseURL,
       });
     }
 
-    return res.data;
+    return res; // ✅ respuesta completa (headers/status/data)
   } catch (err) {
     const t1 = performance.now();
 
-    // api.js normaliza: preferimos err.status / err.message
     const status = err?.status ?? err?.response?.status ?? 0;
     const msg =
       err?.message ||
@@ -61,33 +112,37 @@ async function postWithTimeout(path, body, opts = {}) {
       });
     }
 
+    // axios: abort suele ser ERR_CANCELED; fetch: AbortError
     if (err?.name === "AbortError" || err?.code === "ERR_CANCELED") {
       const e = new Error("TIMEOUT");
       e.code = "TIMEOUT";
+      // dejamos status si venía
+      if (status) e.status = status;
       throw e;
     }
 
     throw err;
   } finally {
-    clearTimeout(timer);
+    cleanup();
   }
 }
 
 /* ───────────────────────────────
-   LOGIN (Admin/Staff)
-   POST /api/auth/login -> { token }
+   LOGIN (Admin/Staff/Superadmin)
+   POST /api/auth/login -> { ok, token, rol_id, user }
 ──────────────────────────────── */
 export async function login(nombre_usuario, password, options = {}) {
   try {
-    const data = await postWithTimeout(
+    const res = await postWithTimeout(
       "/auth/login",
       { nombre_usuario, password },
-      { timeoutMs: 10_000, isPublic: true, ...options }
+      { timeoutMs: DEFAULT_TIMEOUT_MS, isPublic: true, ...options }
     );
 
-    // backend actual: { token }
-    if (data?.token) setToken(data.token);
-    return data;
+    const data = res?.data ?? {};
+    if (data?.token) setToken(String(data.token));
+
+    return res; // ✅ compat: tu UI hace res?.data ?? res
   } catch (err) {
     console.error("[WELI] Error en login:", err?.message || err);
     throw err;
@@ -96,30 +151,31 @@ export async function login(nombre_usuario, password, options = {}) {
 
 /* ───────────────────────────────
    LOGIN APODERADO
-   POST /api/auth-apoderado/login -> { token, must_change_password }
+   POST /api/auth-apoderado/login -> { ok, token, must_change_password }
 ──────────────────────────────── */
-export async function loginApoderado(rut, password) {
+export async function loginApoderado(rut, password, options = {}) {
   const rutClean = normalizeRut(rut);
 
   try {
-    const data = await postWithTimeout(
+    const res = await postWithTimeout(
       "/auth-apoderado/login",
       { rut: rutClean, password: String(password ?? "") },
-      { timeoutMs: 10_000, isPublic: true }
+      { timeoutMs: DEFAULT_TIMEOUT_MS, isPublic: true, ...options }
     );
 
-    if (data?.token) setToken(data.token);
+    const data = res?.data ?? {};
+    if (data?.token) setToken(String(data.token));
 
     try {
       if (typeof data?.must_change_password !== "undefined") {
         localStorage.setItem(
           "apoderado_must_change_password",
-          String(Number(data.must_change_password) === 1 ? 1 : 0)
+          String(data.must_change_password === true || Number(data.must_change_password) === 1 ? 1 : 0)
         );
       }
     } catch {}
 
-    return data;
+    return res;
   } catch (err) {
     console.error("[WELI] Error en loginApoderado:", err?.message || err);
     throw err;
@@ -152,7 +208,7 @@ function clearLocalAuth() {
   } catch {}
 }
 
-/** Logout Admin/Staff */
+/** Logout Admin/Staff/Superadmin */
 export async function logoutAdmin() {
   try {
     await safePostLogout("/auth/logout");

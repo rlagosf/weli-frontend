@@ -2,6 +2,8 @@
 import axios from "axios";
 
 export const TOKEN_KEY = "weli_token";
+export const ACADEMIA_STORAGE_KEY = "weli_selected_academia";
+export const ACADEMIA_HEADER = "x-academia-id";
 
 /* -------------------- Base URL (determinista) -------------------- */
 const pickBaseUrl = () => {
@@ -11,14 +13,11 @@ const pickBaseUrl = () => {
     (typeof envUrl === "string" && envUrl.trim()) || "http://127.0.0.1:8000";
 
   url = url.trim();
-
-  // Si alguien pegó una URL con query/hash, las quitamos
   url = url.split("#")[0].split("?")[0];
 
   if (!/^https?:\/\//i.test(url)) url = `http://${url}`;
   if (url.endsWith("/")) url = url.slice(0, -1);
 
-  // Asegura sufijo /api (solo una vez)
   if (!/\/api$/i.test(url)) url = `${url}/api`;
 
   if (import.meta.env.PROD && /(localhost|127\.0\.0\.1)/i.test(url)) {
@@ -55,6 +54,64 @@ export const setToken = (token) => {
   }
 };
 
+/* -------------------- Superadmin Academia helpers -------------------- */
+function readSelectedAcademiaId() {
+  try {
+    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
+    if (!raw) return 0;
+    const parsed = JSON.parse(raw);
+    const id = Number(parsed?.id ?? 0);
+    return Number.isFinite(id) && id > 0 ? id : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function decodeJwtPayload(token) {
+  try {
+    const parts = String(token).split(".");
+    if (parts.length !== 3) return null;
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "===".slice((b64.length + 3) % 4);
+    const json = atob(padded);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+function extractRolFromToken(token) {
+  const p = decodeJwtPayload(token);
+  const raw = p?.rol_id ?? p?.role_id ?? p?.role ?? 0;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+// Solo enviar x-academia-id en rutas tenantizadas
+function shouldSendAcademiaHeader(url = "") {
+  const u = String(url || "");
+
+  // no enviar para recursos del superDashboard / auth
+  if (u.startsWith("/academias")) return false;
+  if (u.startsWith("/deportes")) return false;
+  if (u.startsWith("/auth")) return false;
+
+  // ✅ tenantizadas (incluye eventos)
+  const allowPrefixes = [
+    "/jugadores",
+    "/pagos",
+    "/estadisticas",
+    "/convocatorias",
+    "/agenda",
+    "/eventos",   // ✅ FIX CRÍTICO
+    "/noticias",
+    "/sucursales",
+    "/catalogos",
+  ];
+
+  return allowPrefixes.some((p) => u.startsWith(p));
+}
+
 /* -------------------- Axios instances -------------------- */
 export const apiPublic = axios.create({
   baseURL: API_BASE_URL,
@@ -68,11 +125,11 @@ export const apiPrivate = axios.create({
   timeout: 15000,
 });
 
-// Seteo inicial (opcional pero útil)
+const api = apiPrivate;
+
+// Seteo inicial
 const bootToken = getToken();
 if (bootToken) apiPrivate.defaults.headers.common.Authorization = `Bearer ${bootToken}`;
-
-const api = apiPrivate;
 
 /* -------------------- Interceptors (PUBLIC) -------------------- */
 apiPublic.interceptors.request.use((config) => {
@@ -80,6 +137,7 @@ apiPublic.interceptors.request.use((config) => {
   const plain = typeof headers?.toJSON === "function" ? headers.toJSON() : { ...headers };
   delete plain.Authorization;
   delete plain.authorization;
+  delete plain[ACADEMIA_HEADER];
   config.headers = plain;
   return config;
 });
@@ -91,10 +149,25 @@ apiPrivate.interceptors.request.use((config) => {
   const headers = config.headers ?? {};
   const plain = typeof headers?.toJSON === "function" ? headers.toJSON() : { ...headers };
 
+  // Authorization
   if (token) plain.Authorization = `Bearer ${token}`;
   else {
     delete plain.Authorization;
     delete plain.authorization;
+  }
+
+  // x-academia-id (solo superadmin + rutas tenantizadas)
+  if (token) {
+    const rol = extractRolFromToken(token);
+    if (rol === 3 && shouldSendAcademiaHeader(config?.url)) {
+      const academiaId = readSelectedAcademiaId();
+      if (academiaId > 0) plain[ACADEMIA_HEADER] = String(academiaId);
+      else delete plain[ACADEMIA_HEADER];
+    } else {
+      delete plain[ACADEMIA_HEADER];
+    }
+  } else {
+    delete plain[ACADEMIA_HEADER];
   }
 
   config.headers = plain;
@@ -108,6 +181,7 @@ apiPrivate.interceptors.response.use(
     const status = error?.response?.status ?? 0;
     const data = error?.response?.data ?? null;
 
+    // ✅ solo 401 “real” limpia token
     if (status === 401) {
       const msg = String(data?.message || "").toLowerCase();
       const shouldClear =
@@ -130,9 +204,14 @@ apiPrivate.interceptors.response.use(
         error?.message ||
         "Error de red o del servidor",
       data,
-      // en prod, no arrastres _raw/config/request (evita filtraciones en logs)
       ...(import.meta.env.DEV
-        ? { response: error?.response || null, request: error?.request || null, code: error?.code, config: error?.config, _raw: error }
+        ? {
+            response: error?.response || null,
+            request: error?.request || null,
+            code: error?.code,
+            config: error?.config,
+            _raw: error,
+          }
         : {}),
     };
 
@@ -141,3 +220,4 @@ apiPrivate.interceptors.response.use(
 );
 
 export default api;
+export { decodeJwtPayload }; // opcional si quieres reutilizar en módulos

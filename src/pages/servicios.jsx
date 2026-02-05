@@ -1,5 +1,5 @@
 // src/pages/Servicios.jsx
-import { motion } from "framer-motion";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -48,28 +48,45 @@ const FEATURES = [
   },
 ];
 
-const SECTION_VARIANTS = {
-  hidden: { opacity: 0, y: 50 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.8, ease: "easeOut" },
-  },
-};
-
 export default function Servicios() {
+  const rootRef = useRef(null);
+  const [inView, setInView] = useState(false);
+
+  const ioOptions = useMemo(
+    () => ({
+      root: null,
+      threshold: 0.16,
+      rootMargin: "-10% 0px -10% 0px",
+    }),
+    []
+  );
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+
+    const obs = new IntersectionObserver(([entry]) => {
+      setInView(entry.isIntersecting);
+    }, ioOptions);
+
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [ioOptions]);
+
   return (
-    <motion.section
+    <section
       id="servicios"
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: false, amount: 0.2 }}
-      variants={SECTION_VARIANTS}
-      className="text-white py-16 px-6 font-sans bg-transparent flex flex-col items-center"
+      ref={rootRef}
+      className={[
+        "text-white py-16 px-6 font-sans bg-transparent flex flex-col items-center",
+        // ✅ animación barata (entra/sale)
+        "transition-all duration-500 ease-out transform-gpu will-change-transform will-change-opacity",
+        inView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6",
+      ].join(" ")}
     >
-      {/* Header */}
+      {/* Header (plano) */}
       <div className="max-w-4xl text-center mb-10">
-        <h2 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight text-ra-sand drop-shadow-[0_0_12px_rgba(170,80,19,0.25)]">
+        <h2 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight text-ra-sand">
           ¿Qué ofrece WELI?
         </h2>
         <p className="text-white/70 text-lg">
@@ -78,39 +95,28 @@ export default function Servicios() {
         </p>
       </div>
 
-      {/* Grid de 6 tarjetas */}
+      {/* Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl w-full">
-        {FEATURES.map((f, i) => (
-          <motion.div
+        {FEATURES.map((f) => (
+          <article
             key={f.titulo}
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.15 }}
-            transition={{ duration: 0.6, delay: i * 0.08 }}
             className="
               relative rounded-2xl p-6 overflow-hidden
-              bg-white/5 backdrop-blur-lg
-              border border-ra-fucsia/20
-              shadow-[0_0_26px_rgba(0,0,0,0.35)]
-              hover:shadow-[0_0_28px_rgba(170,80,19,0.18)]
-              transition-all duration-300
+              bg-white/[0.06]
+              border border-ra-fucsia/15
               flex flex-col
               min-h-[260px]
             "
           >
-            {/* Glow sutil WELI */}
-            <div className="absolute -top-24 -right-24 w-56 h-56 rounded-full bg-ra-fucsia/15 blur-3xl pointer-events-none" />
-
-            {/* Contenido (flex-1 para empujar la línea abajo) */}
             <div className="flex-1">
               <div className="flex items-start gap-4">
+                {/* Icon box (plano) */}
                 <div
                   className="
                     flex items-center justify-center
                     w-12 h-12 rounded-xl
                     bg-black/20
-                    border border-ra-fucsia/30
-                    shadow-[0_0_18px_rgba(170,80,19,0.12)]
+                    border border-ra-fucsia/15
                     shrink-0
                   "
                   aria-hidden="true"
@@ -123,18 +129,18 @@ export default function Servicios() {
                     {f.titulo}
                   </h3>
 
-                  <p className="text-white/70 text-sm md:text-base leading-relaxed text-justify">
+                  <p className="text-white/75 text-sm md:text-base leading-relaxed text-justify">
                     {f.descripcion}
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Línea inferior SIEMPRE alineada */}
+            {/* Línea marca (estática) */}
             <div className="mt-6 h-[2px] w-full bg-gradient-to-r from-ra-fucsia via-ra-terracotta to-ra-sand opacity-75" />
-          </motion.div>
+          </article>
         ))}
       </div>
-    </motion.section>
+    </section>
   );
 }
