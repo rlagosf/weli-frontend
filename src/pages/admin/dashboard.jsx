@@ -27,10 +27,10 @@ import {
 } from "lucide-react";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
-/* ───────────────── RA Theme (tu paleta) ───────────────── */
+/* ───────────────── RA Theme ───────────────── */
 const RA = {
-  copper: "#aa5013",      // acento principal
-  brown: "#6d5829",       // base cálida oscura
+  copper: "#aa5013",
+  brown: "#6d5829",
   gold: "#b79f69",
   cream: "#e8dac4",
   sand: "#ffdda1",
@@ -120,26 +120,39 @@ export default function Dashboard() {
   const ROOT = isSuperTree ? "/super-dashboard/admin/dashboard" : "/admin";
   const BASE = ROOT;
 
-  const effectiveRol = useMemo(() => (rol === 3 ? 1 : rol), [rol]);
-
+  /* ───────────────── Cards (roles reales, sin “3->1”) ───────────────── */
   const cards = useMemo(
     () => [
-      { to: `${BASE}/crear-jugador`, label: "Crear Jugador", roles: [1], Icon: UserPlus },
-      { to: `${BASE}/listar-jugadores`, label: "Listar Jugadores", roles: [1, 2], Icon: Users },
-      { to: `${BASE}/registrar-estadisticas`, label: "Registrar Estadísticas", roles: [1, 2], Icon: ClipboardList },
-      { to: `${BASE}/estadisticas`, label: "Estadísticas Globales", roles: [1, 2], Icon: BarChart3 },
-      { to: `${BASE}/convocatorias`, label: "Crear Convocatorias", roles: [1], Icon: CalendarPlus },
-      { to: `${BASE}/ver-convocaciones-historicas`, label: "Historial Convocatorias", roles: [1, 2], Icon: History },
-      { to: `${BASE}/gestionar-pagos`, label: "Gestión de pagos", roles: [1], Icon: Banknote },
-      { to: `${BASE}/power-bi`, label: "POWER BI FINANANCIERO", roles: [1], Icon: PieChart },
-      { to: `${BASE}/noticias`, label: "Registro Noticias", roles: [1, 2], Icon: Newspaper },
-      { to: `${BASE}/crear-usuario`, label: "Crear Usuario", roles: [1], Icon: UserCog },
-      { to: `${BASE}/configuracion`, label: "Configuración", roles: [1], Icon: Settings },
-      { to: `${BASE}/agenda`, label: "Agenda de eventos", roles: [1, 2], Icon: CalendarDays },
+      // jugadores
+      { to: `${BASE}/crear-jugador`, label: "Crear Jugador", roles: [1, 3], Icon: UserPlus },
+      { to: `${BASE}/listar-jugadores`, label: "Listar Jugadores", roles: [1, 2, 3], Icon: Users },
+
+      // estadísticas
+      { to: `${BASE}/registrar-estadisticas`, label: "Registrar Estadísticas", roles: [1, 2, 3], Icon: ClipboardList },
+      { to: `${BASE}/estadisticas`, label: "Estadísticas Globales", roles: [1, 2, 3], Icon: BarChart3 },
+
+      // convocatorias / agenda
+      { to: `${BASE}/convocatorias`, label: "Crear Convocatorias", roles: [1, 3], Icon: CalendarPlus },
+      { to: `${BASE}/ver-convocaciones-historicas`, label: "Historial Convocatorias", roles: [1, 2, 3], Icon: History },
+      { to: `${BASE}/agenda`, label: "Agenda de eventos", roles: [1, 2, 3], Icon: CalendarDays },
+
+      // pagos
+      { to: `${BASE}/gestionar-pagos`, label: "Gestión de pagos", roles: [1, 3], Icon: Banknote },
+      { to: `${BASE}/power-bi`, label: "POWER BI FINANANCIERO", roles: [1, 3], Icon: PieChart },
+
+      // noticias
+      { to: `${BASE}/noticias`, label: "Registro Noticias", roles: [1, 2, 3], Icon: Newspaper },
+
+      // usuarios / configuración
+      { to: `${BASE}/crear-usuario`, label: "Crear Usuario", roles: [1, 3], Icon: UserCog },
+
+      // ⚠️ Si “Configuración” es SOLO por academia, superadmin también debería verla (tenantizado)
+      { to: `${BASE}/configuracion`, label: "Configuración", roles: [1, 3], Icon: Settings },
+
       {
         to: `${BASE}/seguimiento-medico`,
         label: "Seguimiento médico (próximamente)",
-        roles: [1, 2],
+        roles: [1, 2, 3],
         Icon: Stethoscope,
         disabled: true,
       },
@@ -167,6 +180,7 @@ export default function Dashboard() {
           return;
         }
 
+        // Refresh si expira (si tu backend lo soporta)
         if (isExpired(decoded)) {
           try {
             const r = await api.post("/auth/refresh");
@@ -185,11 +199,13 @@ export default function Dashboard() {
         const r = extractRol(decoded);
         if (mountedRef.current) setRol(r);
 
+        // si está en árbol super-dashboard, SOLO rol 3
         if (isSuperTree && r !== 3) {
           navigate("/admin", { replace: true });
           return;
         }
 
+        // rol 3 dentro del árbol super: exige academia seleccionada
         if (r === 3 && isSuperTree) {
           const snap = readSelectedAcademia();
           if (mountedRef.current) setSelectedAcademia(snap);
@@ -253,29 +269,25 @@ export default function Dashboard() {
 
   const isRoot = location.pathname === ROOT;
 
-  /* ───────────────── UI Skin (RA palette) ───────────────── */
+  /* ───────────────── UI Skin ───────────────── */
   const pageBg = darkMode
     ? "bg-gradient-to-br from-[#160a05] via-[#111827] to-[#0b1220] text-white"
     : "bg-gradient-to-br from-[#fff7ef] via-[#fff] to-[#fffbf5] text-[#1d0b0b]";
 
-  // Cards
   const cardBase = darkMode
     ? "bg-white/5 border border-white/10 hover:border-[#aa5013] hover:bg-white/7"
     : "bg-white border border-black/5 hover:border-[#aa5013] hover:shadow-md";
 
   const actionBtn = darkMode ? "hover:bg-white/10" : "hover:bg-black/5";
 
-  // pequeño “pill” SOLO para la academia (no es tarjeta de header)
   const academiaPill = darkMode
     ? "bg-white/5 border-white/15 text-white"
     : "bg-white border-black/10 text-[#1d0b0b]";
 
   return (
     <div className={`${pageBg} min-h-screen font-weli`}>
-      {/* Header SIN encapsular en tarjeta */}
       <header className="px-6 pt-6">
         <div className="flex items-center justify-between gap-3">
-          {/* Breadcrumb */}
           <nav className="text-sm min-w-0" aria-label="breadcrumb">
             <ol className="flex flex-wrap items-center gap-2 min-w-0">
               {breadcrumb.map((b, i) => (
@@ -286,7 +298,11 @@ export default function Dashboard() {
                       {b.label}
                     </span>
                   ) : (
-                    <Link className="hover:opacity-90 truncate" style={{ color: darkMode ? "#fff" : RA.brown }} to={b.to}>
+                    <Link
+                      className="hover:opacity-90 truncate"
+                      style={{ color: darkMode ? "#fff" : RA.brown }}
+                      to={b.to}
+                    >
                       {b.label}
                     </Link>
                   )}
@@ -295,7 +311,6 @@ export default function Dashboard() {
             </ol>
           </nav>
 
-          {/* Right controls aligned with breadcrumb line */}
           <div className="flex items-center gap-2 flex-shrink-0">
             {rol === 3 && isSuperTree && selectedAcademia && (
               <div className={`hidden sm:flex items-center gap-2 ${academiaPill} px-3 py-1.5 rounded-xl border`}>
@@ -340,7 +355,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Title (panel normal) */}
         <h1 className="text-3xl font-extrabold text-center tracking-tight mt-6">
           Panel de Administración
         </h1>
@@ -353,10 +367,8 @@ export default function Dashboard() {
         {isRoot ? (
           <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {cards
-              .filter((c) => !c.roles || c.roles.includes(effectiveRol))
-              .sort((a, b) =>
-                (a.label || "").localeCompare(b.label || "", "es", { sensitivity: "base" })
-              )
+              .filter((c) => !c.roles || c.roles.includes(rol))
+              .sort((a, b) => (a.label || "").localeCompare(b.label || "", "es", { sensitivity: "base" }))
               .map(({ to, label, Icon, disabled }) => {
                 const common =
                   `${cardBase} rounded-2xl p-6 shadow-sm transition transform ` +
@@ -369,13 +381,7 @@ export default function Dashboard() {
                 if (disabled) {
                   return (
                     <div key={to} className={`${common} opacity-60 cursor-not-allowed`} title="Próximamente">
-                      <div
-                        className="rounded-2xl p-3"
-                        style={{
-                          background: iconBg,
-                          border: `1px solid ${RA.copper}22`,
-                        }}
-                      >
+                      <div className="rounded-2xl p-3" style={{ background: iconBg, border: `1px solid ${RA.copper}22` }}>
                         <Icon className="w-10 h-10" style={{ color: RA.copper }} />
                       </div>
                       <div className="text-center font-bold leading-tight">{label}</div>
@@ -385,13 +391,7 @@ export default function Dashboard() {
 
                 return (
                   <Link key={to} to={to} className={`${common} hover:-translate-y-1 hover:shadow-lg`}>
-                    <div
-                      className="rounded-2xl p-3"
-                      style={{
-                        background: iconBg,
-                        border: `1px solid ${RA.copper}22`,
-                      }}
-                    >
+                    <div className="rounded-2xl p-3" style={{ background: iconBg, border: `1px solid ${RA.copper}22` }}>
                       <Icon className="w-10 h-10" style={{ color: RA.copper }} />
                     </div>
                     <div className="text-center font-bold leading-tight">{label}</div>

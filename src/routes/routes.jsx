@@ -108,8 +108,10 @@ function PrivateApp({
 }
 
 /* -------------------- Gates -------------------- */
+
+// ✅ FIX CRÍTICO: AdminGate permite [1,2,3]
 const AdminGate = ({ children }) => (
-  <ProtectedRoute mode="admin" roleIn={[1, 2]}>
+  <ProtectedRoute mode="admin" roleIn={[1, 2, 3]}>
     <PrivateApp
       redirectTo="/login"
       storageKey="weli_lastActivity_admin"
@@ -122,6 +124,7 @@ const AdminGate = ({ children }) => (
   </ProtectedRoute>
 );
 
+// ✅ SuperAdminGate: solo rol 3 (selector)
 const SuperAdminGate = ({ children }) => (
   <ProtectedRoute mode="admin" roleIn={[3]}>
     <PrivateApp

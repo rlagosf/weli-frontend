@@ -1,12 +1,12 @@
 // src/pages/admin/listarJugadores.jsx
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { useTheme } from '../../context/ThemeContext';
-import api, { getToken, clearToken } from '../../services/api';
-import IsLoading from '../../components/isLoading';
-import { jwtDecode } from 'jwt-decode';
-import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
-import { formatRutWithDV } from '../../services/rut';
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { useTheme } from "../../context/ThemeContext";
+import api, { getToken, clearToken } from "../../services/api";
+import IsLoading from "../../components/isLoading";
+import { jwtDecode } from "jwt-decode";
+import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
+import { formatRutWithDV } from "../../services/rut";
 
 export default function ListarJugadores() {
   const { darkMode } = useTheme();
@@ -15,17 +15,17 @@ export default function ListarJugadores() {
 
   const [jugadores, setJugadores] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [rol, setRol] = useState(null);
 
-  // 🧭 Breadcrumb base: Inicio / Listar Jugadores
+  // 🧭 Breadcrumb base
   useEffect(() => {
     if (!Array.isArray(location.state?.breadcrumb)) {
       navigate(location.pathname + location.search, {
         replace: true,
         state: {
           ...(location.state || {}),
-          breadcrumb: [{ label: 'Listar Jugadores', to: '/admin/listar-jugadores' }],
+          breadcrumb: [{ label: "Listar Jugadores", to: "/admin/listar-jugadores" }],
         },
       });
     }
@@ -34,24 +34,26 @@ export default function ListarJugadores() {
 
   useMobileAutoScrollTop();
 
-  // 🔐 Validación de sesión/rol
+  // 🔐 Validación de sesión/rol (ahora incluye rol 3)
   useEffect(() => {
     try {
       const token = getToken();
-      if (!token) throw new Error('no-token');
+      if (!token) throw new Error("no-token");
 
       const decoded = jwtDecode(token);
       const now = Math.floor(Date.now() / 1000);
-      if (decoded?.exp && decoded.exp < now) throw new Error('expired');
+      if (decoded?.exp && decoded.exp < now) throw new Error("expired");
 
       const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
       const userRol = Number.isFinite(Number(rawRol)) ? Number(rawRol) : 0;
 
-      if (![1, 2].includes(userRol)) return navigate('/admin', { replace: true });
+      // ✅ ahora permitimos superadmin (3)
+      if (![1, 2, 3].includes(userRol)) return navigate("/admin", { replace: true });
+
       setRol(userRol);
     } catch {
       clearToken();
-      navigate('/login', { replace: true });
+      navigate("/login", { replace: true });
     }
   }, [navigate]);
 
@@ -65,14 +67,14 @@ export default function ListarJugadores() {
     return [];
   };
 
-  // ✅ acepta string o array + prueba variantes con / y sin /
   const tryGetList = async (paths) => {
     const list = Array.isArray(paths) ? paths : [paths];
 
+    // variantes con / y sin / final
     const variants = [];
     for (const p of list) {
-      const base = p.startsWith('/') ? p : `/${p}`;
-      variants.push(base, base.endsWith('/') ? base.slice(0, -1) : `${base}/`);
+      const base = p.startsWith("/") ? p : `/${p}`;
+      variants.push(base, base.endsWith("/") ? base.slice(0, -1) : `${base}/`);
     }
     const uniq = [...new Set(variants)];
 
@@ -81,62 +83,56 @@ export default function ListarJugadores() {
         const r = await api.get(url);
         return normalizeListResponse(r);
       } catch (e) {
-        const st = e?.response?.status;
+        // con tu api.js el error "normalizado" NO trae response siempre:
+        const st = e?.status ?? e?.response?.status ?? 0;
         if (st === 401 || st === 403) throw e;
+        // si es 404, seguimos probando
         continue;
       }
     }
     return [];
   };
 
-  // 📥 Carga de jugadores + catálogos mínimos para labels
+  // 📥 Carga de jugadores + catálogos mínimos
   useEffect(() => {
     if (!rol) return;
     let alive = true;
 
     (async () => {
       setIsLoading(true);
-      setError('');
+      setError("");
 
       try {
         /**
-         * ✅ CLAVE DEL REQUERIMIENTO:
-         * ListarJugadores = HISTORIAL COMPLETO (activos + inactivos).
-         *
-         * Si tu backend filtra por defecto SOLO activos, entonces:
-         * - usamos include_inactivos=1 (query)
-         * - y dejamos fallback a endpoints tipo /jugadores/todos (si existe)
+         * ✅ RUTAS: evita “inventar” demasiadas.
+         * Suposición razonable en WELI:
+         * - GET /jugadores soporta include_inactivos=1
+         * - staff puede tener ruta especial, pero si no existe, no forzamos
          */
         const jugadoresPaths =
           rol === 2
             ? [
-                // Staff - TODOS
-                '/jugadores/staff?include_inactivos=1',
-                '/jugadores/staff/todos',
-                '/jugadores/staff/all',
-                // General - TODOS
-                '/jugadores?include_inactivos=1',
-                '/jugadores/todos',
-                '/jugadores/all',
-                // Último fallback (podría venir filtrado por backend)
-                '/jugadores/staff',
-                '/jugadores',
+                "/jugadores?include_inactivos=1",
+                "/jugadores", // fallback
               ]
             : [
-                // Admin - TODOS
-                '/jugadores?include_inactivos=1',
-                '/jugadores/todos',
-                '/jugadores/all',
-                // Fallback final
-                '/jugadores',
+                // Admin (1) y Superadmin (3)
+                "/jugadores?include_inactivos=1",
+                "/jugadores",
               ];
 
         const rawJugadores = await tryGetList(jugadoresPaths);
 
+        /**
+         * ✅ Catálogos: nombres coherentes con tus routers.
+         * - posiciones: /posiciones
+         * - categorias: /categorias
+         * - estado: tu proyecto a veces lo llama /estado o /estados (fallback)
+         */
         const [posList, catList, estList] = await Promise.all([
-          tryGetList(['/posiciones']),
-          tryGetList(['/categorias']),
-          tryGetList(['/estado']),
+          tryGetList(["/posiciones"]),
+          tryGetList(["/categorias"]),
+          tryGetList(["/estado", "/estados"]),
         ]);
 
         if (!alive) return;
@@ -144,23 +140,24 @@ export default function ListarJugadores() {
         const posMap = new Map(
           (posList ?? []).map((p) => [
             Number(p.id ?? p.posicion_id),
-            p.nombre ?? p.descripcion ?? '',
+            p.nombre ?? p.descripcion ?? "",
           ])
         );
         const catMap = new Map(
           (catList ?? []).map((c) => [
             Number(c.id ?? c.categoria_id),
-            c.nombre ?? c.descripcion ?? '',
+            c.nombre ?? c.descripcion ?? "",
           ])
         );
         const estMap = new Map(
           (estList ?? []).map((e) => [
             Number(e.id ?? e.estado_id),
-            e.nombre ?? e.descripcion ?? '',
+            e.nombre ?? e.descripcion ?? "",
           ])
         );
 
         const safeJugadores = Array.isArray(rawJugadores) ? rawJugadores : [];
+
         const data = safeJugadores.map((j) => {
           const catObj = j.categoria
             ? j.categoria
@@ -187,17 +184,26 @@ export default function ListarJugadores() {
         setJugadores(data);
         setIsLoading(false);
 
-        // Si no vino nada, avisamos (pero sin romper la UI)
-        if (!data.length) setError('⚠️ No se encontraron jugadores.');
+        if (!data.length) setError("⚠️ No se encontraron jugadores.");
       } catch (err) {
-        const status = err?.response?.status;
+        const status = err?.status ?? err?.response?.status ?? 0;
+        const msg = String(err?.message || "").toLowerCase();
+
         if (status === 401 || status === 403) {
           clearToken();
-          navigate('/login', { replace: true });
+          navigate("/login", { replace: true });
           return;
         }
+
+        // Caso típico rol 3 sin academia seleccionada (depende de tu backend)
+        if (rol === 3 && (status === 400 || status === 409 || msg.includes("academia"))) {
+          setError("⚠️ Superadmin: selecciona una academia para listar jugadores.");
+          setIsLoading(false);
+          return;
+        }
+
         if (!alive) return;
-        setError('❌ No se pudo cargar la lista de jugadores');
+        setError("❌ No se pudo cargar la lista de jugadores");
         setIsLoading(false);
       }
     })();
@@ -207,34 +213,32 @@ export default function ListarJugadores() {
     };
   }, [rol, navigate]);
 
-  // 🎨 clases (solo look&feel)
-  const fondoClase = darkMode ? 'bg-[#111827] text-white' : 'bg-white text-[#1d0b0b]';
-  const tablaCabecera = darkMode ? 'bg-[#1f2937] text-white' : 'bg-gray-100 text-[#1d0b0b]';
-  const filaHover = darkMode ? 'hover:bg-[#1f2937]' : 'hover:bg-gray-100';
+  // 🎨 clases
+  const fondoClase = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";
+  const tablaCabecera = darkMode ? "bg-[#1f2937] text-white" : "bg-gray-100 text-[#1d0b0b]";
+  const filaHover = darkMode ? "hover:bg-[#1f2937]" : "hover:bg-gray-100";
 
-  // ✅ acento WELI (en vez de fucsia RAFC)
   const tarjetaClase = darkMode
-    ? 'bg-[#1f2937] shadow-lg rounded-lg p-4 border border-gray-700 hover:border-[#24C6FF] transition-colors'
-    : 'bg-white shadow-md rounded-lg p-4 border border-gray-200 hover:border-[#24C6FF] transition-colors';
+    ? "bg-[#1f2937] shadow-lg rounded-lg p-4 border border-gray-700 hover:border-[#24C6FF] transition-colors"
+    : "bg-white shadow-md rounded-lg p-4 border border-gray-200 hover:border-[#24C6FF] transition-colors";
 
   const handleClick = (rut, stateBreadcrumb) =>
     navigate(`/admin/detalle-jugador/${encodeURIComponent(rut)}`, {
       state: {
-        from: '/admin/listar-jugadores',
-        breadcrumb:
-          stateBreadcrumb ?? [{ label: 'Listar Jugadores', to: '/admin/listar-jugadores' }],
+        from: "/admin/listar-jugadores",
+        breadcrumb: stateBreadcrumb ?? [{ label: "Listar Jugadores", to: "/admin/listar-jugadores" }],
       },
     });
 
-  // 🧩 Agrupar por categoría (para tarjetas)
+  // 🧩 Agrupar por categoría
   const grupos = useMemo(() => {
     const m = new Map();
     for (const j of jugadores) {
-      const cat = j?.categoria?.nombre || 'Sin categoría';
+      const cat = j?.categoria?.nombre || "Sin categoría";
       if (!m.has(cat)) m.set(cat, []);
       m.get(cat).push(j);
     }
-    return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b, 'es'));
+    return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b, "es"));
   }, [jugadores]);
 
   if (isLoading) return <IsLoading />;
@@ -267,9 +271,7 @@ export default function ListarJugadores() {
         <div className="space-y-6">
           {grupos.map(([categoriaNombre, lista]) => (
             <div key={categoriaNombre} className={`${tarjetaClase}`}>
-              <h3 className="text-xl font-semibold mb-3 text-center">
-                Categoría {categoriaNombre}
-              </h3>
+              <h3 className="text-xl font-semibold mb-3 text-center">Categoría {categoriaNombre}</h3>
 
               <div className="w-full overflow-x-auto">
                 <table className="w-full text-xs sm:text-sm min-w-[820px]">
@@ -287,7 +289,7 @@ export default function ListarJugadores() {
                   <tbody>
                     {lista.map((jugador) => {
                       const rutCrudo = jugador.rut_jugador ?? jugador.id ?? null;
-                      const rutFormateado = rutCrudo ? formatRutWithDV(rutCrudo) : '-';
+                      const rutFormateado = rutCrudo ? formatRutWithDV(rutCrudo) : "-";
 
                       return (
                         <tr
@@ -296,15 +298,15 @@ export default function ListarJugadores() {
                           onClick={() => handleClick(jugador.rut_jugador, location.state?.breadcrumb)}
                         >
                           <td className="p-2 border text-center">{jugador.nombre_jugador}</td>
-                          <td className="p-2 border text-center">{rutFormateado || rutCrudo || '-'}</td>
-                          <td className="p-2 border text-center">{jugador.edad ?? '-'}</td>
-                          <td className="p-2 border text-center">{jugador.telefono ?? '-'}</td>
-                          <td className="p-2 border text-center break-all">{jugador.email ?? '-'}</td>
+                          <td className="p-2 border text-center">{rutFormateado || rutCrudo || "-"}</td>
+                          <td className="p-2 border text-center">{jugador.edad ?? "-"}</td>
+                          <td className="p-2 border text-center">{jugador.telefono ?? "-"}</td>
+                          <td className="p-2 border text-center break-all">{jugador.email ?? "-"}</td>
                           <td className="p-2 border text-center">
-                            {jugador.posicion?.nombre ?? jugador.posicion_id ?? '-'}
+                            {jugador.posicion?.nombre ?? jugador.posicion_id ?? "-"}
                           </td>
                           <td className="p-2 border text-center">
-                            {jugador.estado?.nombre ?? jugador.estado_id ?? '-'}
+                            {jugador.estado?.nombre ?? jugador.estado_id ?? "-"}
                           </td>
                         </tr>
                       );

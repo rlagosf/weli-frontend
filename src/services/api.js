@@ -18,6 +18,7 @@ const pickBaseUrl = () => {
   if (!/^https?:\/\//i.test(url)) url = `http://${url}`;
   if (url.endsWith("/")) url = url.slice(0, -1);
 
+  // Normaliza a /api (tu backend expone rutas bajo /api en la práctica)
   if (!/\/api$/i.test(url)) url = `${url}/api`;
 
   if (import.meta.env.PROD && /(localhost|127\.0\.0\.1)/i.test(url)) {
@@ -54,11 +55,12 @@ export const setToken = (token) => {
   }
 };
 
-/* -------------------- Superadmin Academia helpers -------------------- */
+/* -------------------- Academia helpers -------------------- */
 function readSelectedAcademiaId() {
   try {
     const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
     if (!raw) return 0;
+
     const parsed = JSON.parse(raw);
     const id = Number(parsed?.id ?? 0);
     return Number.isFinite(id) && id > 0 ? id : 0;
@@ -67,13 +69,24 @@ function readSelectedAcademiaId() {
   }
 }
 
+/**
+ * Decodifica payload JWT (base64url) robusto (soporta UTF-8).
+ * NOTA: esto NO valida firma; es solo para extraer claims livianos (rol_id).
+ */
 function decodeJwtPayload(token) {
   try {
-    const parts = String(token).split(".");
+    const parts = String(token || "").split(".");
     if (parts.length !== 3) return null;
-    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+
+    const b64url = parts[1];
+    const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
     const padded = b64 + "===".slice((b64.length + 3) % 4);
-    const json = atob(padded);
+
+    // atob -> bytes -> utf8
+    const bin = atob(padded);
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    const json = new TextDecoder("utf-8").decode(bytes);
+
     return JSON.parse(json);
   } catch {
     return null;
@@ -87,29 +100,52 @@ function extractRolFromToken(token) {
   return Number.isFinite(n) ? n : 0;
 }
 
-// Solo enviar x-academia-id en rutas tenantizadas
+/**
+ * Decide si se debe enviar x-academia-id según URL.
+ * Regla: SOLO endpoints "tenantizados" del panel. Nunca auth ni portal apoderado.
+ */
 function shouldSendAcademiaHeader(url = "") {
   const u = String(url || "");
 
-  // no enviar para recursos del superDashboard / auth
-  if (u.startsWith("/academias")) return false;
-  if (u.startsWith("/deportes")) return false;
-  if (u.startsWith("/auth")) return false;
+  // Normaliza: puede venir como "/ruta" o full URL si axios lo resolvió raro
+  const path = u.startsWith("http") ? new URL(u).pathname : u;
+  const p = path.startsWith("/") ? path : `/${path}`;
 
-  // ✅ tenantizadas (incluye eventos)
+  // ❌ jamás a apoderado
+  if (p.startsWith("/portal-apoderado")) return false;
+  if (p.startsWith("/auth-apoderado")) return false;
+
+  // ❌ jamás a auth panel
+  if (p.startsWith("/auth")) return false;
+
+  // ❌ recursos globales de superadmin (no tenant)
+  if (p.startsWith("/academias")) return false;
+
+  // ✅ tenantizados (ajustado a tus routers reales)
   const allowPrefixes = [
     "/jugadores",
-    "/pagos",
+    "/pagos-jugador",
+    "/pagos_jugador",
     "/estadisticas",
     "/convocatorias",
     "/agenda",
-    "/eventos",   // ✅ FIX CRÍTICO
+    "/eventos",
     "/noticias",
-    "/sucursales",
-    "/catalogos",
+
+    // catálogos (en WELI pueden ser tenantizados según tu regla)
+    "/posiciones",
+    "/sucursales_real",
+    "/sucursales-real",
+    "/prevision_medica",
+    "/prevision-medica",
+    "/tipo_pago",
+    "/tipo-pago",
+    "/situacion_pago",
+    "/situacion-pago",
+    "/usuarios", // usuarios: en tu modelo también es por academia (rol 1/3)
   ];
 
-  return allowPrefixes.some((p) => u.startsWith(p));
+  return allowPrefixes.some((pref) => p.startsWith(pref));
 }
 
 /* -------------------- Axios instances -------------------- */
@@ -127,7 +163,7 @@ export const apiPrivate = axios.create({
 
 const api = apiPrivate;
 
-// Seteo inicial
+// Seteo inicial de Authorization
 const bootToken = getToken();
 if (bootToken) apiPrivate.defaults.headers.common.Authorization = `Bearer ${bootToken}`;
 
@@ -135,9 +171,12 @@ if (bootToken) apiPrivate.defaults.headers.common.Authorization = `Bearer ${boot
 apiPublic.interceptors.request.use((config) => {
   const headers = config.headers ?? {};
   const plain = typeof headers?.toJSON === "function" ? headers.toJSON() : { ...headers };
+
+  // blindaje: público nunca debe llevar auth ni tenant header
   delete plain.Authorization;
   delete plain.authorization;
   delete plain[ACADEMIA_HEADER];
+
   config.headers = plain;
   return config;
 });
@@ -156,13 +195,17 @@ apiPrivate.interceptors.request.use((config) => {
     delete plain.authorization;
   }
 
-  // x-academia-id (solo superadmin + rutas tenantizadas)
-  if (token) {
+  // x-academia-id
+  // Regla práctica:
+  // - Rol 3 (superadmin): SIEMPRE usa academia seleccionada para rutas tenantizadas.
+  // - Rol 1/2: puedes mandar si existe seleccionada (no rompe). Si no hay, no mandes.
+  // - Nunca mandes a auth ni portal apoderado (shouldSendAcademiaHeader ya lo evita).
+  if (token && shouldSendAcademiaHeader(config?.url)) {
     const rol = extractRolFromToken(token);
-    if (rol === 3 && shouldSendAcademiaHeader(config?.url)) {
-      const academiaId = readSelectedAcademiaId();
-      if (academiaId > 0) plain[ACADEMIA_HEADER] = String(academiaId);
-      else delete plain[ACADEMIA_HEADER];
+    const academiaId = readSelectedAcademiaId();
+
+    if (academiaId > 0 && (rol === 3 || rol === 1 || rol === 2)) {
+      plain[ACADEMIA_HEADER] = String(academiaId);
     } else {
       delete plain[ACADEMIA_HEADER];
     }
@@ -199,6 +242,9 @@ apiPrivate.interceptors.response.use(
 
     const norm = {
       status,
+      url: error?.config?.url ?? null,
+      method: error?.config?.method ?? null,
+      baseURL: error?.config?.baseURL ?? null,
       message:
         (data && (data.message || data.detail || data.error)) ||
         error?.message ||
@@ -220,4 +266,4 @@ apiPrivate.interceptors.response.use(
 );
 
 export default api;
-export { decodeJwtPayload }; // opcional si quieres reutilizar en módulos
+export { decodeJwtPayload };
