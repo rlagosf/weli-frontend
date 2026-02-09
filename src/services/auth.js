@@ -10,14 +10,28 @@ const AUTH_DEBUG =
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
+// ✅ mismo storage que usa tu app para snapshot de academia
+const ACADEMIA_STORAGE_KEY = "weli_selected_academia";
+
 /** Normaliza: solo dígitos (RUT sin DV) */
 function normalizeRut(rut) {
   return String(rut ?? "").replace(/\D/g, "").slice(0, 8);
 }
 
+function readSelectedAcademiaId() {
+  try {
+    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const id = Number(parsed?.id ?? 0);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Une un signal externo con un timeout.
- * Si se aborta cualquiera, abortamos el request.
  */
 function buildAbortSignal({ signal, timeoutMs }) {
   const controller = new AbortController();
@@ -35,7 +49,6 @@ function buildAbortSignal({ signal, timeoutMs }) {
   }
 
   if (signal) {
-    // Si el signal ya viene abortado, abortamos al toque.
     if (signal.aborted) {
       try {
         controller.abort();
@@ -48,9 +61,7 @@ function buildAbortSignal({ signal, timeoutMs }) {
       };
       try {
         signal.addEventListener("abort", onAbort, { once: true });
-      } catch {
-        // nada
-      }
+      } catch {}
     }
   }
 
@@ -69,18 +80,13 @@ function buildAbortSignal({ signal, timeoutMs }) {
 /** Wrapper para medir tiempos + timeout + abort externo */
 async function postWithTimeout(path, body, opts = {}) {
   const timeoutMs = Number(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-  const isPublic = Boolean(opts.isPublic);
   const externalSignal = opts.signal;
 
   const t0 = performance.now();
-
   const { signal, cleanup } = buildAbortSignal({ signal: externalSignal, timeoutMs });
 
   try {
-    const res = await api.post(path, body, {
-      signal,
-      meta: { isPublic },
-    });
+    const res = await api.post(path, body, { signal });
 
     const t1 = performance.now();
     if (AUTH_DEBUG) {
@@ -91,7 +97,7 @@ async function postWithTimeout(path, body, opts = {}) {
       });
     }
 
-    return res; // ✅ respuesta completa (headers/status/data)
+    return res;
   } catch (err) {
     const t1 = performance.now();
 
@@ -112,11 +118,9 @@ async function postWithTimeout(path, body, opts = {}) {
       });
     }
 
-    // axios: abort suele ser ERR_CANCELED; fetch: AbortError
     if (err?.name === "AbortError" || err?.code === "ERR_CANCELED") {
       const e = new Error("TIMEOUT");
       e.code = "TIMEOUT";
-      // dejamos status si venía
       if (status) e.status = status;
       throw e;
     }
@@ -133,16 +137,24 @@ async function postWithTimeout(path, body, opts = {}) {
 ──────────────────────────────── */
 export async function login(nombre_usuario, password, options = {}) {
   try {
+    const academia_id = readSelectedAcademiaId(); // ✅ si existe, la mandamos
+
+    const body = {
+      nombre_usuario,
+      password,
+      ...(academia_id ? { academia_id } : {}),
+    };
+
     const res = await postWithTimeout(
       "/auth/login",
-      { nombre_usuario, password },
-      { timeoutMs: DEFAULT_TIMEOUT_MS, isPublic: true, ...options }
+      body,
+      { timeoutMs: DEFAULT_TIMEOUT_MS, ...options }
     );
 
     const data = res?.data ?? {};
     if (data?.token) setToken(String(data.token));
 
-    return res; // ✅ compat: tu UI hace res?.data ?? res
+    return res;
   } catch (err) {
     console.error("[WELI] Error en login:", err?.message || err);
     throw err;
@@ -151,7 +163,6 @@ export async function login(nombre_usuario, password, options = {}) {
 
 /* ───────────────────────────────
    LOGIN APODERADO
-   POST /api/auth-apoderado/login -> { ok, token, must_change_password }
 ──────────────────────────────── */
 export async function loginApoderado(rut, password, options = {}) {
   const rutClean = normalizeRut(rut);
@@ -160,7 +171,7 @@ export async function loginApoderado(rut, password, options = {}) {
     const res = await postWithTimeout(
       "/auth-apoderado/login",
       { rut: rutClean, password: String(password ?? "") },
-      { timeoutMs: DEFAULT_TIMEOUT_MS, isPublic: true, ...options }
+      { timeoutMs: DEFAULT_TIMEOUT_MS, ...options }
     );
 
     const data = res?.data ?? {};
@@ -183,7 +194,7 @@ export async function loginApoderado(rut, password, options = {}) {
 }
 
 /* ───────────────────────────────
-   LOGOUTS con auditoría
+   LOGOUTS
 ──────────────────────────────── */
 async function safePostLogout(path) {
   const token =
@@ -193,10 +204,8 @@ async function safePostLogout(path) {
   if (!token) return;
 
   try {
-    await postWithTimeout(path, null, { timeoutMs: 8_000, isPublic: false });
-  } catch {
-    // logout no debe bloquear cierre de sesión local
-  }
+    await postWithTimeout(path, null, { timeoutMs: 8_000 });
+  } catch {}
 }
 
 function clearLocalAuth() {
@@ -208,7 +217,6 @@ function clearLocalAuth() {
   } catch {}
 }
 
-/** Logout Admin/Staff/Superadmin */
 export async function logoutAdmin() {
   try {
     await safePostLogout("/auth/logout");
@@ -217,7 +225,6 @@ export async function logoutAdmin() {
   }
 }
 
-/** Logout Apoderado */
 export async function logoutApoderado() {
   try {
     await safePostLogout("/auth-apoderado/logout");
@@ -226,7 +233,6 @@ export async function logoutApoderado() {
   }
 }
 
-/** Logout “inteligente” */
 export async function logoutAuto() {
   try {
     await safePostLogout("/auth-apoderado/logout");

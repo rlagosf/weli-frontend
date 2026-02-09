@@ -2,190 +2,254 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "../../context/ThemeContext";
-import api, { getToken, clearToken } from "../../services/api";
+import api, {
+  getToken,
+  clearToken,
+  ACADEMIA_STORAGE_KEY,
+} from "../../services/api";
 import IsLoading from "../../components/isLoading";
 import { jwtDecode } from "jwt-decode";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 import { formatRutWithDV } from "../../services/rut";
+
+/* ─────────────────────────────
+   Auth / Headers (WELI) — MISMO PATRÓN
+───────────────────────────── */
+const isExpired = (decoded) => {
+  const now = Math.floor(Date.now() / 1000);
+  return !decoded?.exp || decoded.exp <= now;
+};
+
+const extractRol = (decoded) => {
+  const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
+  const parsed = Number(rawRol);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+/** Soporta "1" o JSON {"id":1} */
+const getAcademiaIdFromStorage = () => {
+  try {
+    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
+    if (!raw) return null;
+
+    const direct = Number(raw);
+    if (Number.isFinite(direct) && direct > 0) return direct;
+
+    const parsed = JSON.parse(raw);
+    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+};
+
+const buildHeaders = (rol) => {
+  const token = getToken();
+  const h = token ? { Authorization: `Bearer ${token}` } : {};
+  if (rol === 3) {
+    const a = getAcademiaIdFromStorage();
+    if (a) h["x-academia-id"] = String(a);
+  }
+  return h;
+};
+
+/* ─────────────────────────────
+   Helpers robustos (con headers/signal)
+───────────────────────────── */
+const normalizeListResponse = (res) => {
+  if (!res || res.status === 204) return [];
+  const data = res.data ?? res;
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.results)) return data.results;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.rows)) return data.rows;
+  if (data?.ok && Array.isArray(data?.data)) return data.data;
+  if (data?.ok && Array.isArray(data?.items)) return data.items;
+  return [];
+};
+
+const getWithFallback = async (path, { signal, headers } = {}) => {
+  const urls = path.endsWith("/")
+    ? [path, path.slice(0, -1)]
+    : [path, `${path}/`];
+
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      return await api.get(url, { signal, headers });
+    } catch (e) {
+      lastErr = e;
+      const st = e?.status ?? e?.response?.status;
+      if (st === 401 || st === 403) throw e;
+    }
+  }
+  throw lastErr ?? new Error("GET failed");
+};
+
+const tryGetList = async (paths, { signal, headers } = {}) => {
+  const list = Array.isArray(paths) ? paths : [paths];
+
+  const variants = [];
+  for (const p of list) {
+    const base = p.startsWith("/") ? p : `/${p}`;
+    variants.push(base, base.endsWith("/") ? base.slice(0, -1) : `${base}/`);
+  }
+  const uniq = [...new Set(variants)];
+
+  for (const url of uniq) {
+    try {
+      const r = await api.get(url, { signal, headers });
+      return normalizeListResponse(r);
+    } catch (e) {
+      const st = e?.status ?? e?.response?.status ?? 0;
+      if (st === 401 || st === 403) throw e;
+      // 404 u otros -> probamos siguiente
+      continue;
+    }
+  }
+  return [];
+};
 
 export default function ListarJugadores() {
   const { darkMode } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
 
+  const [rolActual, setRolActual] = useState(0);
+
   const [jugadores, setJugadores] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [rol, setRol] = useState(null);
 
-  // 🧭 Breadcrumb base
+  useMobileAutoScrollTop();
+
+  /* 🧭 Breadcrumb por defecto (MISMO PATRÓN que listarPagos.jsx)
+     - No hardcodea rutas
+     - Respeta trazabilidad si vienes con breadcrumb desde SuperDashboard
+  */
   useEffect(() => {
     if (!Array.isArray(location.state?.breadcrumb)) {
       navigate(location.pathname + location.search, {
         replace: true,
         state: {
           ...(location.state || {}),
-          breadcrumb: [{ label: "Listar Jugadores", to: "/admin/listar-jugadores" }],
+          breadcrumb: [{ to: location.pathname, label: "Listar Jugadores" }],
         },
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, location.search]);
+  }, [location, navigate]);
 
-  useMobileAutoScrollTop();
-
-  // 🔐 Validación de sesión/rol (ahora incluye rol 3)
+  /* 🔐 Validación de sesión/rol (incluye rol 3) */
   useEffect(() => {
     try {
       const token = getToken();
       if (!token) throw new Error("no-token");
 
       const decoded = jwtDecode(token);
-      const now = Math.floor(Date.now() / 1000);
-      if (decoded?.exp && decoded.exp < now) throw new Error("expired");
+      if (isExpired(decoded)) throw new Error("expired");
 
-      const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
-      const userRol = Number.isFinite(Number(rawRol)) ? Number(rawRol) : 0;
+      const rol = extractRol(decoded);
 
-      // ✅ ahora permitimos superadmin (3)
-      if (![1, 2, 3].includes(userRol)) return navigate("/admin", { replace: true });
+      // ✅ Admin (1), Staff (2), Superadmin (3)
+      if (![1, 2, 3].includes(rol)) {
+        navigate("/admin", { replace: true });
+        return;
+      }
 
-      setRol(userRol);
+      // ✅ Si es superadmin, exige academia seleccionada (patrón WELI)
+      if (rol === 3) {
+        const a = getAcademiaIdFromStorage();
+        if (!a) throw new Error("missing-academia-target");
+      }
+
+      setRolActual(rol);
     } catch {
       clearToken();
       navigate("/login", { replace: true });
     }
   }, [navigate]);
 
-  // ───────────────── Helpers robustos ─────────────────
-  const normalizeListResponse = (res) => {
-    if (!res || res.status === 204) return [];
-    const data = res.data;
-    if (Array.isArray(data)) return data;
-    if (Array.isArray(data?.results)) return data.results;
-    if (Array.isArray(data?.items)) return data.items;
-    return [];
-  };
-
-  const tryGetList = async (paths) => {
-    const list = Array.isArray(paths) ? paths : [paths];
-
-    // variantes con / y sin / final
-    const variants = [];
-    for (const p of list) {
-      const base = p.startsWith("/") ? p : `/${p}`;
-      variants.push(base, base.endsWith("/") ? base.slice(0, -1) : `${base}/`);
-    }
-    const uniq = [...new Set(variants)];
-
-    for (const url of uniq) {
-      try {
-        const r = await api.get(url);
-        return normalizeListResponse(r);
-      } catch (e) {
-        // con tu api.js el error "normalizado" NO trae response siempre:
-        const st = e?.status ?? e?.response?.status ?? 0;
-        if (st === 401 || st === 403) throw e;
-        // si es 404, seguimos probando
-        continue;
-      }
-    }
-    return [];
-  };
-
-  // 📥 Carga de jugadores + catálogos mínimos
+  /* 📥 Carga de jugadores + catálogos mínimos */
   useEffect(() => {
-    if (!rol) return;
-    let alive = true;
+    if (!rolActual) return;
+
+    const abort = new AbortController();
+    const headers = buildHeaders(rolActual);
 
     (async () => {
       setIsLoading(true);
       setError("");
 
       try {
-        /**
-         * ✅ RUTAS: evita “inventar” demasiadas.
-         * Suposición razonable en WELI:
-         * - GET /jugadores soporta include_inactivos=1
-         * - staff puede tener ruta especial, pero si no existe, no forzamos
-         */
-        const jugadoresPaths =
-          rol === 2
-            ? [
-                "/jugadores?include_inactivos=1",
-                "/jugadores", // fallback
-              ]
-            : [
-                // Admin (1) y Superadmin (3)
-                "/jugadores?include_inactivos=1",
-                "/jugadores",
-              ];
+        // ✅ Misma lógica: rutas con fallback, sin inventar 20 endpoints
+        const jugadoresPaths = ["/jugadores?include_inactivos=1", "/jugadores"];
 
-        const rawJugadores = await tryGetList(jugadoresPaths);
-
-        /**
-         * ✅ Catálogos: nombres coherentes con tus routers.
-         * - posiciones: /posiciones
-         * - categorias: /categorias
-         * - estado: tu proyecto a veces lo llama /estado o /estados (fallback)
-         */
-        const [posList, catList, estList] = await Promise.all([
-          tryGetList(["/posiciones"]),
-          tryGetList(["/categorias"]),
-          tryGetList(["/estado", "/estados"]),
+        const [rawJugadores, posList, catList, estList] = await Promise.all([
+          tryGetList(jugadoresPaths, { signal: abort.signal, headers }),
+          tryGetList(["/posiciones"], { signal: abort.signal, headers }),
+          tryGetList(["/categorias"], { signal: abort.signal, headers }),
+          tryGetList(["/estado", "/estados"], { signal: abort.signal, headers }),
         ]);
 
-        if (!alive) return;
+        if (abort.signal.aborted) return;
 
         const posMap = new Map(
           (posList ?? []).map((p) => [
-            Number(p.id ?? p.posicion_id),
-            p.nombre ?? p.descripcion ?? "",
+            Number(p?.id ?? p?.posicion_id),
+            String(p?.nombre ?? p?.descripcion ?? "").trim(),
           ])
         );
+
         const catMap = new Map(
           (catList ?? []).map((c) => [
-            Number(c.id ?? c.categoria_id),
-            c.nombre ?? c.descripcion ?? "",
+            Number(c?.id ?? c?.categoria_id),
+            String(c?.nombre ?? c?.descripcion ?? "").trim(),
           ])
         );
+
         const estMap = new Map(
           (estList ?? []).map((e) => [
-            Number(e.id ?? e.estado_id),
-            e.nombre ?? e.descripcion ?? "",
+            Number(e?.id ?? e?.estado_id),
+            String(e?.nombre ?? e?.descripcion ?? "").trim(),
           ])
         );
 
         const safeJugadores = Array.isArray(rawJugadores) ? rawJugadores : [];
 
         const data = safeJugadores.map((j) => {
-          const catObj = j.categoria
-            ? j.categoria
-            : catMap.has(Number(j.categoria_id))
-            ? { nombre: catMap.get(Number(j.categoria_id)) }
-            : null;
+          const posId = Number(j?.posicion_id ?? j?.posicion?.id ?? NaN);
+          const catId = Number(j?.categoria_id ?? j?.categoria?.id ?? NaN);
+          const estId = Number(j?.estado_id ?? j?.estado?.id ?? NaN);
 
-          return {
-            ...j,
-            posicion:
-              j.posicion ??
-              (posMap.has(Number(j.posicion_id))
-                ? { nombre: posMap.get(Number(j.posicion_id)) }
-                : null),
-            categoria: catObj,
-            estado:
-              j.estado ??
-              (estMap.has(Number(j.estado_id))
-                ? { nombre: estMap.get(Number(j.estado_id)) }
-                : null),
-          };
+          const posicion =
+            j?.posicion ??
+            (Number.isFinite(posId) && posMap.has(posId)
+              ? { nombre: posMap.get(posId) }
+              : null);
+
+          const categoria =
+            j?.categoria ??
+            (Number.isFinite(catId) && catMap.has(catId)
+              ? { nombre: catMap.get(catId) }
+              : null);
+
+          const estado =
+            j?.estado ??
+            (Number.isFinite(estId) && estMap.has(estId)
+              ? { nombre: estMap.get(estId) }
+              : null);
+
+          return { ...j, posicion, categoria, estado };
         });
 
         setJugadores(data);
-        setIsLoading(false);
 
-        if (!data.length) setError("⚠️ No se encontraron jugadores.");
+        if (!data.length) {
+          setError("⚠️ No se encontraron jugadores.");
+        }
       } catch (err) {
+        if (abort.signal.aborted) return;
+
         const status = err?.status ?? err?.response?.status ?? 0;
         const msg = String(err?.message || "").toLowerCase();
 
@@ -195,25 +259,21 @@ export default function ListarJugadores() {
           return;
         }
 
-        // Caso típico rol 3 sin academia seleccionada (depende de tu backend)
-        if (rol === 3 && (status === 400 || status === 409 || msg.includes("academia"))) {
+        if (rolActual === 3 && (msg.includes("academia") || msg.includes("x-academia"))) {
           setError("⚠️ Superadmin: selecciona una academia para listar jugadores.");
-          setIsLoading(false);
           return;
         }
 
-        if (!alive) return;
         setError("❌ No se pudo cargar la lista de jugadores");
-        setIsLoading(false);
+      } finally {
+        if (!abort.signal.aborted) setIsLoading(false);
       }
     })();
 
-    return () => {
-      alive = false;
-    };
-  }, [rol, navigate]);
+    return () => abort.abort();
+  }, [rolActual, navigate]);
 
-  // 🎨 clases
+  /* 🎨 clases */
   const fondoClase = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";
   const tablaCabecera = darkMode ? "bg-[#1f2937] text-white" : "bg-gray-100 text-[#1d0b0b]";
   const filaHover = darkMode ? "hover:bg-[#1f2937]" : "hover:bg-gray-100";
@@ -222,15 +282,26 @@ export default function ListarJugadores() {
     ? "bg-[#1f2937] shadow-lg rounded-lg p-4 border border-gray-700 hover:border-[#24C6FF] transition-colors"
     : "bg-white shadow-md rounded-lg p-4 border border-gray-200 hover:border-[#24C6FF] transition-colors";
 
-  const handleClick = (rut, stateBreadcrumb) =>
-    navigate(`/admin/detalle-jugador/${encodeURIComponent(rut)}`, {
+  const handleClick = (rut, stateBreadcrumb) => {
+    const base = String(location.pathname || "").replace(/\/$/, "");
+    // /super-dashboard/admin/dashboard/listar-jugadores
+
+    const to = `${base}/detalle-jugador/`;
+
+    navigate(to, {
       state: {
-        from: "/admin/listar-jugadores",
-        breadcrumb: stateBreadcrumb ?? [{ label: "Listar Jugadores", to: "/admin/listar-jugadores" }],
+        rut: String(rut),            // ✅ el rut viaja por state (RAFC style)
+        from: base,                  // ✅ para volver bien
+        breadcrumb:
+          stateBreadcrumb ??
+          [{ label: "Listar Jugadores", to: base }],
       },
     });
+  };
 
-  // 🧩 Agrupar por categoría
+
+
+  /* 🧩 Agrupar por categoría */
   const grupos = useMemo(() => {
     const m = new Map();
     for (const j of jugadores) {
@@ -257,21 +328,23 @@ export default function ListarJugadores() {
 
       {!!error && (
         <div className="max-w-5xl mx-auto mb-4">
-          <div className={`${tarjetaClase}`}>
+          <div className={tarjetaClase}>
             <p className="text-yellow-400 text-center">{error}</p>
           </div>
         </div>
       )}
 
       {grupos.length === 0 ? (
-        <div className={`${tarjetaClase}`}>
+        <div className={tarjetaClase}>
           <p className="text-center text-gray-400 py-4">No hay jugadores registrados.</p>
         </div>
       ) : (
         <div className="space-y-6">
           {grupos.map(([categoriaNombre, lista]) => (
-            <div key={categoriaNombre} className={`${tarjetaClase}`}>
-              <h3 className="text-xl font-semibold mb-3 text-center">Categoría {categoriaNombre}</h3>
+            <div key={categoriaNombre} className={tarjetaClase}>
+              <h3 className="text-xl font-semibold mb-3 text-center">
+                Categoría {categoriaNombre}
+              </h3>
 
               <div className="w-full overflow-x-auto">
                 <table className="w-full text-xs sm:text-sm min-w-[820px]">
@@ -286,27 +359,29 @@ export default function ListarJugadores() {
                       <th className="p-2 border text-center w-24">Estado</th>
                     </tr>
                   </thead>
+
                   <tbody>
                     {lista.map((jugador) => {
-                      const rutCrudo = jugador.rut_jugador ?? jugador.id ?? null;
-                      const rutFormateado = rutCrudo ? formatRutWithDV(rutCrudo) : "-";
+                      const rutCrudo = jugador?.rut_jugador ?? jugador?.rut ?? jugador?.id ?? null;
+                      const rutFmt = rutCrudo ? formatRutWithDV(rutCrudo) : "-";
 
                       return (
                         <tr
-                          key={jugador.rut_jugador ?? jugador.id}
+                          key={jugador?.rut_jugador ?? jugador?.id ?? `${categoriaNombre}-${String(rutCrudo ?? Math.random())}`}
                           className={`${filaHover} cursor-pointer`}
-                          onClick={() => handleClick(jugador.rut_jugador, location.state?.breadcrumb)}
+                          onClick={() => handleClick(jugador?.rut_jugador ?? jugador?.rut ?? rutCrudo)}
+                          title="Ver detalle del jugador"
                         >
-                          <td className="p-2 border text-center">{jugador.nombre_jugador}</td>
-                          <td className="p-2 border text-center">{rutFormateado || rutCrudo || "-"}</td>
-                          <td className="p-2 border text-center">{jugador.edad ?? "-"}</td>
-                          <td className="p-2 border text-center">{jugador.telefono ?? "-"}</td>
-                          <td className="p-2 border text-center break-all">{jugador.email ?? "-"}</td>
+                          <td className="p-2 border text-center">{jugador?.nombre_jugador ?? "—"}</td>
+                          <td className="p-2 border text-center">{rutFmt || rutCrudo || "-"}</td>
+                          <td className="p-2 border text-center">{jugador?.edad ?? "-"}</td>
+                          <td className="p-2 border text-center">{jugador?.telefono ?? "-"}</td>
+                          <td className="p-2 border text-center break-all">{jugador?.email ?? "-"}</td>
                           <td className="p-2 border text-center">
-                            {jugador.posicion?.nombre ?? jugador.posicion_id ?? "-"}
+                            {jugador?.posicion?.nombre ?? jugador?.posicion_id ?? "-"}
                           </td>
                           <td className="p-2 border text-center">
-                            {jugador.estado?.nombre ?? jugador.estado_id ?? "-"}
+                            {jugador?.estado?.nombre ?? jugador?.estado_id ?? "-"}
                           </td>
                         </tr>
                       );

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { useTheme } from "../../context/ThemeContext";
-import api, { getToken, clearToken } from "../../services/api";
+import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
 import IsLoading from "../../components/isLoading";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -19,24 +19,6 @@ const toArray = (resp) => {
   if (Array.isArray(d?.results)) return d.results;
   if (d?.ok && Array.isArray(d.items)) return d.items;
   if (d?.ok && Array.isArray(d.data)) return d.data;
-  return [];
-};
-
-const getList = async (basePath, signal) => {
-  const urls = basePath.endsWith("/")
-    ? [basePath, basePath.slice(0, -1)]
-    : [basePath, `${basePath}/`];
-
-  for (const url of urls) {
-    try {
-      const r = await api.get(url, { signal });
-      return toArray(r);
-    } catch (e) {
-      if (e?.name === "CanceledError" || e?.code === "ERR_CANCELED") return [];
-      const st = e?.response?.status;
-      if (st === 401 || st === 403) throw e;
-    }
-  }
   return [];
 };
 
@@ -60,6 +42,72 @@ const extractRol = (decoded) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const getAcademiaIdFromStorage = () => {
+  try {
+    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
+    if (!raw) return null;
+
+    const direct = Number(raw);
+    if (Number.isFinite(direct) && direct > 0) return direct;
+
+    const parsed = JSON.parse(raw);
+    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+};
+
+
+const buildHeaders = (rol) => {
+  const token = getToken();
+  const h = token ? { Authorization: `Bearer ${token}` } : {};
+
+  if (rol === 3) {
+    const academiaId = getAcademiaIdFromStorage();
+    if (academiaId) h["x-academia-id"] = String(academiaId);
+  }
+  return h;
+};
+
+const getList = async (basePath, signal, headers) => {
+  const urls = basePath.endsWith("/")
+    ? [basePath, basePath.slice(0, -1)]
+    : [basePath, `${basePath}/`];
+
+  for (const url of urls) {
+    try {
+      const r = await api.get(url, { signal, headers });
+      return toArray(r);
+    } catch (e) {
+      if (e?.name === "CanceledError" || e?.code === "ERR_CANCELED") return [];
+      const st = e?.response?.status;
+      if (st === 401 || st === 403) throw e;
+    }
+  }
+  return [];
+};
+
+const postWithFallback = async (path, body, headers) => {
+  // intenta con y sin slash
+  const urls = path.endsWith("/")
+    ? [path, path.slice(0, -1)]
+    : [path, `${path}/`];
+
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      return await api.post(url, body, { headers });
+    } catch (e) {
+      lastErr = e;
+      const st = e?.response?.status;
+      // si es auth/permiso, no sigas intentando
+      if (st === 401 || st === 403) throw e;
+    }
+  }
+  throw lastErr ?? new Error("POST failed");
+};
+
 /* =======================================================
    Componente principal
 ======================================================= */
@@ -79,19 +127,31 @@ export default function CrearConvocatorias() {
   const [convocatoriaInfo, setConvocatoriaInfo] = useState(null);
   // { evento_id: number, convocatoria_id: number }
 
+  const [rolActual, setRolActual] = useState(0);
+
   useMobileAutoScrollTop();
 
   /* ==================== Auth ==================== */
   useEffect(() => {
     try {
-      const token = getToken(); // ✅ fuente de verdad (WELI)
+      const token = getToken();
       if (!token) throw new Error("no-token");
 
       const decoded = jwtDecode(token);
       if (isExpired(decoded)) throw new Error("expired");
 
       const rol = extractRol(decoded);
-      if (![1, 2].includes(rol)) throw new Error("no-role");
+
+      // ✅ ahora incluye superadmin (3)
+      if (![1, 2, 3].includes(rol)) throw new Error("no-role");
+
+      // ✅ si es superadmin, exige academia target seleccionada
+      if (rol === 3) {
+        const a = getAcademiaIdFromStorage();
+        if (!a) throw new Error("missing-academia-target");
+      }
+
+      setRolActual(rol);
     } catch {
       clearToken();
       navigate("/login", { replace: true });
@@ -107,10 +167,12 @@ export default function CrearConvocatorias() {
       setError("");
 
       try {
+        const headers = buildHeaders(rolActual);
+
         const [js, es, cs] = await Promise.all([
-          getList("/jugadores", abort.signal),
-          getList("/eventos", abort.signal),
-          getList("/categorias", abort.signal),
+          getList("/jugadores", abort.signal, headers),
+          getList("/eventos", abort.signal, headers),
+          getList("/categorias", abort.signal, headers),
         ]);
 
         const init = {};
@@ -142,7 +204,7 @@ export default function CrearConvocatorias() {
     })();
 
     return () => abort.abort();
-  }, [navigate]);
+  }, [navigate, rolActual]);
 
   /* ==================== Mappers ==================== */
   const catMap = useMemo(
@@ -283,14 +345,15 @@ export default function CrearConvocatorias() {
         return;
       }
 
-      const resp = await api.post("/convocatorias/", datosEnviar);
+      const headers = buildHeaders(rolActual);
+
+      // ✅ robusto con / y sin /
+      const resp = await postWithFallback("/convocatorias", datosEnviar, headers);
 
       const eventoIdBackend = resp?.data?.evento_id ?? datosEnviar[0].evento_id;
       const convIdBackend = resp?.data?.convocatoria_id;
 
-      if (!convIdBackend) {
-        throw new Error("Backend no retornó convocatoria_id");
-      }
+      if (!convIdBackend) throw new Error("Backend no retornó convocatoria_id");
 
       setConvocatoriaInfo({
         evento_id: Number(eventoIdBackend),
@@ -308,7 +371,7 @@ export default function CrearConvocatorias() {
       console.error(e);
       setError("❌ Error al guardar convocatorias");
     }
-  }, [jugadores, convocatorias, navigate]);
+  }, [jugadores, convocatorias, navigate, rolActual]);
 
   /* ==================== Generar PDF + Histórico ==================== */
   const generarListado = useCallback(async () => {
@@ -356,12 +419,15 @@ export default function CrearConvocatorias() {
 
       const base64 = doc.output("datauristring").split(",")[1];
 
-      await api.post("/convocatorias-historico", {
+      const headers = buildHeaders(rolActual);
+
+      // ✅ robusto con / y sin /
+      await postWithFallback("/convocatorias-historico", {
         evento_id: convocatoriaInfo.evento_id,
         convocatoria_id: convocatoriaInfo.convocatoria_id,
         fecha_generacion: new Date().toISOString(),
         listado_base64: base64,
-      });
+      }, headers);
 
       // Reset total
       const init = {};
@@ -390,7 +456,7 @@ export default function CrearConvocatorias() {
       console.error(e);
       alert("❌ Error al generar el PDF");
     }
-  }, [convocatoriaInfo, jugadores, convocatorias, navigate]);
+  }, [convocatoriaInfo, jugadores, convocatorias, navigate, rolActual]);
 
   /* ==================== UI ==================== */
   const fondoClase = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";

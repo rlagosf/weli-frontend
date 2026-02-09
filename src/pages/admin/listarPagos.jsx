@@ -1,12 +1,17 @@
 // src/pages/admin/listarPagos.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "../../context/ThemeContext";
-import api, { getToken, clearToken } from "../../services/api";
+import api, {
+  getToken,
+  clearToken,
+  ACADEMIA_STORAGE_KEY,
+} from "../../services/api";
 import { jwtDecode } from "jwt-decode";
 import { formatRutWithDV } from "../../services/rut";
 import { Pencil, Trash2, X, CreditCard } from "lucide-react";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
+import IsLoading from "../../components/isLoading";
 
 /* ─────────────────────────────
    CONSTANTES NEGOCIO
@@ -17,10 +22,15 @@ const SITUACION_PAGO_PAGADO_ID = 1; // Ajusta si tu catálogo usa otro ID
 const START_DEUDA_YEAR = 2025;
 const START_DEUDA_MONTH = 12;
 
+/* Paginación */
+const PAGE_SIZE = 10;
+const MAX_PAGES = 200;
+
+const MANUAL_PAGE_SIZE = 10;
+
 /* ─────────────────────────────
    HELPERS (MISMA LÓGICA detalleJugador.jsx)
 ───────────────────────────── */
-
 const monthLabelEs = (year, month) => {
   const d = new Date(year, month - 1, 1);
   const m = new Intl.DateTimeFormat("es-CL", { month: "long" }).format(d);
@@ -54,7 +64,6 @@ const buildMesesExigibles = (
     endM = mNow;
   }
 
-  // Si el end es anterior al start -> nada
   const startKey = startYear * 100 + startMonth;
   const endKey = endY * 100 + endM;
   if (endKey < startKey) return [];
@@ -71,7 +80,6 @@ const buildMesesExigibles = (
       y++;
     }
   }
-
   return out;
 };
 
@@ -85,24 +93,14 @@ const asList = (raw) => {
   return [];
 };
 
-const tryGetList = async (paths, signal) => {
-  const variants = [];
-  for (const p of paths) {
-    variants.push(p.endsWith("/") ? p : `${p}/`);
-    variants.push(p.endsWith("/") ? p.slice(0, -1) : p);
+const buildIdNameMap = (arr, idKey = "id", nameKey = "nombre") => {
+  const m = new Map();
+  for (const x of Array.isArray(arr) ? arr : []) {
+    const id = x?.[idKey];
+    const name = x?.[nameKey] ?? String(id ?? "—");
+    if (id != null) m.set(String(id), String(name).trim());
   }
-  const uniq = [...new Set(variants)];
-  for (const url of uniq) {
-    try {
-      const r = await api.get(url, { signal });
-      return asList(r);
-    } catch (e) {
-      const st = e?.response?.status;
-      if (st === 401 || st === 403) throw e;
-      continue;
-    }
-  }
-  return [];
+  return m;
 };
 
 // Igual que en detalleJugador: id + nombre/descripcion
@@ -123,18 +121,148 @@ const normalizeCatalog = (arr) =>
     }))
     .filter((x) => Number.isFinite(x.id) && x.nombre);
 
-const buildIdNameMap = (arr, idKey = "id", nameKey = "nombre") => {
-  const m = new Map();
-  for (const x of Array.isArray(arr) ? arr : []) {
-    const id = x?.[idKey];
-    const name = x?.[nameKey] ?? String(id ?? "—");
-    if (id != null) m.set(String(id), String(name).trim());
-  }
-  return m;
+/* ─────────────────────────────
+   Auth / Headers (WELI)
+───────────────────────────── */
+const isExpired = (decoded) => {
+  const now = Math.floor(Date.now() / 1000);
+  return !decoded?.exp || decoded.exp <= now;
 };
 
-// ✅ FINAL: normalizePagos
-const normalizePagos = (arr, { tipoPagoMap, medioPagoMap, situacionPagoMap, jugadoresMap }) => {
+const extractRol = (decoded) => {
+  const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
+  const parsed = Number(rawRol);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+/** Soporta "1" o JSON {"id":1} */
+const getAcademiaIdFromStorage = () => {
+  try {
+    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
+    if (!raw) return null;
+
+    const direct = Number(raw);
+    if (Number.isFinite(direct) && direct > 0) return direct;
+
+    const parsed = JSON.parse(raw);
+    const id = Number(
+      parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0
+    );
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+};
+
+const buildHeaders = (rol) => {
+  const token = getToken();
+  const h = token ? { Authorization: `Bearer ${token}` } : {};
+  if (rol === 3) {
+    const a = getAcademiaIdFromStorage();
+    if (a) h["x-academia-id"] = String(a);
+  }
+  return h;
+};
+
+// intenta varias rutas y variantes con / y sin /
+const tryGetList = async (paths, { signal, headers }) => {
+  const variants = [];
+  for (const p of paths) {
+    variants.push(p.endsWith("/") ? p : `${p}/`);
+    variants.push(p.endsWith("/") ? p.slice(0, -1) : p);
+  }
+  const uniq = [...new Set(variants)];
+
+  for (const url of uniq) {
+    try {
+      const r = await api.get(url, { signal, headers });
+      return asList(r);
+    } catch (e) {
+      const st = e?.status ?? e?.response?.status;
+      if (st === 401 || st === 403) throw e;
+      // probar siguiente
+    }
+  }
+  return [];
+};
+
+const getWithFallback = async (path, { signal, headers } = {}) => {
+  const urls = path.endsWith("/")
+    ? [path, path.slice(0, -1)]
+    : [path, `${path}/`];
+
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      return await api.get(url, { signal, headers });
+    } catch (e) {
+      lastErr = e;
+      const st = e?.status ?? e?.response?.status;
+      if (st === 401 || st === 403) throw e;
+    }
+  }
+  throw lastErr ?? new Error("GET failed");
+};
+
+const postWithFallback = async (path, body, { signal, headers } = {}) => {
+  const urls = path.endsWith("/")
+    ? [path, path.slice(0, -1)]
+    : [path, `${path}/`];
+
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      return await api.post(url, body, { signal, headers });
+    } catch (e) {
+      lastErr = e;
+      const st = e?.status ?? e?.response?.status;
+      if (st === 401 || st === 403) throw e;
+    }
+  }
+  throw lastErr ?? new Error("POST failed");
+};
+
+const putWithFallback = async (path, body, { signal, headers } = {}) => {
+  const urls = path.endsWith("/")
+    ? [path, path.slice(0, -1)]
+    : [path, `${path}/`];
+
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      return await api.put(url, body, { signal, headers });
+    } catch (e) {
+      lastErr = e;
+      const st = e?.status ?? e?.response?.status;
+      if (st === 401 || st === 403) throw e;
+    }
+  }
+  throw lastErr ?? new Error("PUT failed");
+};
+
+const deleteWithFallback = async (path, { signal, headers } = {}) => {
+  const urls = path.endsWith("/")
+    ? [path, path.slice(0, -1)]
+    : [path, `${path}/`];
+
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      return await api.delete(url, { signal, headers });
+    } catch (e) {
+      lastErr = e;
+      const st = e?.status ?? e?.response?.status;
+      if (st === 401 || st === 403) throw e;
+    }
+  }
+  throw lastErr ?? new Error("DELETE failed");
+};
+
+/* ✅ FINAL: normalizePagos */
+const normalizePagos = (
+  arr,
+  { tipoPagoMap, medioPagoMap, situacionPagoMap, jugadoresMap }
+) => {
   const list = Array.isArray(arr) ? arr : [];
 
   const safeInt = (v) => {
@@ -154,17 +282,25 @@ const normalizePagos = (arr, { tipoPagoMap, medioPagoMap, situacionPagoMap, juga
   };
 
   return list.map((p) => {
-    // ---------- IDs catálogos ----------
-    const tipoIdRaw = p?.tipo_pago_id ?? p?.tipo_id ?? p?.tipoPagoId ?? p?.tipo_pago?.id ?? null;
-    const medioIdRaw = p?.medio_pago_id ?? p?.medio_id ?? p?.medioPagoId ?? p?.medio_pago?.id ?? null;
+    const tipoIdRaw =
+      p?.tipo_pago_id ?? p?.tipo_id ?? p?.tipoPagoId ?? p?.tipo_pago?.id ?? null;
+    const medioIdRaw =
+      p?.medio_pago_id ??
+      p?.medio_id ??
+      p?.medioPagoId ??
+      p?.medio_pago?.id ??
+      null;
     const situIdRaw =
-      p?.situacion_pago_id ?? p?.estado_pago_id ?? p?.estado_id ?? p?.situacion_pago?.id ?? null;
+      p?.situacion_pago_id ??
+      p?.estado_pago_id ??
+      p?.estado_id ??
+      p?.situacion_pago?.id ??
+      null;
 
     const tipoId = safeInt(tipoIdRaw);
     const medioId = safeInt(medioIdRaw);
     const situId = safeInt(situIdRaw);
 
-    // ---------- RUT ----------
     const rutPlano =
       p?.jugador_rut ??
       p?.rut_jugador ??
@@ -176,7 +312,6 @@ const normalizePagos = (arr, { tipoPagoMap, medioPagoMap, situacionPagoMap, juga
     const jAnidado = p?.jugador ?? {};
     const jFromMap = rutPlano != null ? jugadoresMap.get(String(rutPlano)) : null;
 
-    // ---------- Nombre / categoría ----------
     const jugadorNombre =
       jAnidado?.nombre_jugador ??
       jAnidado?.nombre ??
@@ -186,7 +321,11 @@ const normalizePagos = (arr, { tipoPagoMap, medioPagoMap, situacionPagoMap, juga
       p?.nombre_jugador ??
       "—";
 
-    const catIdRaw = jAnidado?.categoria?.id ?? jAnidado?.categoria_id ?? jFromMap?.categoria?.id ?? null;
+    const catIdRaw =
+      jAnidado?.categoria?.id ??
+      jAnidado?.categoria_id ??
+      jFromMap?.categoria?.id ??
+      null;
     const catId = safeInt(catIdRaw);
 
     const catNombre =
@@ -196,22 +335,23 @@ const normalizePagos = (arr, { tipoPagoMap, medioPagoMap, situacionPagoMap, juga
       (typeof jAnidado?.categoria === "string" ? jAnidado?.categoria : null) ??
       "Sin categoría";
 
-    // ---------- Fecha ----------
     const fecha = p?.fecha_pago ?? p?.fecha ?? null;
     const d = parseDate(fecha);
 
-    // ---------- Labels catálogos ----------
     let tipoNombreBase =
       p?.tipo_pago?.nombre ??
       p?.tipo_pago_nombre ??
-      (tipoId != null ? tipoPagoMap.get(String(tipoId)) ?? String(tipoId) : "—");
+      (tipoId != null
+        ? tipoPagoMap.get(String(tipoId)) ?? String(tipoId)
+        : "—");
 
-    // ✅ Decorar mensualidad con mes/año según fecha_pago
-    // Ej: "Mensualidad enero 2026"
     if (tipoId === TIPO_PAGO_MENSUALIDAD && d) {
       const labelMes = monthLabelEs(d.getFullYear(), d.getMonth() + 1);
-      // Evita duplicar si ya viene decorado
-      if (!String(tipoNombreBase).toLowerCase().includes(String(labelMes).toLowerCase())) {
+      if (
+        !String(tipoNombreBase)
+          .toLowerCase()
+          .includes(String(labelMes).toLowerCase())
+      ) {
         tipoNombreBase = `Mensualidad ${labelMes}`;
       }
     }
@@ -219,15 +359,18 @@ const normalizePagos = (arr, { tipoPagoMap, medioPagoMap, situacionPagoMap, juga
     const medioNombre =
       p?.medio_pago?.nombre ??
       p?.medio_pago_nombre ??
-      (medioId != null ? medioPagoMap.get(String(medioId)) ?? String(medioId) : "—");
+      (medioId != null
+        ? medioPagoMap.get(String(medioId)) ?? String(medioId)
+        : "—");
 
     const situNombre =
       p?.situacion_pago?.nombre ??
       p?.estado_pago_nombre ??
       p?.estado_nombre ??
-      (situId != null ? situacionPagoMap.get(String(situId)) ?? String(situId) : "—");
+      (situId != null
+        ? situacionPagoMap.get(String(situId)) ?? String(situId)
+        : "—");
 
-    // ---------- ID pago ----------
     const idRaw =
       p?.id ??
       p?.ID ??
@@ -263,6 +406,8 @@ export default function ListarPagos() {
   const location = useLocation();
   useMobileAutoScrollTop();
 
+  const [rolActual, setRolActual] = useState(0);
+
   // 🔐 Auth / estado base
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -275,8 +420,8 @@ export default function ListarPagos() {
   const [situacionPagoMap, setSituacionPagoMap] = useState(new Map());
   const [jugadoresMap, setJugadoresMap] = useState(new Map());
 
-  // ✅ Catálogos normalizados al estilo detalleJugador
-  const [categoriasCat, setCategoriasCat] = useState([]); // opcional (por consistencia)
+  // Catálogos normalizados (consistencia)
+  const [categoriasCat, setCategoriasCat] = useState([]);
   const [sucursalesCat, setSucursalesCat] = useState([]);
 
   // Filtros pagos
@@ -287,12 +432,9 @@ export default function ListarPagos() {
   const [filtroMedioPago, setFiltroMedioPago] = useState(""); // id medio_pago
 
   // Paginación pagos
-  const PAGE_SIZE = 10;
-  const MAX_PAGES = 200;
   const [page, setPage] = useState(1);
 
-  // 🆕 Sección pagos manuales: filtro + paginación
-  const MANUAL_PAGE_SIZE = 10;
+  // Pagos manuales: filtro + paginación
   const [manualFiltro, setManualFiltro] = useState("");
   const [manualPage, setManualPage] = useState(1);
 
@@ -301,7 +443,7 @@ export default function ListarPagos() {
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState("");
 
-  // ✅ Modal de éxito + recarga visual
+  // Modal de éxito + recarga visual
   const [successOpen, setSuccessOpen] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [reloadBusy, setReloadBusy] = useState(false);
@@ -309,7 +451,6 @@ export default function ListarPagos() {
   const [editForm, setEditForm] = useState({
     id: null,
 
-    // flags
     virtual: false, // mensualidad vencida virtual -> POST
     create: false, // pago manual nuevo -> POST
 
@@ -325,28 +466,31 @@ export default function ListarPagos() {
     observaciones: "",
   });
 
-  // 🔐 Validación de sesión y autorización (solo admin = rol 1)
+  /* 🔐 Validación de sesión y autorización
+     - rol 1: admin
+     - rol 3: superadmin (requiere academia seleccionada)
+  */
   useEffect(() => {
     try {
       const token = getToken();
       if (!token) throw new Error("no-token");
 
       const decoded = jwtDecode(token);
-      const now = Math.floor(Date.now() / 1000);
 
-      if (!decoded?.exp || decoded.exp <= now) {
-        clearToken();
-        navigate("/login", { replace: true });
-        return;
-      }
+      if (isExpired(decoded)) throw new Error("expired");
 
-      const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
-      const rol = Number.isFinite(Number(rawRol)) ? Number(rawRol) : 0;
-
-      if (rol !== 1) {
+      const rol = extractRol(decoded);
+      if (![1, 3].includes(rol)) {
         navigate("/admin", { replace: true });
         return;
       }
+
+      if (rol === 3) {
+        const a = getAcademiaIdFromStorage();
+        if (!a) throw new Error("missing-academia-target");
+      }
+
+      setRolActual(rol);
     } catch {
       clearToken();
       navigate("/login", { replace: true });
@@ -369,6 +513,7 @@ export default function ListarPagos() {
   // 📡 Carga catálogos + jugadores + pagos
   useEffect(() => {
     const abort = new AbortController();
+    const headers = buildHeaders(rolActual);
 
     (async () => {
       setIsLoading(true);
@@ -377,22 +522,20 @@ export default function ListarPagos() {
       try {
         const [tipos, medios, situaciones, jugadoresList, categoriasRaw, sucursalesRaw] =
           await Promise.all([
-            tryGetList(["/tipo-pago", "/tipo_pago"], abort.signal),
-            tryGetList(["/medio-pago", "/medio_pago"], abort.signal),
+            tryGetList(["/tipo-pago", "/tipo_pago"], { signal: abort.signal, headers }),
+            tryGetList(["/medio-pago", "/medio_pago"], { signal: abort.signal, headers }),
             tryGetList(
               ["/situacion-pago", "/situacion_pago", "/estado-pago", "/estado_pago"],
-              abort.signal
+              { signal: abort.signal, headers }
             ),
-            tryGetList(["/jugadores"], abort.signal),
-            tryGetList(["/categorias"], abort.signal),
-
-            // ✅ MISMA ruta que tu detalleJugador.jsx
-            tryGetList(["/sucursales-real"], abort.signal),
+            tryGetList(["/jugadores"], { signal: abort.signal, headers }),
+            tryGetList(["/categorias"], { signal: abort.signal, headers }),
+            // ✅ MISMA ruta que detalleJugador.jsx
+            tryGetList(["/sucursales-real", "/sucursales-real/"], { signal: abort.signal, headers }),
           ]);
 
         if (abort.signal.aborted) return;
 
-        // Maps catálogos pagos
         const tipoMap = buildIdNameMap(tipos, "id", "nombre");
         const medioMap = buildIdNameMap(medios, "id", "nombre");
         const situMap = buildIdNameMap(situaciones, "id", "nombre");
@@ -400,7 +543,6 @@ export default function ListarPagos() {
         setMedioPagoMap(medioMap);
         setSituacionPagoMap(situMap);
 
-        // ✅ Normalización estilo detalleJugador
         const _categorias = normalizeCatalog(categoriasRaw);
         const _sucursales = normalizeCatalog(sucursalesRaw);
         setCategoriasCat(_categorias);
@@ -409,14 +551,12 @@ export default function ListarPagos() {
         const catMap = new Map(_categorias.map((c) => [Number(c.id), c.nombre]));
         const sucMap = new Map(_sucursales.map((s) => [Number(s.id), s.nombre]));
 
-        // ✅ SOLO activos
         const activos = (Array.isArray(jugadoresList) ? jugadoresList : []).filter((j) => {
           const estadoId = Number(j?.estado_id ?? j?.estadoId ?? j?.estado ?? 0);
           return estadoId === ESTADO_JUGADOR_ACTIVO;
         });
         setJugadoresActivos(activos);
 
-        // ✅ jugadoresMap enriquecido (incluye sucursal nombre usando sucMap)
         const jm = new Map();
         for (const j of activos) {
           const rut = j?.rut_jugador ?? j?.rut ?? null;
@@ -448,12 +588,17 @@ export default function ListarPagos() {
         setJugadoresMap(jm);
 
         // Pagos (estado cuenta)
-        const respEstado = await api.get("/pagos-jugador/estado-cuenta", { signal: abort.signal });
+        const respEstado = await getWithFallback("/pagos-jugador/estado-cuenta", {
+          signal: abort.signal,
+          headers,
+        });
         if (abort.signal.aborted) return;
 
-        const rawPagos = Array.isArray(respEstado?.data?.pagos) ? respEstado.data.pagos : [];
+        const rawPagos = Array.isArray(respEstado?.data?.pagos)
+          ? respEstado.data.pagos
+          : [];
 
-        // ✅ Filtrar pagos solo de activos
+        // Filtrar pagos solo de activos
         const rutsActivos = new Set(Array.from(jm.keys()));
         const rawPagosActivos = rawPagos.filter((p) => {
           const rut =
@@ -475,7 +620,8 @@ export default function ListarPagos() {
         setPagos(pagosNorm);
       } catch (e) {
         if (abort.signal.aborted) return;
-        const st = e?.response?.status;
+
+        const st = e?.status ?? e?.response?.status;
         if (st === 401 || st === 403) {
           clearToken();
           navigate("/login", { replace: true });
@@ -488,9 +634,11 @@ export default function ListarPagos() {
     })();
 
     return () => abort.abort();
-  }, [navigate]);
+  }, [navigate, rolActual]);
 
-  // 🎨 Estilos
+  /* ─────────────────────────────
+     UI helpers
+  ───────────────────────────── */
   const fondoClase = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";
   const tablaCabecera = darkMode ? "bg-[#1f2937] text-white" : "bg-gray-100 text-[#1d0b0b]";
   const filaHover = darkMode ? "hover:bg-[#111827]" : "hover:bg-gray-50";
@@ -522,7 +670,10 @@ export default function ListarPagos() {
     return null;
   };
 
-  const situacionVencidoId = useMemo(() => findIdByName(situacionPagoMap, "VENCIDO"), [situacionPagoMap]);
+  const situacionVencidoId = useMemo(
+    () => findIdByName(situacionPagoMap, "VENCIDO"),
+    [situacionPagoMap]
+  );
 
   /* ─────────────────────────────
      Construcción de filas (incluye vencidos virtuales)
@@ -530,7 +681,6 @@ export default function ListarPagos() {
   const filas = useMemo(() => {
     const rows = [];
 
-    // helper: yyyy-mm de un pago mensualidad (preferimos deuda_year/deuda_month)
     const getPeriodoMensualidad = (p) => {
       const dy = p?.deuda_year ?? p?.periodo?.year ?? null;
       const dm = p?.deuda_month ?? p?.periodo?.month ?? null;
@@ -542,11 +692,13 @@ export default function ListarPagos() {
         return { year: y, month: m, key: ymKey(y, m) };
       }
 
-      // fallback: fecha_pago (solo si no hay metadata)
       const d = p?.fecha_pago ? new Date(p.fecha_pago) : null;
       if (!d || isNaN(d.getTime())) return null;
-
-      return { year: d.getFullYear(), month: d.getMonth() + 1, key: ymKey(d.getFullYear(), d.getMonth() + 1) };
+      return {
+        year: d.getFullYear(),
+        month: d.getMonth() + 1,
+        key: ymKey(d.getFullYear(), d.getMonth() + 1),
+      };
     };
 
     // 1) Indexar mensualidades PAGADAS por rut y por periodo (YYYY-MM)
@@ -570,7 +722,7 @@ export default function ListarPagos() {
       mensualidadesPagadas.set(rut, set);
     }
 
-    // 2) Filas reales (dedupe por id si existe, o por rut+tipo+periodo si es mensualidad)
+    // 2) Filas reales (dedupe)
     const seen = new Set();
 
     for (const p of pagos) {
@@ -594,7 +746,7 @@ export default function ListarPagos() {
       const dedupeKey = safeId
         ? `ID-${safeId}`
         : periodo
-          ? `MENS-${rut}-${tipoId}-${periodo.key}` // mensualidad sin id: rut+periodo
+          ? `MENS-${rut}-${tipoId}-${periodo.key}`
           : `NOID-${rut}-${tipoId}-${String(p?.fecha_pago ?? "")}-${String(p?.monto ?? "")}`;
 
       if (seen.has(dedupeKey)) continue;
@@ -619,7 +771,7 @@ export default function ListarPagos() {
       });
     }
 
-    // 3) Meses exigibles acumulativos (enero..mesActual, y se agrega el mes actual solo si ya pasó el corte)
+    // 3) Meses exigibles acumulativos
     const mesesExigibles = buildMesesExigibles(new Date(), 5);
 
     // 4) Filas virtuales SOLO para meses exigibles NO pagados
@@ -632,8 +784,6 @@ export default function ListarPagos() {
         const labelMes = monthLabelEs(mm.year, mm.month);
         const vKey = `VIRTUAL-${rut}-${mm.key}`;
 
-        // si ya existe fila real para ese rut+mes (aunque sea vencida), no inventes otra virtual
-        // (esto evita duplicar si backend trae algo raro)
         if (seen.has(`MENS-${rut}-${TIPO_PAGO_MENSUALIDAD}-${mm.key}`)) continue;
 
         rows.push({
@@ -647,11 +797,8 @@ export default function ListarPagos() {
             id: null,
             monto: 0,
             fecha_pago: null,
-
-            // 🔥 esto define el periodo de la mensualidad adeudada
             deuda_year: mm.year,
             deuda_month: mm.month,
-
             jugador: {
               rut_jugador: String(rut),
               nombre_jugador: j?.nombre ?? "—",
@@ -668,7 +815,7 @@ export default function ListarPagos() {
       }
     }
 
-    // 5) Orden: vencidos arriba, y dentro de vencidos por mes (más antiguo primero)
+    // 5) Orden: vencidos arriba
     const pesoEstado = (estadoRaw) => {
       const e = (estadoRaw ?? "").toString().toUpperCase();
       if (e === "VENCIDO") return 0;
@@ -684,18 +831,18 @@ export default function ListarPagos() {
       const aKey = String(a?.key ?? "");
       const bKey = String(b?.key ?? "");
 
-      // virtuales por mes ascendente
       if (aKey.startsWith("VIRTUAL-") && bKey.startsWith("VIRTUAL-")) {
         return aKey.localeCompare(bKey);
       }
-
       return b.ts - a.ts;
     });
 
     return rows;
   }, [pagos, jugadoresMap]);
 
-  // Opciones filtros pagos
+  /* ─────────────────────────────
+     Opciones filtros pagos
+  ───────────────────────────── */
   const opcionesTipoPago = useMemo(() => {
     const m = new Map();
     for (const r of filas) {
@@ -709,9 +856,7 @@ export default function ListarPagos() {
 
   const opcionesCategoria = useMemo(() => {
     const s = new Set();
-    for (const r of filas) {
-      if (r?.categoria) s.add(r.categoria);
-    }
+    for (const r of filas) if (r?.categoria) s.add(r.categoria);
     return Array.from(s).map((label) => ({ value: label, label }));
   }, [filas]);
 
@@ -726,7 +871,9 @@ export default function ListarPagos() {
     return Array.from(m, ([value, label]) => ({ value, label }));
   }, [filas]);
 
-  // Filtros pagos
+  /* ─────────────────────────────
+     Filtros pagos + paginación
+  ───────────────────────────── */
   const filasFiltradas = useMemo(() => {
     const f = (filtroTexto || "").toLowerCase().trim();
 
@@ -768,15 +915,15 @@ export default function ListarPagos() {
   }, [filas, filtroTexto, filtroEstado, filtroTipoPago, filtroCategoriaSel, filtroMedioPago]);
 
   const totalPages = useMemo(() => {
-    const tp = Math.ceil(filasFiltradas.length / 10);
-    return Math.max(1, Math.min(tp, 200));
+    const tp = Math.ceil(filasFiltradas.length / PAGE_SIZE);
+    return Math.max(1, Math.min(tp || 1, MAX_PAGES));
   }, [filasFiltradas]);
 
   useEffect(() => setPage(1), [filtroTexto, filtroEstado, filtroTipoPago, filtroCategoriaSel, filtroMedioPago]);
 
   const pageData = useMemo(() => {
-    const start = (page - 1) * 10;
-    const end = start + 10;
+    const start = (page - 1) * PAGE_SIZE;
+    const end = start + PAGE_SIZE;
     return filasFiltradas.slice(start, end);
   }, [filasFiltradas, page]);
 
@@ -811,15 +958,15 @@ export default function ListarPagos() {
   }, [jugadoresMap, manualFiltro]);
 
   const manualTotalPages = useMemo(() => {
-    const tp = Math.ceil(jugadoresManualRows.length / 10);
-    return Math.max(1, Math.min(tp, 200));
+    const tp = Math.ceil(jugadoresManualRows.length / MANUAL_PAGE_SIZE);
+    return Math.max(1, Math.min(tp || 1, MAX_PAGES));
   }, [jugadoresManualRows]);
 
   useEffect(() => setManualPage(1), [manualFiltro]);
 
   const manualPageData = useMemo(() => {
-    const start = (manualPage - 1) * 10;
-    const end = start + 10;
+    const start = (manualPage - 1) * MANUAL_PAGE_SIZE;
+    const end = start + MANUAL_PAGE_SIZE;
     return jugadoresManualRows.slice(start, end);
   }, [jugadoresManualRows, manualPage]);
 
@@ -835,11 +982,9 @@ export default function ListarPagos() {
     const deudaYear = pago?.deuda_year ?? null;
     const deudaMonth = pago?.deuda_month ?? null;
 
-    // fecha sugerida: primer día del mes adeudado (para que quede registrado ese mes)
     const defaultFechaDeuda =
       deudaYear && deudaMonth ? `${deudaYear}-${String(deudaMonth).padStart(2, "0")}-01` : "";
 
-    // ✅ ID robusto: prioriza pago.id, luego row.id, y lo coerciona a number
     const idRaw = pago?.id ?? row?.id ?? null;
     const idNum = idRaw == null ? null : Number(idRaw);
     const safeId = Number.isFinite(idNum) && idNum > 0 ? idNum : null;
@@ -871,7 +1016,6 @@ export default function ListarPagos() {
         : pago?.situacion_pago?.id != null
           ? String(pago.situacion_pago.id)
           : "",
-
       observaciones: pago?.observaciones ?? "",
     });
 
@@ -887,6 +1031,9 @@ export default function ListarPagos() {
       id: null,
       virtual: false,
       create: true,
+
+      deuda_year: null,
+      deuda_month: null,
 
       jugador_rut: r,
       monto: "",
@@ -905,8 +1052,10 @@ export default function ListarPagos() {
     setEditOpen(false);
   };
 
-  const refetchPagosActivos = async () => {
-    const respEstado = await api.get("/pagos-jugador/estado-cuenta");
+  const refetchPagosActivos = useCallback(async () => {
+    const headers = buildHeaders(rolActual);
+
+    const respEstado = await getWithFallback("/pagos-jugador/estado-cuenta", { headers });
     const rawPagos = Array.isArray(respEstado?.data?.pagos) ? respEstado.data.pagos : [];
 
     const rutsActivos = new Set(Array.from(jugadoresMap.keys()));
@@ -924,24 +1073,27 @@ export default function ListarPagos() {
     });
 
     setPagos(pagosNorm);
-  };
+  }, [jugadoresMap, tipoPagoMap, medioPagoMap, situacionPagoMap, rolActual]);
 
-  const showSuccessAndReload = async (msg) => {
-    setSuccessMsg(msg);
-    setSuccessOpen(true);
-    await new Promise((r) => setTimeout(r, 900));
-    setSuccessOpen(false);
+  const showSuccessAndReload = useCallback(
+    async (msg) => {
+      setSuccessMsg(msg);
+      setSuccessOpen(true);
+      await new Promise((r) => setTimeout(r, 900));
+      setSuccessOpen(false);
 
-    setReloadBusy(true);
-    setIsLoading(true);
+      setReloadBusy(true);
+      setIsLoading(true);
 
-    try {
-      await refetchPagosActivos();
-    } finally {
-      setIsLoading(false);
-      setReloadBusy(false);
-    }
-  };
+      try {
+        await refetchPagosActivos();
+      } finally {
+        setIsLoading(false);
+        setReloadBusy(false);
+      }
+    },
+    [refetchPagosActivos]
+  );
 
   const submitEdit = async (e) => {
     e.preventDefault();
@@ -956,7 +1108,7 @@ export default function ListarPagos() {
 
     const payload = {
       jugador_rut: editForm.jugador_rut,
-      monto: editForm.monto,
+      monto: Number(editForm.monto),
       fecha_pago: editForm.fecha_pago,
       tipo_pago_id: isVirtual ? TIPO_PAGO_MENSUALIDAD : Number(editForm.tipo_pago_id),
       medio_pago_id: Number(editForm.medio_pago_id),
@@ -964,49 +1116,36 @@ export default function ListarPagos() {
       observaciones: editForm.observaciones ?? "",
     };
 
-    if (!payload.monto || Number(payload.monto) <= 0) {
-      setEditError("El monto debe ser mayor a 0");
-      return;
-    }
-    if (!payload.fecha_pago) {
-      setEditError("La fecha de pago es obligatoria");
-      return;
-    }
-    if (!payload.medio_pago_id) {
-      setEditError("Seleccione medio de pago");
-      return;
-    }
-    if (!payload.tipo_pago_id) {
-      setEditError("Seleccione tipo de pago");
-      return;
-    }
-    if (!payload.situacion_pago_id) {
-      setEditError("Seleccione situación");
-      return;
-    }
+    if (!payload.monto || Number(payload.monto) <= 0) return setEditError("El monto debe ser mayor a 0");
+    if (!payload.fecha_pago) return setEditError("La fecha de pago es obligatoria");
+    if (!payload.medio_pago_id) return setEditError("Seleccione medio de pago");
+    if (!payload.tipo_pago_id) return setEditError("Seleccione tipo de pago");
+    if (!payload.situacion_pago_id) return setEditError("Seleccione situación");
 
     setEditBusy(true);
     setEditError("");
 
+    const headers = buildHeaders(rolActual);
+
     try {
       // POST: manual o fila virtual
       if (isVirtual || isCreate) {
-        await api.post("/pagos-jugador", payload);
+        await postWithFallback("/pagos-jugador", payload, { headers });
         setEditOpen(false);
         await showSuccessAndReload("Pago completado");
         return;
       }
 
-      // PUT: editar pago existente (✅ validación robusta)
+      // PUT: editar pago existente
       const idNum = Number(editForm.id);
       if (!Number.isFinite(idNum) || idNum <= 0) {
         setEditError("ID de pago inválido");
         return;
       }
 
-      await api.put(`/pagos-jugador/${idNum}`, payload);
+      await putWithFallback(`/pagos-jugador/${idNum}`, payload, { headers });
 
-      // actualización local rápida (comparación numérica segura)
+      // actualización local rápida
       setPagos((prev) =>
         prev.map((p) => {
           const pid = Number(p?.id);
@@ -1027,8 +1166,7 @@ export default function ListarPagos() {
             },
             situacion_pago: {
               id: Number(payload.situacion_pago_id),
-              nombre:
-                situacionPagoMap.get(String(payload.situacion_pago_id)) ?? p.situacion_pago?.nombre,
+              nombre: situacionPagoMap.get(String(payload.situacion_pago_id)) ?? p.situacion_pago?.nombre,
             },
             observaciones: payload.observaciones ?? "",
           };
@@ -1037,8 +1175,13 @@ export default function ListarPagos() {
 
       setEditOpen(false);
       await showSuccessAndReload("Registro actualizado");
-      return;
     } catch (err) {
+      const st = err?.status ?? err?.response?.status;
+      if (st === 401 || st === 403) {
+        clearToken();
+        navigate("/login", { replace: true });
+        return;
+      }
       setEditError(err?.response?.data?.message || err?.message || "No se pudo guardar el pago");
     } finally {
       setEditBusy(false);
@@ -1052,10 +1195,18 @@ export default function ListarPagos() {
     const ok = window.confirm(`¿Eliminar el pago #${pago.id}? Esta acción es irreversible.`);
     if (!ok) return;
 
+    const headers = buildHeaders(rolActual);
+
     try {
-      await api.delete(`/pagos-jugador/${pago.id}`);
-      setPagos((prev) => prev.filter((p) => p.id !== pago.id));
+      await deleteWithFallback(`/pagos-jugador/${pago.id}`, { headers });
+      setPagos((prev) => prev.filter((p) => Number(p.id) !== Number(pago.id)));
     } catch (err) {
+      const st = err?.status ?? err?.response?.status;
+      if (st === 401 || st === 403) {
+        clearToken();
+        navigate("/login", { replace: true });
+        return;
+      }
       alert(err?.message || "No se pudo eliminar el pago");
     }
   };
@@ -1063,23 +1214,11 @@ export default function ListarPagos() {
   /* ─────────────────────────────
      Render
   ───────────────────────────── */
-  if (isLoading) {
-    return (
-      <div
-        className={`${fondoClase} min-h-[calc(100vh-100px)] px-4 pt-4 pb-16 flex items-center justify-center`}
-      >
-        <p className="opacity-80 text-sm">
-          {reloadBusy ? "Actualizando información…" : "Cargando pagos centralizados…"}
-        </p>
-      </div>
-    );
-  }
+  if (isLoading) return <IsLoading />;
 
   if (error) {
     return (
-      <div
-        className={`${fondoClase} min-h-[calc(100vh-100px)] px-4 pt-4 pb-16 flex items-center justify-center`}
-      >
+      <div className={`${fondoClase} min-h-[calc(100vh-100px)] px-4 pt-4 pb-16 flex items-center justify-center`}>
         <p className="text-red-500 text-sm sm:text-base">{error}</p>
       </div>
     );
@@ -1228,9 +1367,7 @@ export default function ListarPagos() {
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={reloadBusy || page <= 1}
             className={`px-3 py-1 rounded border ${
-              page <= 1 || reloadBusy
-                ? "opacity-50 cursor-not-allowed"
-                : "hover:bg-gray-100 dark:hover:bg-[#111827]"
+              page <= 1 || reloadBusy ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-100 dark:hover:bg-[#111827]"
             }`}
           >
             Anterior
@@ -1244,9 +1381,7 @@ export default function ListarPagos() {
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={reloadBusy || page >= totalPages}
             className={`px-3 py-1 rounded border ${
-              page >= totalPages || reloadBusy
-                ? "opacity-50 cursor-not-allowed"
-                : "hover:bg-gray-100 dark:hover:bg-[#111827]"
+              page >= totalPages || reloadBusy ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-100 dark:hover:bg-[#111827]"
             }`}
           >
             Siguiente
@@ -1260,12 +1395,12 @@ export default function ListarPagos() {
       </div>
 
       {/* ─────────────────────────────
-          NUEVA SECCIÓN: INGRESAR PAGOS MANUALES
+          INGRESAR PAGOS MANUALES
         ───────────────────────────── */}
       <div className="w-full mt-10">
         <h3 className="text-xl font-bold text-center">INGRESAR PAGOS MANUALES</h3>
         <p className="text-center mt-1 mb-4 text-xs sm:text-sm opacity-80">
-          Acá se pueden realizar pagos en forma manual. Se listan{" "}
+          Acá se pueden realizar pagos manuales. Se listan{" "}
           <span className="font-semibold">solo jugadores activos</span> (estado_id = 1).
         </p>
 
@@ -1333,9 +1468,7 @@ export default function ListarPagos() {
               onClick={() => setManualPage((p) => Math.max(1, p - 1))}
               disabled={reloadBusy || manualPage <= 1}
               className={`px-3 py-1 rounded border ${
-                manualPage <= 1 || reloadBusy
-                  ? "opacity-50 cursor-not-allowed"
-                  : "hover:bg-gray-100 dark:hover:bg-[#111827]"
+                manualPage <= 1 || reloadBusy ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-100 dark:hover:bg-[#111827]"
               }`}
             >
               Anterior
@@ -1349,9 +1482,7 @@ export default function ListarPagos() {
               onClick={() => setManualPage((p) => Math.min(manualTotalPages, p + 1))}
               disabled={reloadBusy || manualPage >= manualTotalPages}
               className={`px-3 py-1 rounded border ${
-                manualPage >= manualTotalPages || reloadBusy
-                  ? "opacity-50 cursor-not-allowed"
-                  : "hover:bg-gray-100 dark:hover:bg-[#111827]"
+                manualPage >= manualTotalPages || reloadBusy ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-100 dark:hover:bg-[#111827]"
               }`}
             >
               Siguiente
@@ -1368,9 +1499,7 @@ export default function ListarPagos() {
       {/* Modal Edición / Registro */}
       {editOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div
-            className={`${darkMode ? "bg-[#1f2937] text-white" : "bg-white"} w-[95%] max-w-2xl rounded-lg p-5 shadow-lg`}
-          >
+          <div className={`${darkMode ? "bg-[#1f2937] text-white" : "bg-white"} w-[95%] max-w-2xl rounded-lg p-5 shadow-lg`}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-semibold">
                 {editForm.virtual
@@ -1519,7 +1648,7 @@ export default function ListarPagos() {
         </div>
       )}
 
-      {/* ✅ Modal de éxito */}
+      {/* Modal de éxito */}
       {successOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60">
           <div

@@ -188,6 +188,7 @@ const adminChildren = [
   { path: "configuracion/sucursales", element: <Sucursales /> },
 
   { path: "convocatorias", element: <CrearConvocatoria /> },
+  { path: "listar-jugadores/detalle-jugador", element: <DetalleJugador /> },
   { path: "detalle-jugador/:rut", element: <DetalleJugador /> },
   { path: "ver-convocaciones-historicas", element: <VerConvocacionHistorica /> },
   { path: "registrar-estadisticas", element: <RegistrarEstadisticas /> },

@@ -42,7 +42,7 @@ export const getToken = () => {
 export const clearToken = () => {
   try {
     localStorage.removeItem(TOKEN_KEY);
-  } catch {}
+  } catch { }
   delete apiPrivate.defaults.headers.common.Authorization;
 };
 
@@ -50,7 +50,7 @@ export const setToken = (token) => {
   if (token && typeof token === "string") {
     try {
       localStorage.setItem(TOKEN_KEY, token);
-    } catch {}
+    } catch { }
     apiPrivate.defaults.headers.common.Authorization = `Bearer ${token}`;
   }
 };
@@ -61,13 +61,19 @@ function readSelectedAcademiaId() {
     const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
     if (!raw) return 0;
 
+    // Caso 1: guardado como número/string: "1"
+    const direct = Number(raw);
+    if (Number.isFinite(direct) && direct > 0) return direct;
+
+    // Caso 2: guardado como JSON: {"id":1} o {"academia_id":1}
     const parsed = JSON.parse(raw);
-    const id = Number(parsed?.id ?? 0);
+    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
     return Number.isFinite(id) && id > 0 ? id : 0;
   } catch {
     return 0;
   }
 }
+
 
 /**
  * Decodifica payload JWT (base64url) robusto (soporta UTF-8).
@@ -252,12 +258,12 @@ apiPrivate.interceptors.response.use(
       data,
       ...(import.meta.env.DEV
         ? {
-            response: error?.response || null,
-            request: error?.request || null,
-            code: error?.code,
-            config: error?.config,
-            _raw: error,
-          }
+          response: error?.response || null,
+          request: error?.request || null,
+          code: error?.code,
+          config: error?.config,
+          _raw: error,
+        }
         : {}),
     };
 

@@ -138,7 +138,7 @@ export default function Dashboard() {
 
       // pagos
       { to: `${BASE}/gestionar-pagos`, label: "Gestión de pagos", roles: [1, 3], Icon: Banknote },
-      { to: `${BASE}/power-bi`, label: "POWER BI FINANANCIERO", roles: [1, 3], Icon: PieChart },
+      { to: `${BASE}/power-bi`, label: "POWER BI FINANCIERO", roles: [1, 3], Icon: PieChart },
 
       // noticias
       { to: `${BASE}/noticias`, label: "Registro Noticias", roles: [1, 2, 3], Icon: Newspaper },

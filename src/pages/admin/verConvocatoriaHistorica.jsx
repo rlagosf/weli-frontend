@@ -1,11 +1,15 @@
 // src/pages/admin/verConvocacionHistorica.jsx
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { useTheme } from "../../context/ThemeContext";
-import api, { getToken, clearToken } from "../../services/api";
+import api, {
+  getToken,
+  clearToken,
+  ACADEMIA_STORAGE_KEY,
+} from "../../services/api";
 import IsLoading from "../../components/isLoading";
-import { FileText } from "lucide-react";
+import { FileText, X } from "lucide-react";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -45,14 +49,12 @@ const calcEdad = (fnac) => {
   return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
 };
 
-// Normaliza rut para usarlo como clave en Map (elimina puntos, guiones, espacios, etc.)
+// Normaliza rut para usarlo como clave en Map (solo dígitos; rut sin DV)
 const normalizeRutKey = (val) => {
   if (val == null) return "";
   const s = String(val).trim();
   if (!s) return "";
-  // nos quedamos solo con dígitos (rut sin DV) para mapear de forma estable
-  const digits = s.replace(/\D/g, "");
-  return digits;
+  return s.replace(/\D/g, "");
 };
 
 const nombreDesdeJugador = (j) =>
@@ -66,6 +68,66 @@ const nombreDesdeJugador = (j) =>
 const nombreDesdeConvocado = (c) =>
   coalesceStr(c?.nombre_jugador, c?.jugador_nombre, c?.nombre, c?.nombre_completo);
 
+/* ================= Auth / Headers (WELI) ================= */
+
+const isExpired = (decoded) => {
+  const now = Math.floor(Date.now() / 1000);
+  return !decoded?.exp || decoded.exp <= now;
+};
+
+const extractRol = (decoded) => {
+  const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
+  const parsed = Number(rawRol);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+/** Soporta "1" o JSON {"id":1} */
+const getAcademiaIdFromStorage = () => {
+  try {
+    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
+    if (!raw) return null;
+
+    const direct = Number(raw);
+    if (Number.isFinite(direct) && direct > 0) return direct;
+
+    const parsed = JSON.parse(raw);
+    const id = Number(
+      parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0
+    );
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+};
+
+const buildHeaders = (rol) => {
+  const token = getToken();
+  const h = token ? { Authorization: `Bearer ${token}` } : {};
+  if (rol === 3) {
+    const a = getAcademiaIdFromStorage();
+    if (a) h["x-academia-id"] = String(a);
+  }
+  return h;
+};
+
+const getWithFallback = async (path, { signal, headers } = {}) => {
+  const urls = path.endsWith("/")
+    ? [path, path.slice(0, -1)]
+    : [path, `${path}/`];
+
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      return await api.get(url, { signal, headers });
+    } catch (e) {
+      lastErr = e;
+      const st = getStatus(e);
+      if (st === 401 || st === 403) throw e;
+    }
+  }
+  throw lastErr ?? new Error("GET failed");
+};
+
 /* ================= Componente ================= */
 
 export default function VerConvocacionHistorica() {
@@ -73,54 +135,62 @@ export default function VerConvocacionHistorica() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const [rolActual, setRolActual] = useState(0);
+
   const [historicos, setHistoricos] = useState([]);
   const [eventos, setEventos] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+
   const [modal, setModal] = useState({ open: false, evento: null, jugadores: [] });
   const generatingRef = useRef(false);
 
   // mapa rutNormalizado -> { nombre, fnac, edad }
-  // OJO: este endpoint (/jugadores) en tu sistema suele venir ya filtrado a ACTIVO (estado_id=1),
-  // y lo usamos como "set" de jugadores vigentes para ocultar no-activos en histórico.
+  // Lo usamos como "set" de jugadores activos (estado_id=1).
   const jugadoresMapRef = useRef(new Map());
-
-  /* ========= Breadcrumb ========= */
-  useEffect(() => {
-    const currentPath = "/admin/ver-convocaciones-historicas";
-    const bc = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : [];
-    const last = bc[bc.length - 1];
-    if (!last || last.label !== "Histórico de Convocatorias") {
-      navigate(currentPath, {
-        replace: true,
-        state: {
-          ...(location.state || {}),
-          breadcrumb: [{ label: "Histórico de Convocatorias", to: currentPath }],
-        },
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, navigate]);
 
   useMobileAutoScrollTop();
 
-  /* ========= Auth ========= */
+  /* ========= Breadcrumb ========= */
+  // 🧭 Breadcrumb por defecto (MISMO PATRÓN que listarPagos.jsx)
+  useEffect(() => {
+    if (!Array.isArray(location.state?.breadcrumb)) {
+      navigate(location.pathname + location.search, {
+        replace: true,
+        state: {
+          ...(location.state || {}),
+          breadcrumb: [{ to: location.pathname, label: "Histórico de Convocatorias" }],
+        },
+      });
+    }
+  }, [location, navigate]);
+
+
+  /* ========= Auth =========
+     - rol 1: admin
+     - rol 2: staff
+     - rol 3: superadmin (requiere academia seleccionada)
+  */
   useEffect(() => {
     try {
       const token = getToken();
       if (!token) throw new Error("no-token");
 
       const decoded = jwtDecode(token);
-      const now = Math.floor(Date.now() / 1000);
-      if (decoded?.exp && decoded.exp < now) throw new Error("expired");
+      if (isExpired(decoded)) throw new Error("expired");
 
-      const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
-      const rol = Number.isFinite(Number(rawRol)) ? Number(rawRol) : 0;
-
-      if (![1, 2].includes(rol)) {
-        // sin acceso a este módulo
+      const rol = extractRol(decoded);
+      if (![1, 2, 3].includes(rol)) {
         navigate("/admin", { replace: true });
+        return;
       }
+
+      if (rol === 3) {
+        const a = getAcademiaIdFromStorage();
+        if (!a) throw new Error("missing-academia-target");
+      }
+
+      setRolActual(rol);
     } catch {
       clearToken();
       navigate("/login", { replace: true });
@@ -130,6 +200,7 @@ export default function VerConvocacionHistorica() {
   /* ========= Carga eventos + históricos ========= */
   useEffect(() => {
     const abort = new AbortController();
+    const headers = buildHeaders(rolActual);
 
     (async () => {
       setIsLoading(true);
@@ -137,8 +208,8 @@ export default function VerConvocacionHistorica() {
 
       try {
         const [evRes, hRes] = await Promise.all([
-          api.get("/eventos", { signal: abort.signal }),
-          api.get("/convocatorias-historico", { signal: abort.signal }),
+          getWithFallback("/eventos", { signal: abort.signal, headers }),
+          getWithFallback("/convocatorias-historico", { signal: abort.signal, headers }),
         ]);
 
         if (abort.signal.aborted) return;
@@ -162,21 +233,28 @@ export default function VerConvocacionHistorica() {
     })();
 
     return () => abort.abort();
-  }, [navigate]);
+  }, [navigate, rolActual]);
 
   /* ========= Carga jugadores (para nombre + fnac + edad) ========= */
   useEffect(() => {
     const abort = new AbortController();
+    const headers = buildHeaders(rolActual);
 
     (async () => {
       try {
-        const resp = await api.get("/jugadores", { signal: abort.signal }); // normalmente solo activos (estado_id=1)
+        const resp = await getWithFallback("/jugadores", { signal: abort.signal, headers });
+
         if (abort.signal.aborted) return;
 
         const js = toArray(resp);
         const map = new Map();
 
         for (const j of js) {
+          // seguridad: si backend trae no-activos, los excluimos igual
+          const estadoId = Number(j?.estado_id ?? j?.estadoId ?? j?.estado ?? 0);
+          if (estadoId !== 0 && estadoId !== 1) continue; // si viene 0 desconocido, no excluimos; si viene !=1, fuera
+          if (estadoId !== 0 && estadoId !== 1) continue;
+
           const rutRaw = j?.rut_jugador ?? j?.rut ?? j?.id;
           const rutKey = normalizeRutKey(rutRaw);
           if (!rutKey) continue;
@@ -201,6 +279,9 @@ export default function VerConvocacionHistorica() {
                   ? calcEdad(fnac)
                   : "";
 
+          // En WELI, "activos" suele ser estado_id=1, así que si viene ese dato lo usamos como filtro real:
+          if (Number.isFinite(estadoId) && estadoId !== 1) continue;
+
           map.set(rutKey, { nombre, fnac, edad });
         }
 
@@ -214,14 +295,14 @@ export default function VerConvocacionHistorica() {
           navigate("/login", { replace: true });
           return;
         }
-        // si falla, simplemente no tendremos nombres/fechas desde el mapa
+        // si falla, seguimos sin mapa
       }
     })();
 
     return () => abort.abort();
-  }, [navigate]);
+  }, [navigate, rolActual]);
 
-  /* ========= Helpers de UI y datos ========= */
+  /* ========= Helpers UI/datos ========= */
 
   const fondoClase = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";
   const tablaCabecera = darkMode ? "bg-[#1f2937] text-white" : "bg-gray-100 text-[#1d0b0b]";
@@ -230,10 +311,10 @@ export default function VerConvocacionHistorica() {
     ? "bg-[#1f2937] shadow-lg rounded-lg p-4 border border-gray-700"
     : "bg-white shadow-md rounded-lg p-4 border border-gray-200";
 
-  const getEventoById = (id) => eventos.find((e) => Number(e.id) === Number(id)) || null;
+  const getEventoById = (id) =>
+    eventos.find((e) => Number(e.id) === Number(id)) || null;
 
   const nombreEvento = (e) => e?.titulo ?? e?.nombre ?? `Evento #${e?.id ?? "—"}`;
-
   const fechaEvento = (e) => String(e?.fecha_inicio ?? e?.fecha ?? "").slice(0, 10) || "—";
 
   const ordenarConvocados = (lista) => {
@@ -250,7 +331,7 @@ export default function VerConvocacionHistorica() {
   // Usamos el map de /jugadores como "set" de activos.
   const filtrarSoloActivos = (lista) => {
     const map = jugadoresMapRef.current;
-    if (!map || map.size === 0) return Array.isArray(lista) ? lista : []; // fallback (si no cargó el map)
+    if (!map || map.size === 0) return Array.isArray(lista) ? lista : []; // fallback si no cargó
     return (Array.isArray(lista) ? lista : []).filter((c) => {
       const rutKey = normalizeRutKey(c?.jugador_rut ?? c?.rut ?? c?.rut_jugador ?? "");
       return rutKey && map.has(rutKey);
@@ -264,9 +345,7 @@ export default function VerConvocacionHistorica() {
     const fromMap = rutKey ? jugadoresMapRef.current.get(rutKey) : null;
 
     let nombre = nombreDesdeConvocado(c);
-    if (!isNonEmptyStr(nombre) && fromMap?.nombre) {
-      nombre = fromMap.nombre;
-    }
+    if (!isNonEmptyStr(nombre) && fromMap?.nombre) nombre = fromMap.nombre;
 
     const fnac =
       fromMap?.fnac ??
@@ -279,7 +358,7 @@ export default function VerConvocacionHistorica() {
     const edad = fromMap?.edad ?? (fnac ? calcEdad(fnac) : "");
 
     return {
-      rut: rutKey, // rut "plano" (sin DV) → lo pasamos por formatRutWithDV
+      rut: rutKey, // rut sin DV (dígitos)
       nombre: nombre || "",
       fnac: fnac || "",
       edad: edad || "",
@@ -298,15 +377,13 @@ export default function VerConvocacionHistorica() {
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
 
-    /* ===== Marca de agua (logo) ===== */
+    // Marca de agua (logo)
     let logo = null;
     try {
       logo = await new Promise((resolve) => {
         const img = new Image();
-        // Si tu server bloquea cross-origin, esto no ayuda porque es mismo-origin,
-        // pero no estorba si en algún momento lo mueves a CDN.
         img.crossOrigin = "anonymous";
-        img.src = "/logo-en-negativo.png"; // AJUSTA LA RUTA SI ES NECESARIO
+        img.src = "/logo-en-negativo.png"; // ajusta si aplica
         img.onload = () => resolve(img);
         img.onerror = () => resolve(null);
       });
@@ -319,8 +396,6 @@ export default function VerConvocacionHistorica() {
       const logoW = 350;
       const logoH = 350;
 
-      // Nota: doc.GState puede no existir en algunas builds antiguas de jsPDF.
-      // Si no existe, simplemente dibujamos sin opacidad para no romper exportación.
       if (typeof doc.GState === "function" && typeof doc.setGState === "function") {
         const gState = doc.GState({ opacity });
         doc.setGState(gState);
@@ -329,14 +404,11 @@ export default function VerConvocacionHistorica() {
         return;
       }
 
-      // fallback sin opacidad (mejor PDF feo que PDF muerto)
       doc.addImage(logo, "PNG", (pageW - logoW) / 2, (pageH - logoH) / 2, logoW, logoH);
     };
 
-    // watermark inicial
     drawWatermark(0.12);
 
-    /* ===== Títulos ===== */
     const titulo = "Listado de Convocados";
     const subtitulo = `${nombreEvento(evento)} — ${fechaEvento(evento)}`;
 
@@ -350,7 +422,6 @@ export default function VerConvocacionHistorica() {
     doc.setTextColor(80, 80, 80);
     doc.text(subtitulo, pageW / 2, 82, { align: "center" });
 
-    /* ===== Tabla ===== */
     autoTable(doc, {
       head: [["RUT", "Nombre", "Fecha nacimiento", "Edad"]],
       body: ordenarConvocados(jugadores).map((c) => {
@@ -381,14 +452,14 @@ export default function VerConvocacionHistorica() {
         3: { halign: "center" },
       },
       didDrawPage: (data) => {
-        // watermark por página (suave)
         drawWatermark(0.08);
 
-        // footer
         const y = pageH - 24;
         doc.setFontSize(9);
         doc.setTextColor(90, 90, 90);
-        doc.text(`Creado por WELI • APP Oficial • Página ${data.pageNumber}`, pageW / 2, y, { align: "center" });
+        doc.text(`Creado por WELI • APP Oficial • Página ${data.pageNumber}`, pageW / 2, y, {
+          align: "center",
+        });
       },
     });
 
@@ -411,6 +482,20 @@ export default function VerConvocacionHistorica() {
 
   /* ========= Acciones ========= */
 
+  const fetchConvocadosHistorico = useCallback(
+    async ({ evento_id, convocatoria_id }) => {
+      const headers = buildHeaders(rolActual);
+
+      const res = await getWithFallback(
+        `/convocatorias/evento/${Number(evento_id)}/convocatoria/${Number(convocatoria_id)}`,
+        { headers }
+      );
+
+      return toArray(res);
+    },
+    [rolActual]
+  );
+
   const verPDFDeHistorico = async (h) => {
     if (generatingRef.current) return;
     generatingRef.current = true;
@@ -426,12 +511,9 @@ export default function VerConvocacionHistorica() {
 
       const evento = getEventoById(evento_id) || { id: evento_id };
 
-      const res = await api.get(`/convocatorias/evento/${evento_id}/convocatoria/${convocatoria_id}`);
-      const lista = toArray(res);
+      const lista = await fetchConvocadosHistorico({ evento_id, convocatoria_id });
 
-      // ✅ Solo activos
       const listaActivos = filtrarSoloActivos(lista);
-
       if (!Array.isArray(listaActivos) || listaActivos.length === 0) {
         alert("No hay jugadores activos en esta convocatoria histórica.");
         return;
@@ -463,10 +545,7 @@ export default function VerConvocacionHistorica() {
 
       const evento = getEventoById(evento_id) || { id: evento_id };
 
-      const res = await api.get(`/convocatorias/evento/${evento_id}/convocatoria/${convocatoria_id}`);
-      const lista = toArray(res);
-
-      // ✅ Solo activos
+      const lista = await fetchConvocadosHistorico({ evento_id, convocatoria_id });
       const listaActivos = filtrarSoloActivos(lista);
 
       setModal({ open: true, evento, jugadores: listaActivos });
@@ -486,7 +565,7 @@ export default function VerConvocacionHistorica() {
   if (isLoading) return <IsLoading />;
 
   return (
-    <div className={`${fondoClase} px-2 sm:px-4 pt-4 pb-16 font-realacademy`}>
+    <div className={`${fondoClase} px-2 sm:px-4 pt-4 pb-16 font-weli`}>
       {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
 
       <h2 className="text-2xl font-bold mb-6 text-center">Histórico de Convocatorias</h2>
@@ -500,27 +579,32 @@ export default function VerConvocacionHistorica() {
               <thead className={`${tablaCabecera} text-[10px] sm:text-xs`}>
                 <tr>
                   <th className="p-2 border text-center w-12">ID</th>
-                  {/* columna de ID de evento eliminada, solo mostramos nombre */}
-                  <th className="p-2 border text-center w-32">Nombre evento</th>
-                  <th className="p-2 border text-center w-16">Convocatoria</th>
-                  <th className="p-2 border text-center w-28">Fecha generación</th>
+                  <th className="p-2 border text-center w-56">Nombre evento</th>
+                  <th className="p-2 border text-center w-20">Convocatoria</th>
+                  <th className="p-2 border text-center w-44">Fecha generación</th>
                   <th className="p-2 border text-center w-20">Listado</th>
-                  <th className="p-2 border text-center w-24">Convocados</th>
+                  <th className="p-2 border text-center w-28">Convocados</th>
                 </tr>
               </thead>
+
               <tbody>
                 {historicos.map((h) => {
                   const evento = getEventoById(h.evento_id);
                   return (
                     <tr key={h.id} className={filaHover}>
                       <td className="p-2 border text-center">{h.id}</td>
-                      <td className="p-2 border text-center">{evento ? nombreEvento(evento) : "—"}</td>
+                      <td className="p-2 border text-center break-words">
+                        {evento ? nombreEvento(evento) : "—"}
+                      </td>
                       <td className="p-2 border text-center">#{h.convocatoria_id}</td>
-                      <td className="p-2 border text-center">{String(h.fecha_generacion ?? "").replace("T", " ").slice(0, 19)}</td>
+                      <td className="p-2 border text-center">
+                        {String(h.fecha_generacion ?? "").replace("T", " ").slice(0, 19)}
+                      </td>
                       <td className="p-2 border text-center">
                         <button
                           onClick={() => verPDFDeHistorico(h)}
-                          className={`hover:opacity-80 ${generatingRef.current ? "opacity-60 cursor-not-allowed" : ""}`}
+                          className={`hover:opacity-80 ${generatingRef.current ? "opacity-60 cursor-not-allowed" : ""
+                            }`}
                           title="Exportar listado (PDF)"
                           aria-label={`Exportar listado histórico ${h.id}`}
                           disabled={generatingRef.current}
@@ -531,7 +615,7 @@ export default function VerConvocacionHistorica() {
                       <td className="p-2 border text-center">
                         <button
                           onClick={() => verConvocadosDeHistorico(h)}
-                          className="px-3 py-1 rounded bg-[#e82d89] text-white hover:bg-pink-700"
+                          className="px-3 py-1 rounded bg-[#e82d89] text-white hover:brightness-95"
                         >
                           Ver
                         </button>
@@ -548,17 +632,23 @@ export default function VerConvocacionHistorica() {
       {/* Modal convocados */}
       {modal.open && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50">
-          <div className={`${darkMode ? "bg-[#1f2937] text-white" : "bg-white"} w-[95%] max-w-3xl rounded-lg p-6 shadow-lg`}>
-            <div className="flex justify-between items-center mb-4">
+          <div
+            className={`${darkMode ? "bg-[#1f2937] text-white" : "bg-white text-[#1d0b0b]"
+              } w-[95%] max-w-3xl rounded-lg p-6 shadow-lg`}
+          >
+            <div className="flex justify-between items-center mb-4 gap-3">
               <h3 className="text-lg font-bold">
                 Convocados (solo activos) — {modal.evento ? nombreEvento(modal.evento) : "Evento"}
                 {modal.evento && ` (${fechaEvento(modal.evento)})`}
               </h3>
+
               <button
                 onClick={() => setModal({ open: false, evento: null, jugadores: [] })}
-                className={`px-3 py-1 rounded border ${darkMode ? "border-white/15 hover:bg-white/10" : "border-black/10 hover:bg-black/5"}`}
+                className="p-2 rounded hover:bg-black/10 dark:hover:bg-white/10"
+                title="Cerrar"
+                aria-label="Cerrar modal"
               >
-                Cerrar
+                <X size={18} />
               </button>
             </div>
 
@@ -581,9 +671,13 @@ export default function VerConvocacionHistorica() {
                       const keyBase = normalizeRutKey(c?.jugador_rut ?? c?.rut ?? c?.rut_jugador);
                       return (
                         <tr key={c.id ?? `${keyBase}-${info.fnac || ""}`} className={filaHover}>
-                          <td className="px-2 py-1 border text-center">{info.rut ? formatRutWithDV(info.rut) : ""}</td>
+                          <td className="px-2 py-1 border text-center">
+                            {info.rut ? formatRutWithDV(info.rut) : ""}
+                          </td>
                           <td className="px-2 py-1 border text-center">{info.nombre}</td>
-                          <td className="px-2 py-1 border text-center">{info.fnac ? String(info.fnac).slice(0, 10) : ""}</td>
+                          <td className="px-2 py-1 border text-center">
+                            {info.fnac ? String(info.fnac).slice(0, 10) : ""}
+                          </td>
                           <td className="px-2 py-1 border text-center">{info.edad !== "" ? info.edad : ""}</td>
                         </tr>
                       );

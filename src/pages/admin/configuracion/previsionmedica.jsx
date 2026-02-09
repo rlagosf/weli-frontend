@@ -1,11 +1,13 @@
 // src/pages/admin/config/PrevisionMedica.jsx
-import { useEffect, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { jwtDecode } from 'jwt-decode';
-import api, { getToken, clearToken } from '../../../services/api';
-import { useTheme } from '../../../context/ThemeContext';
-import Modal from '../../../components/modal';
-import { useMobileAutoScrollTop } from '../../../hooks/useMobileScrollTop';
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { jwtDecode } from "jwt-decode";
+import api, { getToken, clearToken } from "../../../services/api";
+import { useTheme } from "../../../context/ThemeContext";
+import Modal from "../../../components/modal";
+import { useMobileAutoScrollTop } from "../../../hooks/useMobileScrollTop";
+
+const ACCENT = "#e82d89";
 
 export default function PrevisionMedica() {
   const { darkMode } = useTheme();
@@ -13,224 +15,257 @@ export default function PrevisionMedica() {
   const location = useLocation();
 
   const [previsiones, setPrevisiones] = useState([]);
-  const [nuevo, setNuevo] = useState('');
+  const [nuevo, setNuevo] = useState("");
   const [editarId, setEditarId] = useState(null);
-  const [editarNombre, setEditarNombre] = useState('');
-  const [mensaje, setMensaje] = useState('');
-  const [error, setError] = useState('');
+  const [editarNombre, setEditarNombre] = useState("");
+  const [mensaje, setMensaje] = useState("");
+  const [error, setError] = useState("");
   const [mostrarModal, setMostrarModal] = useState(false);
   const [seleccionado, setSeleccionado] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  // 🧭 breadcrumb lo pinta el layout /admin
+  useMobileAutoScrollTop();
+
+  // ✅ Estrategia dorada: detecta árbol actual (SIN hardcodear /admin)
+  const dashboardBase = useMemo(() => {
+    const p = location.pathname || "";
+    return p.startsWith("/super-dashboard/admin/dashboard")
+      ? "/super-dashboard/admin/dashboard"
+      : "/admin";
+  }, [location.pathname]);
+
+  const configPath = useMemo(() => `${dashboardBase}/configuracion`, [dashboardBase]);
+
+  // Guards
+  const breadcrumbBootRef = useRef(false);
+
+  const abreviar = useCallback((txt) => {
+    if (!txt) return "";
+    const isMobile = typeof window !== "undefined" ? window.innerWidth <= 640 : false;
+    if (!isMobile) return txt;
+    if (txt.length <= 14) return txt;
+    return txt
+      .split(" ")
+      .map((p) => (p.length > 6 ? p.slice(0, 6) + "." : p))
+      .join(" ");
+  }, []);
+
+  // 🧭 Breadcrumb (ANTI-LOOP) — respeta ruta real
   useEffect(() => {
+    if (breadcrumbBootRef.current) return;
+
     const currentPath = location.pathname;
     const bc = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : [];
     const last = bc[bc.length - 1];
-    if (!last || last.label !== 'Previsión Médica') {
+
+    const label = "Previsión Médica";
+    if (!last || last.label !== label) {
+      breadcrumbBootRef.current = true;
       navigate(currentPath, {
         replace: true,
         state: {
           ...(location.state || {}),
           breadcrumb: [
-            { label: 'Configuración', to: '/admin/configuracion' },
-            { label: 'Previsión Médica', to: currentPath },
+            { label: abreviar("Configuración"), to: configPath },
+            { label: abreviar(label), to: currentPath },
           ],
         },
       });
+    } else {
+      breadcrumbBootRef.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname]);
+  }, [location.pathname, location.search, configPath, abreviar]);
 
-  useMobileAutoScrollTop();
-
-  // 🔐 Auth admin=1
+  // 🔐 Auth (admin=1 o superadmin=3) ✅ evita expulsión por rol 3
   useEffect(() => {
     try {
       const token = getToken();
-      if (!token) throw new Error('no-token');
+      if (!token) throw new Error("no-token");
+
       const decoded = jwtDecode(token);
       const now = Math.floor(Date.now() / 1000);
-      if (decoded?.exp && decoded.exp < now) throw new Error('expired');
+      if (!decoded?.exp || decoded.exp <= now) throw new Error("expired");
+
       const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
       const rol = Number.isFinite(Number(rawRol)) ? Number(rawRol) : 0;
-      if (rol !== 1) navigate('/admin', { replace: true });
+
+      if (![1, 3].includes(rol)) {
+        navigate(dashboardBase, { replace: true });
+        return;
+      }
     } catch {
       clearToken();
-      navigate('/login', { replace: true });
+      navigate("/login", { replace: true });
     }
-  }, [navigate]);
+  }, [navigate, dashboardBase]);
 
   // ───────── Utils ─────────
   const sanitizar = (texto) =>
-    String(texto || '')
-      .replace(/[<>;"']/g, '')
-      .replace(/[^a-zA-Z0-9 áéíóúÁÉÍÓÚñÑ-]/g, '')
+    String(texto || "")
+      .replace(/[<>;"']/g, "")
+      .replace(/[^a-zA-Z0-9 áéíóúÁÉÍÓÚñÑ-]/g, "")
       .trim();
 
-  const flash = (okMsg, errMsg) => {
+  const flash = useCallback((okMsg, errMsg) => {
     if (okMsg) setMensaje(okMsg);
     if (errMsg) setError(errMsg);
-    setTimeout(() => {
-      setMensaje('');
-      setError('');
+    window.setTimeout(() => {
+      setMensaje("");
+      setError("");
     }, 2500);
-  };
+  }, []);
 
   const toArray = (resp) => {
-    const d = resp?.data ?? resp ?? [];
+    const d = resp?.data ?? resp;
     if (Array.isArray(d)) return d;
     if (Array.isArray(d?.items)) return d.items;
     if (Array.isArray(d?.results)) return d.results;
-    if (d?.ok && Array.isArray(d.items)) return d.items;
-    if (d?.ok && Array.isArray(d.data)) return d.data;
+    if (Array.isArray(d?.rows)) return d.rows;
     return [];
   };
 
-  // ✅ error normalizado por api.js
+  // ✅ error normalizado por tu api.js
   const getErrStatus = (err) => err?.status ?? err?.response?.status ?? 0;
   const getErrData = (err) => err?.data ?? err?.response?.data ?? null;
-
-  const handleAuth = () => {
-    clearToken();
-    navigate('/login', { replace: true });
-  };
 
   const prettyError = (err, fallback) => {
     const st = getErrStatus(err);
     const data = getErrData(err);
     const backendMsg = data?.message || data?.detail || data?.error || err?.message || null;
 
-    if (st === 401 || st === 403) return '🔒 Sesión expirada o sin permisos. Vuelve a iniciar sesión.';
-
-    if (st === 400) return backendMsg || '⚠️ Datos inválidos. Revisa el nombre.';
-    if (st === 404) return backendMsg || '⚠️ No encontrado (puede que ya haya sido eliminado).';
+    if (st === 401 || st === 403) return "🔒 Sesión expirada o sin permisos. Vuelve a iniciar sesión.";
+    if (st === 400) return backendMsg || "⚠️ Datos inválidos. Revisa el nombre.";
+    if (st === 404) return backendMsg || "⚠️ No encontrado (puede que ya haya sido eliminado).";
 
     if (st === 409) {
-      if (data?.errno === 1451 || data?.code === 'ER_ROW_IS_REFERENCED_2') {
-        return '⚠️ No se puede eliminar: esta previsión está asignada a uno o más jugadores.';
+      if (data?.errno === 1451 || data?.code === "ER_ROW_IS_REFERENCED_2") {
+        return "⚠️ No se puede eliminar: esta previsión está asignada a uno o más jugadores.";
       }
-      if (data?.errno === 1062 || data?.code === 'ER_DUP_ENTRY') {
-        return '⚠️ Ya existe una previsión médica con ese nombre.';
+      if (data?.errno === 1062 || data?.code === "ER_DUP_ENTRY") {
+        return "⚠️ Ya existe una previsión médica con ese nombre.";
       }
-      return backendMsg || '⚠️ Conflicto: no se pudo completar la acción.';
+      return backendMsg || "⚠️ Conflicto: no se pudo completar la acción.";
     }
 
-    // por si viene 500 pero con errno/code
-    if (data?.errno === 1451 || data?.code === 'ER_ROW_IS_REFERENCED_2') {
-      return '⚠️ No se puede eliminar: esta previsión está asignada a uno o más jugadores.';
+    if (data?.errno === 1451 || data?.code === "ER_ROW_IS_REFERENCED_2") {
+      return "⚠️ No se puede eliminar: esta previsión está asignada a uno o más jugadores.";
     }
-    if (data?.errno === 1062 || data?.code === 'ER_DUP_ENTRY') {
-      return '⚠️ Ya existe una previsión médica con ese nombre.';
+    if (data?.errno === 1062 || data?.code === "ER_DUP_ENTRY") {
+      return "⚠️ Ya existe una previsión médica con ese nombre.";
     }
 
-    return backendMsg || fallback || '❌ Error inesperado.';
+    return backendMsg || fallback || "❌ Error inesperado.";
   };
 
-  // ✅ variantes con y sin slash final, sin depender de err.response
-  const withVariants = (fn) => async (base, ...args) => {
-    const urls = base.endsWith('/') ? [base, base.slice(0, -1)] : [base, `${base}/`];
-    let lastErr = null;
+  const handleAuth = useCallback(() => {
+    clearToken();
+    navigate("/login", { replace: true });
+  }, [navigate]);
 
-    for (const u of urls) {
-      try {
-        return await fn(u, ...args);
-      } catch (e) {
-        lastErr = e;
-        const st = getErrStatus(e);
-        if (st === 401 || st === 403) throw e;
+  // ✅ CLAVE: apiOps estable (NO cambia por render)
+  const apiOps = useMemo(() => {
+    const withVariants = (fn) => async (base, ...args) => {
+      const urls = base.endsWith("/") ? [base, base.slice(0, -1)] : [base, `${base}/`];
+      let lastErr = null;
+
+      for (const u of urls) {
+        try {
+          return await fn(u, ...args);
+        } catch (e) {
+          lastErr = e;
+          const st = getErrStatus(e);
+          if (st === 401 || st === 403) throw e;
+        }
       }
-    }
-    throw lastErr || new Error('ENDPOINT_VARIANTS_FAILED');
-  };
+      throw lastErr || new Error("ENDPOINT_VARIANTS_FAILED");
+    };
 
-  const getVar = withVariants((u, cfg) => api.get(u, cfg));
-  const postVar = withVariants((u, payload, cfg) => api.post(u, payload, cfg));
-  const putVar = withVariants((u, payload, cfg) => api.put(u, payload, cfg));
-  const delVar = withVariants((u, cfg) => api.delete(u, cfg));
-
-  // ───────── Fetch ─────────
-  const fetchDatos = async () => {
-    try {
-      const res = await getVar('/prevision-medica');
-      setPrevisiones(toArray(res));
-    } catch (err) {
-      const st = getErrStatus(err);
-      if (st === 401 || st === 403) return handleAuth();
-      setError(prettyError(err, '❌ Error al obtener previsiones'));
-    }
-  };
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      await fetchDatos();
-      if (!alive) return;
-    })();
-    return () => {
-      alive = false;
+    return {
+      getVar: withVariants((u, c) => api.get(u, c)),
+      postVar: withVariants((u, p, c) => api.post(u, p, c)),
+      putVar: withVariants((u, p, c) => api.put(u, p, c)),
+      delVar: withVariants((u, c) => api.delete(u, c)),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // <- intencionalmente vacío: referencias estables
 
-  // ───────── Crear ─────────
+  // ───────── Fetch (sin loop) ─────────
+  const fetchDatos = useCallback(
+    async (signal) => {
+      try {
+        const res = await apiOps.getVar("/prevision-medica", { signal });
+        if (signal?.aborted) return;
+        setPrevisiones(toArray(res));
+      } catch (err) {
+        if (signal?.aborted) return;
+        const st = getErrStatus(err);
+        if (st === 401 || st === 403) return handleAuth();
+        setError(prettyError(err, "❌ Error al obtener previsiones"));
+      }
+    },
+    [apiOps, handleAuth]
+  );
+
+  useEffect(() => {
+    const abort = new AbortController();
+    fetchDatos(abort.signal);
+    return () => abort.abort();
+  }, [fetchDatos]);
+
+  // ───────── Mutaciones ─────────
   const crear = async () => {
     const nombre = sanitizar(nuevo);
-    if (nombre.length < 3) return setError('⚠️ El nombre debe tener al menos 3 caracteres.');
+    if (nombre.length < 3) return setError("⚠️ El nombre debe tener al menos 3 caracteres.");
 
     setBusy(true);
     try {
-      await postVar('/prevision-medica', { nombre });
-      setNuevo('');
-      flash('✅ Previsión creada');
+      await apiOps.postVar("/prevision-medica", { nombre });
+      setNuevo("");
+      flash("✅ Previsión creada");
       await fetchDatos();
     } catch (err) {
       const st = getErrStatus(err);
       if (st === 401 || st === 403) return handleAuth();
-      setError(prettyError(err, '❌ No se pudo crear la previsión.'));
+      setError(prettyError(err, "❌ No se pudo crear la previsión."));
     } finally {
       setBusy(false);
     }
   };
 
-  // ───────── Actualizar ─────────
   const actualizar = async () => {
-    if (!editarId) return setError('⚠️ Debes seleccionar un registro.');
+    if (!editarId) return setError("⚠️ Debes seleccionar un registro.");
     const nombre = sanitizar(editarNombre);
-    if (nombre.length < 3) return setError('⚠️ El nombre debe tener al menos 3 caracteres.');
+    if (nombre.length < 3) return setError("⚠️ El nombre debe tener al menos 3 caracteres.");
 
     setBusy(true);
     try {
-      await putVar(`/prevision-medica/${editarId}`, { nombre });
+      await apiOps.putVar(`/prevision-medica/${editarId}`, { nombre });
       setEditarId(null);
-      setEditarNombre('');
-      flash('✅ Actualizado');
+      setEditarNombre("");
+      flash("✅ Actualizado");
       await fetchDatos();
     } catch (err) {
       const st = getErrStatus(err);
       if (st === 401 || st === 403) return handleAuth();
-      setError(prettyError(err, '❌ No se pudo actualizar la previsión.'));
+      setError(prettyError(err, "❌ No se pudo actualizar la previsión."));
     } finally {
       setBusy(false);
     }
   };
 
-  // ───────── Eliminar ─────────
   const eliminar = async () => {
-    if (!seleccionado?.id) {
-      setMostrarModal(false);
-      return;
-    }
+    if (!seleccionado?.id) return setMostrarModal(false);
 
     setBusy(true);
     try {
-      await delVar(`/prevision-medica/${seleccionado.id}`);
-      flash('✅ Eliminado');
+      await apiOps.delVar(`/prevision-medica/${seleccionado.id}`);
+      flash("✅ Eliminado");
       await fetchDatos();
     } catch (err) {
       const st = getErrStatus(err);
       if (st === 401 || st === 403) return handleAuth();
-      setError(prettyError(err, '❌ No se pudo eliminar la previsión.'));
+      setError(prettyError(err, "❌ No se pudo eliminar la previsión."));
     } finally {
       setBusy(false);
       setMostrarModal(false);
@@ -239,12 +274,23 @@ export default function PrevisionMedica() {
   };
 
   // 🎨 Estilos (NO tocamos colores)
-  const fondo = darkMode ? 'bg-[#111827] text-white' : 'bg-white text-[#1d0b0b]';
-  const tarjeta = darkMode ? 'bg-[#1f2937] border-gray-700' : 'bg-white border-gray-200';
-  const inputClase =
+  const fondo = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";
+  const tarjeta = darkMode ? "bg-[#1f2937] border-gray-700" : "bg-white border-gray-200";
+
+  const inputBase =
     (darkMode
-      ? 'bg-[#1f2937] text-white border border-gray-600 placeholder-gray-400'
-      : 'bg-white text-black border border-gray-300 placeholder-gray-500') + ' w-full p-2 rounded';
+      ? "bg-[#111827] text-white border border-white/10 placeholder-white/40"
+      : "bg-white text-black border border-black/10 placeholder-black/40") +
+    " w-full p-2 rounded-xl";
+
+  const selectBase = inputBase + " appearance-none";
+
+  const btnBase =
+    "mt-4 w-full py-2 rounded-xl font-bold transition disabled:opacity-60 disabled:cursor-not-allowed text-white";
+
+  const btnCreateStyle = busy ? { backgroundColor: "#9ca3af" } : { backgroundColor: ACCENT };
+  const btnUpdateStyle = busy || !editarId ? { backgroundColor: "#9ca3af" } : { backgroundColor: "#f59e0b" };
+  const btnDeleteStyle = !seleccionado || busy ? { backgroundColor: "#9ca3af" } : { backgroundColor: "#dc2626" };
 
   return (
     <div className={`${fondo} min-h-screen px-4 pt-4 pb-16 font-realacademy`}>
@@ -252,57 +298,53 @@ export default function PrevisionMedica() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-6xl mx-auto">
         {/* Listado */}
-        <div className={`${tarjeta} border shadow-md rounded-xl p-6`}>
-          <h3 className="text-lg font-bold mb-4">📋 Listado</h3>
+        <div className={`${tarjeta} border shadow-md rounded-2xl p-6`}>
+          <h3 className="text-lg font-extrabold mb-4">📋 Listado</h3>
           {previsiones.length === 0 ? (
             <p className="opacity-60">Sin registros.</p>
           ) : (
             <ul className="list-disc pl-5 space-y-1">
               {previsiones.map((e) => (
-                <li key={e.id}>{e.nombre ?? `#${e.id}`}</li>
+                <li key={e.id} className="font-semibold opacity-90">
+                  {e.nombre ?? `#${e.id}`}
+                </li>
               ))}
             </ul>
           )}
         </div>
 
         {/* Crear */}
-        <div className={`${tarjeta} border shadow-md rounded-xl p-6`}>
-          <h3 className="text-lg font-bold mb-4">➕ Crear</h3>
+        <div className={`${tarjeta} border shadow-md rounded-2xl p-6`}>
+          <h3 className="text-lg font-extrabold mb-4">➕ Crear</h3>
           <input
             value={nuevo}
             onChange={(e) => {
               setNuevo(e.target.value);
-              setError('');
-              setMensaje('');
+              setError("");
+              setMensaje("");
             }}
             placeholder="Nombre"
-            className={inputClase}
+            className={inputBase}
             disabled={busy}
           />
-          <button
-            onClick={crear}
-            disabled={busy}
-            className={`mt-4 w-full py-2 rounded text-white ${
-              busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
-            }`}
-          >
-            {busy ? 'Procesando...' : 'Guardar'}
+          <button onClick={crear} disabled={busy} className={btnBase} style={btnCreateStyle}>
+            {busy ? "Procesando..." : "Guardar"}
           </button>
         </div>
 
         {/* Editar */}
-        <div className={`${tarjeta} border shadow-md rounded-xl p-6`}>
-          <h3 className="text-lg font-bold mb-4">✏️ Editar</h3>
+        <div className={`${tarjeta} border shadow-md rounded-2xl p-6`}>
+          <h3 className="text-lg font-extrabold mb-4">✏️ Editar</h3>
           <select
-            value={editarId || ''}
+            value={editarId || ""}
             onChange={(e) => {
-              const id = parseInt(e.target.value, 10);
+              const id = Number(e.target.value);
               setEditarId(id || null);
-              setEditarNombre(previsiones.find((p) => Number(p.id) === id)?.nombre || '');
-              setError('');
-              setMensaje('');
+              setEditarNombre(previsiones.find((p) => Number(p.id) === id)?.nombre || "");
+              setError("");
+              setMensaje("");
             }}
-            className={`${inputClase} mb-2`}
+            className={`${selectBase} mb-2`}
             disabled={busy}
           >
             <option value="">Selecciona</option>
@@ -317,40 +359,32 @@ export default function PrevisionMedica() {
             value={editarNombre}
             onChange={(e) => {
               setEditarNombre(e.target.value);
-              setError('');
-              setMensaje('');
+              setError("");
+              setMensaje("");
             }}
             placeholder="Nuevo nombre"
-            className={inputClase}
+            className={inputBase}
             disabled={busy || !editarId}
           />
 
-          <button
-            onClick={actualizar}
-            disabled={busy || !editarId}
-            className={`mt-4 w-full py-2 rounded text-white ${
-              busy || !editarId
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-yellow-600 hover:bg-yellow-700'
-            }`}
-          >
-            {busy ? 'Procesando...' : 'Actualizar'}
+          <button onClick={actualizar} disabled={busy || !editarId} className={btnBase} style={btnUpdateStyle}>
+            {busy ? "Procesando..." : "Actualizar"}
           </button>
         </div>
 
         {/* Eliminar */}
-        <div className={`${tarjeta} border shadow-md rounded-xl p-6`}>
-          <h3 className="text-lg font-bold mb-4">🗑️ Eliminar</h3>
+        <div className={`${tarjeta} border shadow-md rounded-2xl p-6`}>
+          <h3 className="text-lg font-extrabold mb-4">🗑️ Eliminar</h3>
           <select
-            value={seleccionado?.id || ''}
+            value={seleccionado?.id || ""}
             onChange={(e) => {
-              const id = parseInt(e.target.value, 10);
+              const id = Number(e.target.value);
               const sel = previsiones.find((p) => Number(p.id) === id);
               setSeleccionado(sel || null);
-              setError('');
-              setMensaje('');
+              setError("");
+              setMensaje("");
             }}
-            className={inputClase}
+            className={selectBase}
             disabled={busy}
           >
             <option value="">Selecciona</option>
@@ -362,24 +396,21 @@ export default function PrevisionMedica() {
           </select>
 
           <button
-            disabled={!seleccionado || busy}
             onClick={() => {
               if (busy || !seleccionado) return;
               setMostrarModal(true);
             }}
-            className={`mt-4 w-full py-2 rounded text-white ${
-              !seleccionado || busy
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-red-600 hover:bg-red-700'
-            }`}
+            disabled={!seleccionado || busy}
+            className={btnBase}
+            style={btnDeleteStyle}
           >
-            {busy ? 'Procesando...' : 'Eliminar'}
+            {busy ? "Procesando..." : "Eliminar"}
           </button>
         </div>
       </div>
 
       {(mensaje || error) && (
-        <p className={`text-center mt-6 ${mensaje ? 'text-green-500' : 'text-red-500'}`}>
+        <p className={`text-center mt-6 font-bold ${mensaje ? "text-green-500" : "text-red-500"}`}>
           {mensaje || error}
         </p>
       )}
