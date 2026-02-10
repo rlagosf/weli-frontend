@@ -6,7 +6,10 @@ import { LoaderCircle } from "lucide-react";
 import { useTheme } from "../../context/ThemeContext";
 import api, { getToken, clearToken } from "../../services/api";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
-import { formatRutWithDV } from "../../services/rut"; // ✅ solo para mostrar
+import { formatRutWithDV } from "../../services/rut";
+
+const isSuperTreePath = (pathname) =>
+  String(pathname || "").startsWith("/super-dashboard/admin/dashboard");
 
 export default function DetalleEstadistica() {
   const { darkMode } = useTheme();
@@ -20,26 +23,25 @@ export default function DetalleEstadistica() {
   const [jugador, setJugador] = useState(null);
   const [jugadorId, setJugadorId] = useState(null);
 
-  const [statsId, setStatsId] = useState(null); // ✅ stats_base.id
+  const [statsId, setStatsId] = useState(null); // stats_base.id
   const [formData, setFormData] = useState({});
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  // ✅ stats actuales unidos (base + sport)
-  // null: no sabemos aún | {}: no hay/creamos cero | { ... } : datos existentes
   const [statsExistentes, setStatsExistentes] = useState(null);
 
   const fondoClase = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";
-  const tarjetaClase = darkMode ? "bg-[#1f2937] border border-gray-700" : "bg-white border border-gray-200";
+  const tarjetaClase = darkMode
+    ? "bg-[#1f2937] border border-gray-700"
+    : "bg-white border border-gray-200";
   const cardClase = `${tarjetaClase} shadow-md rounded-xl p-4`;
   const contenedorClase = `${tarjetaClase} shadow-lg rounded-2xl p-4 md:p-6`;
   const inputClase = darkMode
     ? "bg-[#1f2937] text-white border border-gray-600 placeholder-gray-400"
     : "bg-white text-black border border-gray-300 placeholder-gray-500";
 
-  // ✅ campos fútbol (si luego haces multi-deporte, esto se vuelve SPORT_META como en globales)
   const campos = useMemo(
     () => ({
       Ofensivas: [
@@ -54,9 +56,29 @@ export default function DetalleEstadistica() {
         "centros_acertados",
         "pases_clave",
       ],
-      Defensivas: ["intercepciones", "despejes", "duelos_ganados", "entradas_exitosas", "bloqueos", "recuperaciones"],
-      Técnicas: ["pases_completados", "pases_errados", "posesion_perdida", "offsides", "faltas_cometidas", "faltas_recibidas"],
-      Físicas: ["distancia_recorrida_km", "sprints", "duelos_aereos_ganados", "minutos_jugados", "partidos_jugados"],
+      Defensivas: [
+        "intercepciones",
+        "despejes",
+        "duelos_ganados",
+        "entradas_exitosas",
+        "bloqueos",
+        "recuperaciones",
+      ],
+      Técnicas: [
+        "pases_completados",
+        "pases_errados",
+        "posesion_perdida",
+        "offsides",
+        "faltas_cometidas",
+        "faltas_recibidas",
+      ],
+      Físicas: [
+        "distancia_recorrida_km",
+        "sprints",
+        "duelos_aereos_ganados",
+        "minutos_jugados",
+        "partidos_jugados",
+      ],
       Médicas: ["lesiones", "dias_baja"],
       Disciplina: ["tarjetas_amarillas", "tarjetas_rojas", "sanciones_federativas"],
     }),
@@ -64,16 +86,15 @@ export default function DetalleEstadistica() {
   );
 
   const opciones = Array.from({ length: 11 }, (_, i) => i);
-
   const allFields = useMemo(() => Object.values(campos).flat(), [campos]);
 
   const blankForm = useCallback(
     (sid) => {
-      const base = { stats_id: sid ?? null };
+      const baseForm = { stats_id: sid ?? null };
       allFields.forEach((campo) => {
-        base[campo] = campo === "distancia_recorrida_km" ? 0.0 : 0;
+        baseForm[campo] = campo === "distancia_recorrida_km" ? 0.0 : 0;
       });
-      return base;
+      return baseForm;
     },
     [allFields]
   );
@@ -81,11 +102,16 @@ export default function DetalleEstadistica() {
   /* ============== Breadcrumb ============== */
   useEffect(() => {
     const currentPath = location.pathname + location.search;
-    const base = Array.isArray(location.state?.breadcrumb)
-      ? location.state.breadcrumb
-      : [{ label: "Registrar Estadísticas", to: "/admin/registrar-estadisticas" }];
 
-    const last = base[base.length - 1];
+    const superTree = isSuperTreePath(location.pathname);
+    const basePath = superTree ? "/super-dashboard/admin/dashboard" : "/admin";
+    const defaultFrom = `${basePath}/registrar-estadisticas`;
+
+    const crumbBase = Array.isArray(location.state?.breadcrumb)
+      ? location.state.breadcrumb
+      : [{ label: "Registrar Estadísticas", to: location.state?.from || defaultFrom }];
+
+    const last = crumbBase[crumbBase.length - 1];
     const needsAppend = !last || last.label !== "Detalle Estadística";
 
     if (needsAppend) {
@@ -93,7 +119,7 @@ export default function DetalleEstadistica() {
         replace: true,
         state: {
           ...(location.state || {}),
-          breadcrumb: [...base, { label: "Detalle Estadística", to: currentPath }],
+          breadcrumb: [...crumbBase, { label: "Detalle Estadística", to: currentPath }],
         },
       });
     }
@@ -113,26 +139,22 @@ export default function DetalleEstadistica() {
     return root;
   };
 
-  const pretty = (s) => String(s || "").replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+  const pretty = (s) =>
+    String(s || "").replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 
-  // ✅ RUT con DV solo para mostrar
   const rutConDV = useMemo(() => {
     if (!jugador) return formatRutWithDV(rut);
     return formatRutWithDV(jugador.rut_jugador ?? rut);
   }, [jugador, rut]);
 
-  // ✅ unir base + sport en un solo objeto plano (lo que le gusta a tu UI)
   const flattenJoined = useCallback(
     (joined) => {
-      const base = joined?.base || {};
-      const sport = joined?.sport || {};
-      const out = { ...base, ...sport };
+      const baseStats = joined?.base || {};
+      const sportStats = joined?.sport || {};
+      const out = { ...baseStats, ...sportStats };
 
-      // normaliza llaves esperadas por el frontend
-      // base trae id como stats_id si lo seleccionas así; acá lo ponemos consistente:
       if (out.id != null && out.stats_id == null) out.stats_id = out.id;
 
-      // si por alguna razón viniera null
       allFields.forEach((k) => {
         if (out[k] == null) out[k] = k === "distancia_recorrida_km" ? 0.0 : 0;
       });
@@ -144,22 +166,25 @@ export default function DetalleEstadistica() {
 
   const pickEditablePayload = useCallback(
     (obj) => {
-      // ✅ solo campos editables (los del form). Evitamos mandar basura al backend.
       const out = {};
       allFields.forEach((k) => {
         const v = obj?.[k];
         if (v === undefined) return;
         out[k] =
           k === "distancia_recorrida_km"
-            ? (Number.isFinite(Number.parseFloat(String(v))) ? Number.parseFloat(String(v)) : 0)
-            : (Number.isFinite(Number.parseInt(String(v), 10)) ? Number.parseInt(String(v), 10) : 0);
+            ? Number.isFinite(Number.parseFloat(String(v)))
+              ? Number.parseFloat(String(v))
+              : 0
+            : Number.isFinite(Number.parseInt(String(v), 10))
+              ? Number.parseInt(String(v), 10)
+              : 0;
       });
       return out;
     },
     [allFields]
   );
 
-  /* ============================ Auth (WELI) ============================ */
+  /* ============================ Auth ============================ */
   useEffect(() => {
     try {
       const token = getToken();
@@ -172,14 +197,12 @@ export default function DetalleEstadistica() {
       const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
       const r = Number.isFinite(Number(rawRol)) ? Number(rawRol) : 0;
 
-      // ✅ READ: 1/2/3
       if (![1, 2, 3].includes(r)) {
         navigate("/admin", { replace: true });
         return;
       }
 
       setRol(r);
-      // ✅ WRITE: 1 y 3 (según tu router)
       setCanWrite([1, 3].includes(r));
     } catch {
       clearToken();
@@ -187,7 +210,7 @@ export default function DetalleEstadistica() {
     }
   }, [navigate]);
 
-  /* ====================== Cargar jugador + stats (nuevo modelo) ====================== */
+  /* ====================== Cargar jugador + stats ====================== */
   useEffect(() => {
     if (rol == null) return;
 
@@ -198,20 +221,17 @@ export default function DetalleEstadistica() {
       setError("");
 
       try {
-        // 1) Prioridad: jugador_id viene desde ListarEstadisticas (state)
         const stateJugadorId = Number(location.state?.jugador_id ?? 0) || null;
         let jid = stateJugadorId;
 
-        // 2) Si no viene, resolvemos por rut (legacy)
         let jRaw = null;
 
         if (jid) {
-          // si tenemos jugador_id, igual conviene traer jugador para nombre/rut real
           try {
             const resJ = await api.get(`/jugadores/${encodeURIComponent(String(jid))}`);
             jRaw = unwrapJugador(resJ.data);
           } catch {
-            // fallback a rut
+            // fallback rut
           }
         }
 
@@ -240,14 +260,14 @@ export default function DetalleEstadistica() {
         setJugador(jRaw);
         setJugadorId(jid);
 
-        // 3) Traer stats unidas (base + sport) por jugador_id
-        //    Esta ruta asegura stats_base y la fila sport existen.
-        const joinedRes = await api.get(`/estadisticas/by-jugador/${encodeURIComponent(String(jid))}`);
+        const joinedRes = await api.get(
+          `/estadisticas/by-jugador/${encodeURIComponent(String(jid))}`
+        );
         if (!alive) return;
 
         const joined = joinedRes?.data?.item ?? joinedRes?.data?.data?.item ?? null;
+
         if (!joined) {
-          // raro, pero dejamos en blanco
           setStatsExistentes({});
           setStatsId(null);
           setFormData(blankForm(null));
@@ -259,14 +279,9 @@ export default function DetalleEstadistica() {
 
         const sid = Number(flat?.stats_id ?? flat?.id ?? 0) || null;
         setStatsId(sid);
-
-        // stats actuales (para acumular)
         setStatsExistentes(flat);
 
-        // ✅ Mostrar valores actuales como base
-        // y que el usuario edite "incrementos" o "valores".
-        // Tu UX actual es "Acumular y Guardar": usaremos form como incrementos (0).
-        // Si quieres modo "editar absoluto", cambiamos esto a flat.
+        // modo acumulativo: incrementos en 0
         setFormData(blankForm(sid));
       } catch (err) {
         const st = getErrStatus(err);
@@ -280,7 +295,12 @@ export default function DetalleEstadistica() {
         if (st === 404) setError("El jugador o sus stats no existen.");
         else setError("Error al cargar los datos.");
 
-        setTimeout(() => navigate("/admin/registrar-estadisticas", { replace: true }), 1200);
+        const superTree = isSuperTreePath(location.pathname);
+        const basePath = superTree ? "/super-dashboard/admin/dashboard" : "/admin";
+        setTimeout(
+          () => navigate(`${basePath}/registrar-estadisticas`, { replace: true }),
+          1200
+        );
       } finally {
         if (alive) setLoading(false);
       }
@@ -289,7 +309,7 @@ export default function DetalleEstadistica() {
     return () => {
       alive = false;
     };
-  }, [rol, rut, navigate, location.state, blankForm, flattenJoined, getErrStatus]);
+  }, [rol, rut, navigate, location.state, blankForm, flattenJoined]);
 
   /* ============================ Handlers ============================ */
   const handleChange = (campo, value) => {
@@ -297,8 +317,12 @@ export default function DetalleEstadistica() {
       ...prev,
       [campo]:
         campo === "distancia_recorrida_km"
-          ? (Number.isFinite(parseFloat(value)) ? parseFloat(value) : 0)
-          : (Number.isFinite(parseInt(value, 10)) ? parseInt(value, 10) : 0),
+          ? Number.isFinite(parseFloat(value))
+            ? parseFloat(value)
+            : 0
+          : Number.isFinite(parseInt(value, 10))
+            ? parseInt(value, 10)
+            : 0,
     }));
   };
 
@@ -308,6 +332,7 @@ export default function DetalleEstadistica() {
 
   const handleSubmit = async () => {
     if (submitting) return;
+
     if (!canWrite) {
       setError("No tienes permisos para guardar (solo roles 1 y 3).");
       return;
@@ -321,31 +346,36 @@ export default function DetalleEstadistica() {
     setError("");
 
     try {
-      // ✅ calculamos suma: existentes + incrementos (formData)
-      const base = statsExistentes && typeof statsExistentes === "object" ? statsExistentes : {};
-      const inc = formData && typeof formData === "object" ? formData : {};
+      const currentStats =
+        statsExistentes && typeof statsExistentes === "object" ? statsExistentes : {};
+      const incStats = formData && typeof formData === "object" ? formData : {};
 
       const sumado = {};
       allFields.forEach((campo) => {
-        const antiguo = Number(base?.[campo] ?? 0);
-        const nuevo = Number(inc?.[campo] ?? 0);
+        const antiguo = Number(currentStats?.[campo] ?? 0);
+        const nuevo = Number(incStats?.[campo] ?? 0);
 
         sumado[campo] =
           campo === "distancia_recorrida_km"
             ? Number((antiguo + nuevo).toFixed(2))
-            : (Number.isFinite(antiguo) ? antiguo : 0) + (Number.isFinite(nuevo) ? nuevo : 0);
+            : (Number.isFinite(antiguo) ? antiguo : 0) +
+              (Number.isFinite(nuevo) ? nuevo : 0);
       });
 
       const payload = pickEditablePayload(sumado);
 
-      // Si ya tenemos statsId -> PUT /estadisticas/:id
       if (statsId) {
         await api.put(`/estadisticas/${encodeURIComponent(String(statsId))}`, payload);
       } else {
-        // Si no hay statsId (caso raro), POST crea todo.
-        // Requiere academia_id y deporte_id (los sacamos del jugador)
-        const academia_id = Number(jugador?.academia_id ?? 0) || Number(location.state?.scope?.academia_id ?? 0) || null;
-        const deporte_id = Number(jugador?.deporte_id ?? 0) || Number(location.state?.scope?.deporte_id ?? 0) || null;
+        const academia_id =
+          Number(jugador?.academia_id ?? 0) ||
+          Number(location.state?.scope?.academia_id ?? 0) ||
+          null;
+
+        const deporte_id =
+          Number(jugador?.deporte_id ?? 0) ||
+          Number(location.state?.scope?.deporte_id ?? 0) ||
+          null;
 
         if (!academia_id || !deporte_id) {
           throw new Error("Falta academia_id/deporte_id para crear stats.");
@@ -361,7 +391,10 @@ export default function DetalleEstadistica() {
 
       alert("✅ Estadísticas acumuladas y guardadas correctamente");
 
-      navigate("/admin/registrar-estadisticas", { replace: true });
+      const from = location.state?.from;
+      const superTree = isSuperTreePath(location.pathname);
+      const basePath = superTree ? "/super-dashboard/admin/dashboard" : "/admin";
+      navigate(from || `${basePath}/registrar-estadisticas`, { replace: true });
     } catch (err) {
       const st = getErrStatus(err);
 
@@ -369,7 +402,10 @@ export default function DetalleEstadistica() {
         clearToken();
         navigate("/login", { replace: true });
       } else {
-        const detail = err?.response?.data?.error || err?.response?.data?.message || err?.message;
+        const detail =
+          err?.response?.data?.error ||
+          err?.response?.data?.message ||
+          err?.message;
         setError(detail || "❌ Error al guardar estadísticas");
       }
     } finally {
@@ -391,10 +427,10 @@ export default function DetalleEstadistica() {
       {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
 
       <h2 className="text-2xl font-bold mb-2 text-center">
-        Modificar Estadísticas de {jugador?.nombre_jugador ?? jugador?.nombre ?? "Jugador"} (RUT: {rutConDV})
+        Modificar Estadísticas de{" "}
+        {jugador?.nombre_jugador ?? jugador?.nombre ?? "Jugador"} (RUT: {rutConDV})
       </h2>
 
-      {/* ✅ mostrar contexto actual */}
       <p className="text-center text-sm opacity-80 mb-6">
         {jugadorId ? `Jugador ID: ${jugadorId}` : ""}
         {statsId ? ` · Stats ID: ${statsId}` : " · Stats: (sin id aún)"}
@@ -402,27 +438,31 @@ export default function DetalleEstadistica() {
       </p>
 
       <div className={`${contenedorClase} max-w-6xl mx-auto`}>
-        {/* ✅ Vista rápida de valores actuales */}
-        {statsExistentes && typeof statsExistentes === "object" && Object.keys(statsExistentes).length > 0 && (
-          <div className={`${cardClase} mb-4`}>
-            <h4 className="font-bold mb-2 text-base">Valores actuales (acumulados)</h4>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 text-xs">
-              {allFields.map((k) => (
-                <div key={k} className="flex items-center justify-between gap-2 border border-gray-500/20 rounded px-2 py-1">
-                  <span className="opacity-80">{pretty(k)}</span>
-                  <span className="font-semibold">
-                    {k === "distancia_recorrida_km"
-                      ? Number(statsExistentes?.[k] ?? 0).toFixed(2)
-                      : Number(statsExistentes?.[k] ?? 0)}
-                  </span>
-                </div>
-              ))}
+        {statsExistentes &&
+          typeof statsExistentes === "object" &&
+          Object.keys(statsExistentes).length > 0 && (
+            <div className={`${cardClase} mb-4`}>
+              <h4 className="font-bold mb-2 text-base">Valores actuales (acumulados)</h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 text-xs">
+                {allFields.map((k) => (
+                  <div
+                    key={k}
+                    className="flex items-center justify-between gap-2 border border-gray-500/20 rounded px-2 py-1"
+                  >
+                    <span className="opacity-80">{pretty(k)}</span>
+                    <span className="font-semibold">
+                      {k === "distancia_recorrida_km"
+                        ? Number(statsExistentes?.[k] ?? 0).toFixed(2)
+                        : Number(statsExistentes?.[k] ?? 0)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] opacity-70">
+                Lo que ingreses abajo se suma a estos valores (modo acumulativo).
+              </p>
             </div>
-            <p className="mt-2 text-[11px] opacity-70">
-              Lo que ingreses abajo se suma a estos valores (modo acumulativo).
-            </p>
-          </div>
-        )}
+          )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {Object.entries(campos).map(([categoria, listaCampos]) => (
@@ -432,7 +472,9 @@ export default function DetalleEstadistica() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {listaCampos.map((campo) => (
                   <div key={campo} className="space-y-1">
-                    <label className="block text-xs sm:text-sm font-medium">{pretty(campo)}</label>
+                    <label className="block text-xs sm:text-sm font-medium">
+                      {pretty(campo)}
+                    </label>
 
                     {campo === "distancia_recorrida_km" ? (
                       <input
@@ -480,7 +522,9 @@ export default function DetalleEstadistica() {
             onClick={handleSubmit}
             disabled={submitting || !canWrite}
             className={`text-white font-bold py-2 px-6 rounded ${
-              submitting || !canWrite ? "bg-gray-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"
+              submitting || !canWrite
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-green-600 hover:bg-green-700"
             }`}
             title={!canWrite ? "Solo lectura (roles 1 y 3 pueden guardar)" : "Guardar"}
           >

@@ -108,8 +108,6 @@ function PrivateApp({
 }
 
 /* -------------------- Gates -------------------- */
-
-// ✅ FIX CRÍTICO: AdminGate permite [1,2,3]
 const AdminGate = ({ children }) => (
   <ProtectedRoute mode="admin" roleIn={[1, 2, 3]}>
     <PrivateApp
@@ -124,7 +122,6 @@ const AdminGate = ({ children }) => (
   </ProtectedRoute>
 );
 
-// ✅ SuperAdminGate: solo rol 3 (selector)
 const SuperAdminGate = ({ children }) => (
   <ProtectedRoute mode="admin" roleIn={[3]}>
     <PrivateApp
@@ -191,8 +188,11 @@ const adminChildren = [
   { path: "listar-jugadores/detalle-jugador", element: <DetalleJugador /> },
   { path: "detalle-jugador/:rut", element: <DetalleJugador /> },
   { path: "ver-convocaciones-historicas", element: <VerConvocacionHistorica /> },
+
   { path: "registrar-estadisticas", element: <RegistrarEstadisticas /> },
-  { path: "detalle-estadistica/:rut", element: <DetalleEstadistica /> },
+
+  // ✅ CAMBIO: ruta limpia sin :rut (RAFC style)
+  { path: "registrar-estadisticas/detalle-estadistica", element: <DetalleEstadistica /> },
 
   { path: "noticias", element: <RegistroNoticias /> },
 ];
@@ -262,6 +262,4 @@ export const routes = [
       </ApoderadoPwdGate>
     ),
   },
-
-  // { path: "*", element: <Navigate to="/" replace /> },
 ];

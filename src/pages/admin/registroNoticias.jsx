@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { useTheme } from "../../context/ThemeContext";
-import api, { getToken, clearToken } from "../../services/api";
+import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
 import IsLoading from "../../components/isLoading";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 import { Newspaper, Plus, Save, Trash2, X, Image as ImageIcon, RefreshCcw } from "lucide-react";
@@ -30,40 +30,126 @@ const isCanceled = (e) =>
   e?.code === "ERR_CANCELED" ||
   String(e?.message || "").toLowerCase().includes("canceled");
 
-/**
- * Normaliza status/mensaje por compatibilidad:
- * - axios clásico: e.response.status / e.response.data
- * - api.js normalizado: e.status / e.data / e.message
- */
 const getStatus = (e) => e?.status ?? e?.response?.status;
 const getMessage = (e, fallback = "Error") =>
   e?.message || e?.data?.message || e?.response?.data?.message || fallback;
 
-const getList = async (basePath, signal, config = {}) => {
-  const urls = basePath.endsWith("/") ? [basePath, basePath.slice(0, -1)] : [basePath, `${basePath}/`];
+// Normaliza URLs: genera ["/path", "/path/"] sin duplicar
+const withSlashVariants = (path) => {
+  const p = String(path || "");
+  if (!p) return [];
+  const a = p.endsWith("/") ? p.slice(0, -1) : p;
+  const b = a + "/";
+  return [...new Set([a, b])];
+};
 
+// Auth helpers
+const isExpired = (decoded) => {
+  const now = Math.floor(Date.now() / 1000);
+  return !decoded?.exp || decoded.exp <= now;
+};
+
+const extractRol = (decoded) => {
+  const raw = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+};
+
+// Soporta "1" o JSON {"id":1}
+const getAcademiaIdFromStorage = () => {
+  try {
+    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
+    if (!raw) return null;
+
+    const direct = Number(raw);
+    if (Number.isFinite(direct) && direct > 0) return direct;
+
+    const parsed = JSON.parse(raw);
+    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+};
+
+const buildHeaders = (rol) => {
+  const token = getToken();
+  const h = token ? { Authorization: `Bearer ${token}` } : {};
+  if (rol === 3) {
+    const a = getAcademiaIdFromStorage();
+    if (a) h["x-academia-id"] = String(a);
+  }
+  return h;
+};
+
+// Requests con fallback (evita backend “loco” por slash)
+const reqGet = async (path, config = {}) => {
+  const urls = withSlashVariants(path);
   let lastErr = null;
-
   for (const url of urls) {
     try {
-      const r = await api.get(url, { ...(signal ? { signal } : {}), ...(config || {}) });
-      return toArray(r);
+      return await api.get(url, config);
     } catch (e) {
-      if (isCanceled(e)) {
-        console.warn("[getList] canceled", url);
-        return [];
-      }
       lastErr = e;
-
       const st = getStatus(e);
-      console.warn("[getList] fail", url, st, e?.data ?? e?.response?.data ?? e?.message);
-
       if (st === 401 || st === 403) throw e;
+      if (isCanceled(e)) throw e;
     }
   }
+  throw lastErr ?? new Error("GET failed");
+};
 
-  if (lastErr) throw lastErr;
-  return [];
+const reqPost = async (path, body, config = {}) => {
+  const urls = withSlashVariants(path);
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      return await api.post(url, body, config);
+    } catch (e) {
+      lastErr = e;
+      const st = getStatus(e);
+      if (st === 401 || st === 403) throw e;
+      if (isCanceled(e)) throw e;
+    }
+  }
+  throw lastErr ?? new Error("POST failed");
+};
+
+const reqPatch = async (path, body, config = {}) => {
+  const urls = withSlashVariants(path);
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      return await api.patch(url, body, config);
+    } catch (e) {
+      lastErr = e;
+      const st = getStatus(e);
+      if (st === 401 || st === 403) throw e;
+      if (isCanceled(e)) throw e;
+    }
+  }
+  throw lastErr ?? new Error("PATCH failed");
+};
+
+const reqDelete = async (path, config = {}) => {
+  const urls = withSlashVariants(path);
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      return await api.delete(url, config);
+    } catch (e) {
+      lastErr = e;
+      const st = getStatus(e);
+      if (st === 401 || st === 403) throw e;
+      if (isCanceled(e)) throw e;
+    }
+  }
+  throw lastErr ?? new Error("DELETE failed");
+};
+
+const getList = async (basePath, signal, config = {}) => {
+  const r = await reqGet(basePath, { ...(signal ? { signal } : {}), ...(config || {}) });
+  return toArray(r);
 };
 
 const slugify = (input) =>
@@ -100,7 +186,8 @@ const toMysqlDatetimeLocal = (value) => {
   return s.includes("T") ? `${s.replace("T", " ")}:00` : s;
 };
 
-const isValidMime = (m) => ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(String(m || "").toLowerCase());
+const isValidMime = (m) =>
+  ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(String(m || "").toLowerCase());
 
 const fileToDataURL = (file) =>
   new Promise((resolve, reject) => {
@@ -175,6 +262,7 @@ export default function RegistroNoticias() {
   const navigate = useNavigate();
   useMobileAutoScrollTop();
 
+  const [rolActual, setRolActual] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
   const [boardPopup, setBoardPopup] = useState(null);
@@ -201,14 +289,12 @@ export default function RegistroNoticias() {
   const bootstrappedRef = useRef(false);
   const loadBoardInFlightRef = useRef(false);
 
-  // ✅ imagen flags
   const imageDirtyRef = useRef(false);
   const imageRemoveRef = useRef(false);
 
-  // ✅ objectURL para preview
   const objectUrlRef = useRef(null);
 
-  // ✅ cleanup global
+  // cleanup objectURL
   useEffect(() => {
     return () => {
       if (objectUrlRef.current) {
@@ -218,19 +304,28 @@ export default function RegistroNoticias() {
     };
   }, []);
 
-  // ✅ guard auth (roles 1 y 2)
+  // ✅ guard auth (roles 1,2,3)
   useEffect(() => {
     try {
       const token = getToken();
       if (!token) throw new Error("no-token");
 
       const decoded = jwtDecode(token);
-      const now = Math.floor(Date.now() / 1000);
-      if (decoded?.exp && decoded.exp < now) throw new Error("expired");
+      if (isExpired(decoded)) throw new Error("expired");
 
-      const rol = Number(decoded?.rol_id ?? decoded?.role_id ?? decoded?.role);
-      if (![1, 2].includes(rol)) throw new Error("no-role");
-    } catch {
+      const rol = extractRol(decoded);
+      if (![1, 2, 3].includes(rol)) throw new Error("no-role");
+
+      // si es rol 3, intentamos setear x-academia-id (si tu backend lo requiere)
+      if (rol === 3) {
+        // si no existe, NO expulsamos: solo no enviamos header extra
+        // (si tu backend lo exige sí o sí, aquí podrías forzar error)
+        getAcademiaIdFromStorage();
+      }
+
+      setRolActual(rol);
+    } catch (e) {
+      console.warn("[AUTH] fail", e?.message);
       clearToken();
       navigate("/login", { replace: true });
     }
@@ -264,41 +359,49 @@ export default function RegistroNoticias() {
     [estados, findEstadoIdByName]
   );
 
-  // ✅ thumbs: permite overwrite y limpieza cuando no hay imagen
-  const ensureThumb = useCallback(async (id, opts = {}) => {
-    const force = !!opts.force;
-    if (!id) return null;
+  // ✅ thumbs robusto + headers
+  const ensureThumb = useCallback(
+    async (id, opts = {}) => {
+      const force = !!opts.force;
+      if (!id) return null;
 
-    if (!force && thumbsRef.current[id]) return thumbsRef.current[id];
+      if (!force && thumbsRef.current[id]) return thumbsRef.current[id];
 
-    try {
-      const { data } = await api.get(`${BASE_NOTICIAS}/${id}`);
-      const it = data?.item;
+      try {
+        const headers = buildHeaders(rolActual);
+        const { data } = await reqGet(`${BASE_NOTICIAS}/${id}`, { headers });
+        const it = data?.item;
 
-      if (it?.imagen_base64 && it?.imagen_mime) {
-        const dataUrl = `data:${it.imagen_mime};base64,${it.imagen_base64}`;
-        setThumbs((p) => ({ ...p, [id]: dataUrl }));
-        return dataUrl;
+        if (it?.imagen_base64 && it?.imagen_mime) {
+          const dataUrl = `data:${it.imagen_mime};base64,${it.imagen_base64}`;
+          setThumbs((p) => ({ ...p, [id]: dataUrl }));
+          return dataUrl;
+        }
+
+        if (force) {
+          setThumbs((p) => {
+            const copy = { ...p };
+            delete copy[id];
+            return copy;
+          });
+        }
+      } catch {
+        // no romper flujo
       }
 
-      if (force) {
-        setThumbs((p) => {
-          const copy = { ...p };
-          delete copy[id];
-          return copy;
-        });
-      }
-    } catch (e) {
-      // ✅ no romper flujo; si es 401/403 ya lo manejará el caller principal
-    }
+      return null;
+    },
+    [rolActual]
+  );
 
-    return null;
-  }, []);
-
-  const loadEstados = useCallback(async (signal) => {
-    const arr = await getList(BASE_ESTADOS, signal);
-    if (arr?.length) setEstados(arr);
-  }, []);
+  const loadEstados = useCallback(
+    async (signal) => {
+      const headers = buildHeaders(rolActual);
+      const arr = await getList(BASE_ESTADOS, signal, { headers });
+      if (arr?.length) setEstados(arr);
+    },
+    [rolActual]
+  );
 
   const loadBoard = useCallback(
     async (signal) => {
@@ -306,7 +409,10 @@ export default function RegistroNoticias() {
       loadBoardInFlightRef.current = true;
 
       try {
+        const headers = buildHeaders(rolActual);
+
         const list = await getList(BASE_NOTICIAS, signal, {
+          headers,
           params: { include_archived: 1, limit: 200, offset: 0 },
         });
 
@@ -344,10 +450,12 @@ export default function RegistroNoticias() {
         loadBoardInFlightRef.current = false;
       }
     },
-    [ensureThumb, isArchivedItem]
+    [ensureThumb, isArchivedItem, rolActual]
   );
 
   useEffect(() => {
+    if (!rolActual) return;
+
     const abort = new AbortController();
     let alive = true;
 
@@ -381,7 +489,7 @@ export default function RegistroNoticias() {
       alive = false;
       abort.abort();
     };
-  }, [loadBoard, loadEstados, navigate]);
+  }, [loadBoard, loadEstados, navigate, rolActual]);
 
   const popupSlot = useMemo(() => ({ type: "popup", item: boardPopup }), [boardPopup]);
 
@@ -398,7 +506,6 @@ export default function RegistroNoticias() {
     const archivedFromList = !!(slot?.item && isArchivedItem(slot.item));
     if (archivedFromList) setOk("👀 Abriendo en modo lectura (Archivada).");
 
-    // al abrir modal, limpiamos objectURL previo (para no mezclar)
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
       objectUrlRef.current = null;
@@ -407,7 +514,9 @@ export default function RegistroNoticias() {
     if (slot?.item?.id) {
       setOpening(true);
       try {
-        const { data } = await api.get(`${BASE_NOTICIAS}/${slot.item.id}`);
+        const headers = buildHeaders(rolActual);
+
+        const { data } = await reqGet(`${BASE_NOTICIAS}/${slot.item.id}`, { headers });
         const it = data?.item ?? slot.item;
 
         const archived = isArchivedItem(it);
@@ -469,7 +578,7 @@ export default function RegistroNoticias() {
       return;
     }
 
-    // crear (nunca es readOnly)
+    // crear
     imageDirtyRef.current = false;
     imageRemoveRef.current = false;
 
@@ -536,7 +645,7 @@ export default function RegistroNoticias() {
       return;
     }
 
-    // ✅ preview por objectURL
+    // preview por objectURL
     try {
       if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
       const objUrl = URL.createObjectURL(file);
@@ -550,7 +659,7 @@ export default function RegistroNoticias() {
       console.warn("[pick] objectURL failed:", err);
     }
 
-    // ✅ base64 optimizada para enviar
+    // base64 optimizada para enviar
     try {
       const raw = await fileToDataURL(file);
       const { base64, mime, bytes } = await compressToBase64Jpeg(raw, 1280, 0.78);
@@ -630,7 +739,9 @@ export default function RegistroNoticias() {
     setArchiving(true);
 
     try {
-      await api.delete(`${BASE_NOTICIAS}/${form.id}`);
+      const headers = buildHeaders(rolActual);
+
+      await reqDelete(`${BASE_NOTICIAS}/${form.id}`, { headers });
       setOk("✅ Noticia archivada (no editable).");
 
       imageDirtyRef.current = false;
@@ -676,6 +787,7 @@ export default function RegistroNoticias() {
 
     setSaving(true);
     try {
+      const headers = buildHeaders(rolActual);
       const isCardSlot = form.slotType === "card" && Number.isInteger(form.slotIndex);
 
       const payload = {
@@ -711,7 +823,7 @@ export default function RegistroNoticias() {
       let idToRefresh = form.id;
 
       if (!form.id) {
-        const { data } = await api.post(BASE_NOTICIAS, payload);
+        const { data } = await reqPost(BASE_NOTICIAS, payload, { headers });
         idToRefresh = data?.id ?? null;
 
         setOk("✅ Noticia creada.");
@@ -731,7 +843,7 @@ export default function RegistroNoticias() {
 
         setOpen(false);
       } else {
-        await api.patch(`${BASE_NOTICIAS}/${form.id}`, payload);
+        await reqPatch(`${BASE_NOTICIAS}/${form.id}`, payload, { headers });
 
         if (touchedImage) await ensureThumb(form.id, { force: true });
 
@@ -818,6 +930,7 @@ export default function RegistroNoticias() {
           {ok && <div className="mt-3 text-green-400 font-semibold">{ok}</div>}
         </div>
 
+        {/* POPUP */}
         <div className="mt-6">
           <div className="text-xs tracking-widest font-bold opacity-70 mb-2 ml-2">ANUNCIO POPUP</div>
 
@@ -867,6 +980,7 @@ export default function RegistroNoticias() {
           </button>
         </div>
 
+        {/* 6 SLOTS */}
         <div className="mt-8">
           <div className="text-xs tracking-widest font-bold opacity-70 mb-2 ml-2">NOTICIAS (6 TARJETAS FIJAS)</div>
 
@@ -914,6 +1028,7 @@ export default function RegistroNoticias() {
           </div>
         </div>
 
+        {/* ARCHIVADAS */}
         <div className="mt-10">
           <div className="text-xs tracking-widest font-bold opacity-70 mb-2 ml-2">NOTICIAS ANTERIORES</div>
 
@@ -953,6 +1068,7 @@ export default function RegistroNoticias() {
         </div>
       </div>
 
+      {/* MODAL */}
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60" onClick={closeModal} />

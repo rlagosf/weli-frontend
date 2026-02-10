@@ -7,7 +7,7 @@ import { Pencil } from "lucide-react";
 import { jwtDecode } from "jwt-decode";
 import IsLoading from "../../components/isLoading";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
-import { formatRutWithDV } from "../../services/rut"; // ✅ solo frontend
+import { formatRutWithDV } from "../../services/rut";
 
 /* ───────────────── Scope helpers ───────────────── */
 const STORAGE_KEY = "weli_selected_academia";
@@ -41,7 +41,6 @@ export default function ListarEstadisticas() {
   const [error, setError] = useState("");
   const [rol, setRol] = useState(null);
 
-  // ✅ scope real (academia/deporte)
   const [scope, setScope] = useState({
     academia_id: null,
     deporte_id: null,
@@ -51,7 +50,6 @@ export default function ListarEstadisticas() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // 🧭 Inyecta breadcrumb base si no viene en state
   useEffect(() => {
     if (!Array.isArray(location.state?.breadcrumb)) {
       navigate(location.pathname + location.search, {
@@ -80,7 +78,6 @@ export default function ListarEstadisticas() {
       const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
       const parsedRol = Number.isFinite(Number(rawRol)) ? Number(rawRol) : 0;
 
-      // ✅ permitir 1/2/3
       if (![1, 2, 3].includes(parsedRol)) {
         navigate("/admin", { replace: true });
         return;
@@ -106,10 +103,9 @@ export default function ListarEstadisticas() {
     }
   }, [navigate, location.pathname]);
 
-  /* ───────────────── Live update (super-dashboard selector) ───────────────── */
+  /* ───────────────── Live update (super selector) ───────────────── */
   useEffect(() => {
     const onChanged = () => {
-      // solo aplica a super-tree
       if (!isSuperTreePath(location.pathname)) return;
       const snap = readSelectedAcademia();
       if (snap?.id) {
@@ -117,7 +113,7 @@ export default function ListarEstadisticas() {
       }
     };
     window.addEventListener("weli:selectedAcademiaChanged", onChanged);
-    window.addEventListener("storage", onChanged); // backup: cambios cross-tab
+    window.addEventListener("storage", onChanged);
     return () => {
       window.removeEventListener("weli:selectedAcademiaChanged", onChanged);
       window.removeEventListener("storage", onChanged);
@@ -162,7 +158,7 @@ export default function ListarEstadisticas() {
     return [];
   };
 
-  /* ───────────────── Carga de datos (scope-aware) ───────────────── */
+  /* ───────────────── Carga de datos ───────────────── */
   useEffect(() => {
     if (rol == null) return;
 
@@ -176,10 +172,8 @@ export default function ListarEstadisticas() {
         const acadId = scope.academia_id;
         const depId = scope.deporte_id;
 
-        // ✅ Jugadores (preferimos backend filtrado por scope, si existe)
         const jugadoresPaths = [];
 
-        // intentos "nuevos" con query params
         if (acadId && depId) {
           if (rol === 2) {
             jugadoresPaths.push(`/jugadores/staff?academia_id=${acadId}&deporte_id=${depId}`);
@@ -193,7 +187,6 @@ export default function ListarEstadisticas() {
           else jugadoresPaths.push(`/jugadores?academia_id=${acadId}`);
         }
 
-        // fallbacks legacy
         if (rol === 2) jugadoresPaths.push("/jugadores/staff");
         jugadoresPaths.push("/jugadores");
 
@@ -208,7 +201,6 @@ export default function ListarEstadisticas() {
         setJugadoresRaw(jugadoresArr);
         setCategoriasRaw(Array.isArray(categorias) ? categorias : []);
 
-        // ✅ si no venía deporte/academia en token (admin/staff), inferimos desde jugadores
         if ((!scope.academia_id || !scope.deporte_id) && jugadoresArr.length) {
           const j0 = jugadoresArr.find((x) => x && (x.academia_id || x.deporte_id));
           const a0 = Number(j0?.academia_id ?? 0) || null;
@@ -240,7 +232,7 @@ export default function ListarEstadisticas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rol, scope.academia_id, scope.deporte_id, navigate, location.pathname]);
 
-  /* ───────────────── Map id→nombre de categoría ───────────────── */
+  /* ───────────────── Categoria maps ───────────────── */
   const categoriaMap = useMemo(() => {
     const map = new Map();
     (Array.isArray(categoriasRaw) ? categoriasRaw : []).forEach((c) => {
@@ -251,7 +243,6 @@ export default function ListarEstadisticas() {
     return map;
   }, [categoriasRaw]);
 
-  // Orden de categorías según el backend
   const categoriaOrder = useMemo(() => {
     const order = new Map();
     (Array.isArray(categoriasRaw) ? categoriasRaw : []).forEach((c, i) => {
@@ -261,7 +252,6 @@ export default function ListarEstadisticas() {
     return order;
   }, [categoriasRaw]);
 
-  // Resolución de categoría
   const toCategoria = useCallback(
     (j) => {
       if (j?.categoria?.nombre) return String(j.categoria.nombre);
@@ -273,7 +263,7 @@ export default function ListarEstadisticas() {
     [categoriaMap]
   );
 
-  /* ───────────────── Normalizador de jugadores (scope filter safe) ───────────────── */
+  /* ───────────────── Normalizar jugadores ───────────────── */
   const jugadores = useMemo(() => {
     const toNombre = (j) =>
       j?.nombre_jugador ||
@@ -284,19 +274,18 @@ export default function ListarEstadisticas() {
 
     const base = Array.isArray(jugadoresRaw) ? jugadoresRaw : [];
 
-    // ✅ Filtro frontend por scope (por si backend no lo hace)
     const a = scope.academia_id;
     const d = scope.deporte_id;
 
     const scoped = (!a && !d)
       ? base
       : base.filter((j) => {
-        const aj = Number(j?.academia_id ?? 0);
-        const dj = Number(j?.deporte_id ?? 0);
-        if (a && aj !== a) return false;
-        if (d && dj !== d) return false;
-        return true;
-      });
+          const aj = Number(j?.academia_id ?? 0);
+          const dj = Number(j?.deporte_id ?? 0);
+          if (a && aj !== a) return false;
+          if (d && dj !== d) return false;
+          return true;
+        });
 
     return scoped.map((j, idx) => {
       const jugador_id = Number(j?.id ?? j?.jugador_id ?? 0) || null;
@@ -311,8 +300,8 @@ export default function ListarEstadisticas() {
       const rutStr = String(rutBase);
 
       return {
-        jugador_id,                    // ✅ clave real para stats acumuladas
-        rut: rutStr,                   // compatibilidad
+        jugador_id,
+        rut: rutStr,
         rutConDV: formatRutWithDV(rutStr),
         nombre: toNombre(j),
         categoriaNombre: toCategoria(j),
@@ -320,7 +309,7 @@ export default function ListarEstadisticas() {
     });
   }, [jugadoresRaw, scope.academia_id, scope.deporte_id, toCategoria]);
 
-  /* ───────────────── Agrupar por categoría ───────────────── */
+  /* ───────────────── Grupos ───────────────── */
   const grupos = useMemo(() => {
     const map = new Map();
     for (const j of jugadores) {
@@ -346,7 +335,7 @@ export default function ListarEstadisticas() {
     }));
   }, [jugadores, categoriaOrder]);
 
-  /* ───────────────── Estilos ───────────────── */
+  /* ───────────────── UI ───────────────── */
   const fondoClase = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";
   const tarjetaClase = darkMode
     ? "bg-[#1f2937] shadow-lg rounded-lg p-4 border border-gray-700"
@@ -400,15 +389,14 @@ export default function ListarEstadisticas() {
                   </thead>
                   <tbody>
                     {items.map((j) => {
-                      const rutSafe = encodeURIComponent(String(j.rut ?? ""));
-                      const isSuperTree = String(location.pathname || "").startsWith("/super-dashboard/admin/dashboard");
-                      const base = isSuperTree ? "/super-dashboard/admin/dashboard" : "/admin";
+                      const isSuperTree = isSuperTreePath(location.pathname);
+                      const basePath = isSuperTree ? "/super-dashboard/admin/dashboard" : "/admin";
 
-                      // ✅ RUTA NUEVA (larga) — consistente en ambos árboles
-                      const to = `${base}/registrar-estadisticas/detalle-estadistica/${rutSafe}`;
+                      // ✅ RUTA LIMPIA (RAFC style)
+                      const to = `${basePath}/registrar-estadisticas/detalle-estadistica`;
 
-                      // ✅ “from” correcto según árbol
-                      const from = `${base}/registrar-estadisticas`;
+                      // ✅ “from” correcto
+                      const from = `${basePath}/registrar-estadisticas`;
 
                       return (
                         <tr key={String(j.jugador_id ?? j.rut)} className={`${filaHover}`}>
@@ -421,34 +409,25 @@ export default function ListarEstadisticas() {
                                 navigate(to, {
                                   state: {
                                     from,
+                                    rut: String(j.rut ?? ""),
                                     jugador_id: j.jugador_id ?? null,
-                                    // si no tienes scope acá, no pasa nada:
-                                    scope: typeof scope !== "undefined" ? { ...scope } : undefined,
-                                    breadcrumb: [
-                                      { label: "Registrar Estadísticas", to: from },
-                                      // el detalle añadirá "Detalle Estadística"
-                                    ],
+                                    scope: { ...scope },
+                                    breadcrumb: [{ label: "Registrar Estadísticas", to: from }],
                                   },
                                 })
                               }
                               className="p-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                               aria-label={`Editar estadísticas de ${j.nombre}`}
                               title={`Editar estadísticas de ${j.nombre}`}
-                              disabled={!j.jugador_id && !j.rut} // blindaje real: si no hay id ni rut, no navegues
+                              disabled={!j.jugador_id && !j.rut}
                             >
                               <Pencil size={16} />
                             </button>
-
-                            {(!j.jugador_id && !j.rut) && (
-                              <div className="text-[10px] mt-1 opacity-70">sin jugador_id ni rut</div>
-                            )}
                           </td>
                         </tr>
                       );
                     })}
                   </tbody>
-
-
                 </table>
               </div>
             </section>

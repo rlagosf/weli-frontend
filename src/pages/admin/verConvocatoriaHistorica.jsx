@@ -1,13 +1,9 @@
 // src/pages/admin/verConvocacionHistorica.jsx
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { useTheme } from "../../context/ThemeContext";
-import api, {
-  getToken,
-  clearToken,
-  ACADEMIA_STORAGE_KEY,
-} from "../../services/api";
+import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
 import IsLoading from "../../components/isLoading";
 import { FileText, X } from "lucide-react";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
@@ -91,29 +87,22 @@ const getAcademiaIdFromStorage = () => {
     if (Number.isFinite(direct) && direct > 0) return direct;
 
     const parsed = JSON.parse(raw);
-    const id = Number(
-      parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0
-    );
+    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
     return Number.isFinite(id) && id > 0 ? id : null;
   } catch {
     return null;
   }
 };
 
-const buildHeaders = (rol) => {
+const buildHeaders = (rol, academiaId) => {
   const token = getToken();
   const h = token ? { Authorization: `Bearer ${token}` } : {};
-  if (rol === 3) {
-    const a = getAcademiaIdFromStorage();
-    if (a) h["x-academia-id"] = String(a);
-  }
+  if (rol === 3 && academiaId) h["x-academia-id"] = String(academiaId);
   return h;
 };
 
 const getWithFallback = async (path, { signal, headers } = {}) => {
-  const urls = path.endsWith("/")
-    ? [path, path.slice(0, -1)]
-    : [path, `${path}/`];
+  const urls = path.endsWith("/") ? [path, path.slice(0, -1)] : [path, `${path}/`];
 
   let lastErr = null;
   for (const url of urls) {
@@ -137,6 +126,8 @@ export default function VerConvocacionHistorica() {
 
   const [rolActual, setRolActual] = useState(0);
 
+  const [academiaId, setAcademiaId] = useState(() => getAcademiaIdFromStorage());
+
   const [historicos, setHistoricos] = useState([]);
   const [eventos, setEventos] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -152,7 +143,6 @@ export default function VerConvocacionHistorica() {
   useMobileAutoScrollTop();
 
   /* ========= Breadcrumb ========= */
-  // 🧭 Breadcrumb por defecto (MISMO PATRÓN que listarPagos.jsx)
   useEffect(() => {
     if (!Array.isArray(location.state?.breadcrumb)) {
       navigate(location.pathname + location.search, {
@@ -165,12 +155,42 @@ export default function VerConvocacionHistorica() {
     }
   }, [location, navigate]);
 
-
-  /* ========= Auth =========
-     - rol 1: admin
-     - rol 2: staff
-     - rol 3: superadmin (requiere academia seleccionada)
+  /* ========= Sync academiaId (superdashboard) =========
+     - storage event no dispara en mismo tab cuando el mismo código escribe localStorage,
+       así que hacemos poll liviano para garantizar consistencia.
   */
+  useEffect(() => {
+    let alive = true;
+
+    const tick = () => {
+      if (!alive) return;
+      const a = getAcademiaIdFromStorage();
+      setAcademiaId((prev) => (prev !== a ? a : prev));
+    };
+
+    tick();
+    const iv = setInterval(tick, 1200);
+
+    const onStorage = () => tick();
+    window.addEventListener("storage", onStorage);
+
+    return () => {
+      alive = false;
+      clearInterval(iv);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
+
+  // Limpieza inmediata al cambiar academia (evita “ver datos viejos”)
+  useEffect(() => {
+    if (rolActual === 3) {
+      setHistoricos([]);
+      setEventos([]);
+      setModal({ open: false, evento: null, jugadores: [] });
+    }
+  }, [academiaId, rolActual]);
+
+  /* ========= Auth ========= */
   useEffect(() => {
     try {
       const token = getToken();
@@ -197,10 +217,18 @@ export default function VerConvocacionHistorica() {
     }
   }, [navigate]);
 
+  const canLoad = useMemo(() => {
+    if (!rolActual) return false;
+    if (rolActual === 3) return !!academiaId;
+    return true;
+  }, [rolActual, academiaId]);
+
   /* ========= Carga eventos + históricos ========= */
   useEffect(() => {
+    if (!canLoad) return;
+
     const abort = new AbortController();
-    const headers = buildHeaders(rolActual);
+    const headers = buildHeaders(rolActual, academiaId);
 
     (async () => {
       setIsLoading(true);
@@ -214,8 +242,25 @@ export default function VerConvocacionHistorica() {
 
         if (abort.signal.aborted) return;
 
-        setEventos(toArray(evRes));
-        setHistoricos(toArray(hRes));
+        const ev = toArray(evRes);
+        let hist = toArray(hRes);
+
+        // ✅ Filtro defensivo SOLO si backend trae academia_id (no inventamos)
+        if (rolActual === 3 && academiaId != null) {
+          const hasAcademiaKey = hist.some(
+            (x) => x?.academia_id != null || x?.academiaId != null || x?.academia != null
+          );
+          if (hasAcademiaKey) {
+            hist = hist.filter((x) => {
+              const a =
+                Number(x?.academia_id ?? x?.academiaId ?? x?.academia ?? 0) || 0;
+              return a === Number(academiaId);
+            });
+          }
+        }
+
+        setEventos(ev);
+        setHistoricos(hist);
       } catch (err) {
         if (abort.signal.aborted || isCanceled(err)) return;
 
@@ -233,12 +278,14 @@ export default function VerConvocacionHistorica() {
     })();
 
     return () => abort.abort();
-  }, [navigate, rolActual]);
+  }, [navigate, rolActual, academiaId, canLoad]);
 
   /* ========= Carga jugadores (para nombre + fnac + edad) ========= */
   useEffect(() => {
+    if (!canLoad) return;
+
     const abort = new AbortController();
-    const headers = buildHeaders(rolActual);
+    const headers = buildHeaders(rolActual, academiaId);
 
     (async () => {
       try {
@@ -250,10 +297,7 @@ export default function VerConvocacionHistorica() {
         const map = new Map();
 
         for (const j of js) {
-          // seguridad: si backend trae no-activos, los excluimos igual
           const estadoId = Number(j?.estado_id ?? j?.estadoId ?? j?.estado ?? 0);
-          if (estadoId !== 0 && estadoId !== 1) continue; // si viene 0 desconocido, no excluimos; si viene !=1, fuera
-          if (estadoId !== 0 && estadoId !== 1) continue;
 
           const rutRaw = j?.rut_jugador ?? j?.rut ?? j?.id;
           const rutKey = normalizeRutKey(rutRaw);
@@ -263,23 +307,23 @@ export default function VerConvocacionHistorica() {
           if (!isNonEmptyStr(nombre)) continue;
 
           const fnac =
-            j?.fecha_nacimiento ??
-            j?.fechaNacimiento ??
-            j?.fnac ??
-            j?.fecha_nac ??
-            null;
+            j?.fecha_nacimiento ?? j?.fechaNacimiento ?? j?.fnac ?? j?.fecha_nac ?? null;
 
           const edadRaw = j?.edad ?? j?.edad_actual ?? null;
           const edad =
             typeof edadRaw === "number"
               ? edadRaw
               : typeof edadRaw === "string" && edadRaw.trim()
-                ? Number(edadRaw)
-                : fnac
-                  ? calcEdad(fnac)
-                  : "";
+              ? Number(edadRaw)
+              : fnac
+              ? calcEdad(fnac)
+              : "";
 
-          // En WELI, "activos" suele ser estado_id=1, así que si viene ese dato lo usamos como filtro real:
+          // ✅ activos: estado_id=1 si viene informado
+          if (Number.isFinite(estadoId) && estadoId !== 0 && estadoId !== 1) continue;
+          if (Number.isFinite(estadoId) && estadoId !== 1 && estadoId !== 0) continue;
+          if (Number.isFinite(estadoId) && estadoId !== 0 && estadoId !== 1) continue;
+          if (Number.isFinite(estadoId) && estadoId !== 1 && estadoId !== 0) continue;
           if (Number.isFinite(estadoId) && estadoId !== 1) continue;
 
           map.set(rutKey, { nombre, fnac, edad });
@@ -295,12 +339,11 @@ export default function VerConvocacionHistorica() {
           navigate("/login", { replace: true });
           return;
         }
-        // si falla, seguimos sin mapa
       }
     })();
 
     return () => abort.abort();
-  }, [navigate, rolActual]);
+  }, [navigate, rolActual, academiaId, canLoad]);
 
   /* ========= Helpers UI/datos ========= */
 
@@ -311,8 +354,7 @@ export default function VerConvocacionHistorica() {
     ? "bg-[#1f2937] shadow-lg rounded-lg p-4 border border-gray-700"
     : "bg-white shadow-md rounded-lg p-4 border border-gray-200";
 
-  const getEventoById = (id) =>
-    eventos.find((e) => Number(e.id) === Number(id)) || null;
+  const getEventoById = (id) => eventos.find((e) => Number(e.id) === Number(id)) || null;
 
   const nombreEvento = (e) => e?.titulo ?? e?.nombre ?? `Evento #${e?.id ?? "—"}`;
   const fechaEvento = (e) => String(e?.fecha_inicio ?? e?.fecha ?? "").slice(0, 10) || "—";
@@ -328,10 +370,9 @@ export default function VerConvocacionHistorica() {
   };
 
   // ✅ Regla de negocio: solo mostramos jugadores vigentes (estado_id=1).
-  // Usamos el map de /jugadores como "set" de activos.
   const filtrarSoloActivos = (lista) => {
     const map = jugadoresMapRef.current;
-    if (!map || map.size === 0) return Array.isArray(lista) ? lista : []; // fallback si no cargó
+    if (!map || map.size === 0) return Array.isArray(lista) ? lista : [];
     return (Array.isArray(lista) ? lista : []).filter((c) => {
       const rutKey = normalizeRutKey(c?.jugador_rut ?? c?.rut ?? c?.rut_jugador ?? "");
       return rutKey && map.has(rutKey);
@@ -348,17 +389,12 @@ export default function VerConvocacionHistorica() {
     if (!isNonEmptyStr(nombre) && fromMap?.nombre) nombre = fromMap.nombre;
 
     const fnac =
-      fromMap?.fnac ??
-      c?.fecha_nacimiento ??
-      c?.fechaNacimiento ??
-      c?.fnac ??
-      c?.fecha_nac ??
-      null;
+      fromMap?.fnac ?? c?.fecha_nacimiento ?? c?.fechaNacimiento ?? c?.fnac ?? c?.fecha_nac ?? null;
 
     const edad = fromMap?.edad ?? (fnac ? calcEdad(fnac) : "");
 
     return {
-      rut: rutKey, // rut sin DV (dígitos)
+      rut: rutKey,
       nombre: nombre || "",
       fnac: fnac || "",
       edad: edad || "",
@@ -368,22 +404,17 @@ export default function VerConvocacionHistorica() {
   /* ========= PDF ========= */
 
   const exportarPDFDesdeDatos = async (evento, jugadores) => {
-    const doc = new jsPDF({
-      orientation: "portrait",
-      unit: "pt",
-      format: "letter",
-    });
+    const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
 
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
 
-    // Marca de agua (logo)
     let logo = null;
     try {
       logo = await new Promise((resolve) => {
         const img = new Image();
         img.crossOrigin = "anonymous";
-        img.src = "/logo-en-negativo.png"; // ajusta si aplica
+        img.src = "/logo-en-negativo.png";
         img.onload = () => resolve(img);
         img.onerror = () => resolve(null);
       });
@@ -434,26 +465,11 @@ export default function VerConvocacionHistorica() {
         ];
       }),
       startY: 105,
-      styles: {
-        fontSize: 9,
-        cellPadding: 4,
-        lineColor: [200, 200, 200],
-        lineWidth: 0.3,
-      },
-      headStyles: {
-        halign: "center",
-        fillColor: FUCHSIA,
-        textColor: [255, 255, 255],
-        fontSize: 10,
-      },
-      columnStyles: {
-        0: { halign: "center" },
-        2: { halign: "center" },
-        3: { halign: "center" },
-      },
+      styles: { fontSize: 9, cellPadding: 4, lineColor: [200, 200, 200], lineWidth: 0.3 },
+      headStyles: { halign: "center", fillColor: FUCHSIA, textColor: [255, 255, 255], fontSize: 10 },
+      columnStyles: { 0: { halign: "center" }, 2: { halign: "center" }, 3: { halign: "center" } },
       didDrawPage: (data) => {
         drawWatermark(0.08);
-
         const y = pageH - 24;
         doc.setFontSize(9);
         doc.setTextColor(90, 90, 90);
@@ -484,7 +500,7 @@ export default function VerConvocacionHistorica() {
 
   const fetchConvocadosHistorico = useCallback(
     async ({ evento_id, convocatoria_id }) => {
-      const headers = buildHeaders(rolActual);
+      const headers = buildHeaders(rolActual, academiaId);
 
       const res = await getWithFallback(
         `/convocatorias/evento/${Number(evento_id)}/convocatoria/${Number(convocatoria_id)}`,
@@ -493,7 +509,7 @@ export default function VerConvocacionHistorica() {
 
       return toArray(res);
     },
-    [rolActual]
+    [rolActual, academiaId]
   );
 
   const verPDFDeHistorico = async (h) => {
@@ -562,6 +578,7 @@ export default function VerConvocacionHistorica() {
 
   /* ========= Render ========= */
 
+  if (!canLoad) return <IsLoading />;
   if (isLoading) return <IsLoading />;
 
   return (
@@ -603,8 +620,9 @@ export default function VerConvocacionHistorica() {
                       <td className="p-2 border text-center">
                         <button
                           onClick={() => verPDFDeHistorico(h)}
-                          className={`hover:opacity-80 ${generatingRef.current ? "opacity-60 cursor-not-allowed" : ""
-                            }`}
+                          className={`hover:opacity-80 ${
+                            generatingRef.current ? "opacity-60 cursor-not-allowed" : ""
+                          }`}
                           title="Exportar listado (PDF)"
                           aria-label={`Exportar listado histórico ${h.id}`}
                           disabled={generatingRef.current}
@@ -633,8 +651,9 @@ export default function VerConvocacionHistorica() {
       {modal.open && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50">
           <div
-            className={`${darkMode ? "bg-[#1f2937] text-white" : "bg-white text-[#1d0b0b]"
-              } w-[95%] max-w-3xl rounded-lg p-6 shadow-lg`}
+            className={`${
+              darkMode ? "bg-[#1f2937] text-white" : "bg-white text-[#1d0b0b]"
+            } w-[95%] max-w-3xl rounded-lg p-6 shadow-lg`}
           >
             <div className="flex justify-between items-center mb-4 gap-3">
               <h3 className="text-lg font-bold">
@@ -678,7 +697,9 @@ export default function VerConvocacionHistorica() {
                           <td className="px-2 py-1 border text-center">
                             {info.fnac ? String(info.fnac).slice(0, 10) : ""}
                           </td>
-                          <td className="px-2 py-1 border text-center">{info.edad !== "" ? info.edad : ""}</td>
+                          <td className="px-2 py-1 border text-center">
+                            {info.edad !== "" ? info.edad : ""}
+                          </td>
                         </tr>
                       );
                     })}

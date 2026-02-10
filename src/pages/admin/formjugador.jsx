@@ -2,11 +2,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../../context/ThemeContext";
-import api, {
-  getToken,
-  clearToken,
-  ACADEMIA_STORAGE_KEY,
-} from "../../services/api";
+import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
 import IsLoading from "../../components/isLoading";
 import { jwtDecode } from "jwt-decode";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
@@ -25,13 +21,13 @@ const asList = (raw) => {
   if (Array.isArray(d?.items)) return d.items;
   if (Array.isArray(d?.results)) return d.results;
   if (Array.isArray(d?.roles)) return d.roles;
+  if (Array.isArray(d?.data)) return d.data;
   return [];
 };
 
 const trimStrings = (obj) => {
   const out = {};
-  for (const [k, v] of Object.entries(obj))
-    out[k] = typeof v === "string" ? v.trim() : v;
+  for (const [k, v] of Object.entries(obj)) out[k] = typeof v === "string" ? v.trim() : v;
   return out;
 };
 
@@ -129,22 +125,42 @@ const extractRol = (decoded) => {
   return Number.isFinite(n) ? n : 0;
 };
 
+const extractAcademiaFromToken = (decoded) => {
+  const raw =
+    decoded?.academia_id ??
+    decoded?.academy_id ??
+    decoded?.academiaId ??
+    decoded?.academyId ??
+    decoded?.academia ??
+    decoded?.academy ??
+    0;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+};
+
 const isExpired = (decoded) => {
   const now = Math.floor(Date.now() / 1000);
   return !decoded?.exp || decoded.exp <= now;
 };
 
-const buildHeaders = (rol) => {
+/**
+ * ✅ Headers multi-academia (alineado con backend nuevo):
+ * - Authorization siempre
+ * - x-academia-id SOLO para rol 3 (superadmin) y solo si existe en storage
+ */
+const buildHeaders = (rolActual) => {
   const token = getToken();
   const h = token ? { Authorization: `Bearer ${token}` } : {};
-  if (rol === 3) {
+
+  if (rolActual === 3) {
     const a = getAcademiaIdFromStorage();
     if (a) h["x-academia-id"] = String(a);
   }
+
   return h;
 };
 
-// intenta varias rutas y variantes con / y sin / + headers blindados
+// intenta varias rutas y variantes con / y sin / + headers
 const tryGetList = async (paths, { signal, headers }) => {
   const variants = [];
   for (const p of paths) {
@@ -156,12 +172,12 @@ const tryGetList = async (paths, { signal, headers }) => {
   for (const url of uniq) {
     try {
       const r = await api.get(url, { signal, headers });
-      const arr = asList(r);
-      if (arr.length >= 0) return arr;
+      return asList(r);
     } catch (e) {
       if (e?.name === "CanceledError" || e?.code === "ERR_CANCELED") return [];
       const st = e?.status ?? e?.response?.status;
       if (st === 401 || st === 403) throw e;
+      // otros errores: probamos siguiente variante
     }
   }
   return [];
@@ -169,9 +185,7 @@ const tryGetList = async (paths, { signal, headers }) => {
 
 // POST robusto con headers + fallback slash
 const postWithFallback = async (path, body, headers) => {
-  const urls = path.endsWith("/")
-    ? [path, path.slice(0, -1)]
-    : [path, `${path}/`];
+  const urls = path.endsWith("/") ? [path, path.slice(0, -1)] : [path, `${path}/`];
 
   let lastErr = null;
   for (const url of urls) {
@@ -193,6 +207,9 @@ export default function FormJugador() {
   useMobileAutoScrollTop();
 
   const [rolActual, setRolActual] = useState(0);
+
+  // ✅ academia objetivo actual (solo importa para rol 3)
+  const [academiaTarget, setAcademiaTarget] = useState(() => getAcademiaIdFromStorage());
 
   // 🔸 Estado del formulario
   const [formData, setFormData] = useState({
@@ -252,25 +269,67 @@ export default function FormJugador() {
       if (isExpired(decoded)) throw new Error("expired");
 
       const rol = extractRol(decoded);
-
-      // ✅ ahora incluye superadmin (3)
       if (![1, 2, 3].includes(rol)) throw new Error("no-role");
 
-      // ✅ superadmin requiere academia target
-      if (rol === 3) {
-        const a = getAcademiaIdFromStorage();
-        if (!a) throw new Error("missing-academia-target");
+      const tokenAcademia = extractAcademiaFromToken(decoded);
+      const storedAcademia = getAcademiaIdFromStorage();
+
+      // ✅ rol 1/2: no usamos x-academia-id; si hay basura guardada, la limpiamos para evitar confusiones
+      if ((rol === 1 || rol === 2) && storedAcademia && tokenAcademia && storedAcademia !== tokenAcademia) {
+        try {
+          localStorage.removeItem(ACADEMIA_STORAGE_KEY);
+        } catch {}
+      }
+
+      // ✅ rol 3: requiere academia target (storage) porque backend exige x-academia-id
+      const a = getAcademiaIdFromStorage();
+      if (rol === 3 && !a) {
+        setRolActual(rol);
+        setAcademiaTarget(null);
+        setError("⚠️ Superadmin: selecciona una academia (x-academia-id) para cargar catálogos.");
+        setIsLoading(false);
+        return;
       }
 
       setRolActual(rol);
+      setAcademiaTarget(a);
     } catch {
       clearToken();
       navigate("/login", { replace: true });
     }
   }, [navigate]);
 
+  /* ───────── Detecta cambios de academia objetivo (storage) ───────── */
+  useEffect(() => {
+    const sync = () => setAcademiaTarget(getAcademiaIdFromStorage());
+
+    const onStorage = (e) => {
+      if (e?.key === ACADEMIA_STORAGE_KEY) sync();
+    };
+
+    let last = String(localStorage.getItem(ACADEMIA_STORAGE_KEY) ?? "");
+    const t = setInterval(() => {
+      const now = String(localStorage.getItem(ACADEMIA_STORAGE_KEY) ?? "");
+      if (now !== last) {
+        last = now;
+        sync();
+      }
+    }, 800);
+
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      clearInterval(t);
+    };
+  }, []);
+
   /* ───────── Cargar catálogos (resistente + abort + headers) ───────── */
   useEffect(() => {
+    if (![1, 2, 3].includes(rolActual)) return;
+
+    // ✅ superadmin sin academia target = no cargamos (backend exige header)
+    if (rolActual === 3 && !academiaTarget) return;
+
     const abort = new AbortController();
     let alive = true;
 
@@ -281,16 +340,15 @@ export default function FormJugador() {
       try {
         const headers = buildHeaders(rolActual);
 
-        const [_pos, _cat, _estados, _edu, _prev, _suc, _com] =
-          await Promise.all([
-            tryGetList(["/posiciones", "/posicion"], { signal: abort.signal, headers }),
-            tryGetList(["/categorias", "/categoria"], { signal: abort.signal, headers }),
-            tryGetList(["/estado", "/estados"], { signal: abort.signal, headers }),
-            tryGetList(["/establecimientos-educ"], { signal: abort.signal, headers }),
-            tryGetList(["/prevision-medica"], { signal: abort.signal, headers }),
-            tryGetList(["/sucursales-real", "/sucursales"], { signal: abort.signal, headers }),
-            tryGetList(["/comunas"], { signal: abort.signal, headers }),
-          ]);
+        const [_pos, _cat, _estados, _edu, _prev, _suc, _com] = await Promise.all([
+          tryGetList(["/posiciones", "/posicion"], { signal: abort.signal, headers }),
+          tryGetList(["/categorias", "/categoria"], { signal: abort.signal, headers }),
+          tryGetList(["/estado", "/estados"], { signal: abort.signal, headers }),
+          tryGetList(["/establecimientos-educ"], { signal: abort.signal, headers }),
+          tryGetList(["/prevision-medica"], { signal: abort.signal, headers }),
+          tryGetList(["/sucursales-real", "/sucursales"], { signal: abort.signal, headers }),
+          tryGetList(["/comunas"], { signal: abort.signal, headers }),
+        ]);
 
         if (!alive) return;
 
@@ -301,32 +359,59 @@ export default function FormJugador() {
               const nameKey = nameKeys.find((k) => typeof x?.[k] === "string");
               const id = x?.[idKey];
               const nombre = x?.[nameKey];
-              return {
-                id: Number(id),
-                nombre: String(nombre ?? "").trim() || String(id ?? "").trim(),
-              };
+              return { id: Number(id), nombre: String(nombre ?? "").trim() || String(id ?? "").trim() };
             })
-            .filter((e) => Number.isFinite(e.id));
+            .filter((e) => Number.isFinite(e.id) && e.id > 0);
 
-        setPosiciones(norm(_pos, ["id", "posicion_id"]));
-        setCategorias(norm(_cat, ["id", "categoria_id"]));
-        setEstados(norm(_estados, ["id", "estado_id"]));
-        setEstablecimientos(norm(_edu, ["id", "establec_educ_id"]));
-        setPrevisiones(norm(_prev, ["id", "prevision_medica_id"]));
-        setSucursales(norm(_suc, ["id"]));
-        setComunas(norm(_com, ["id"]));
+        const posN = norm(_pos, ["id", "posicion_id"]);
+        const catN = norm(_cat, ["id", "categoria_id"]);
+        const estN = norm(_estados, ["id", "estado_id"]);
+        const eduN = norm(_edu, ["id", "establec_educ_id"]);
+        const prevN = norm(_prev, ["id", "prevision_medica_id"]);
+        const sucN = norm(_suc, ["id"]);
+        const comN = norm(_com, ["id"]);
 
-        const allEmpty = [_pos, _cat, _estados, _edu, _prev, _suc, _com].every(
-          (arr) => !Array.isArray(arr) || arr.length === 0
-        );
+        setPosiciones(posN);
+        setCategorias(catN);
+        setEstados(estN);
+        setEstablecimientos(eduN);
+        setPrevisiones(prevN);
+        setSucursales(sucN);
+        setComunas(comN);
+
+        const allEmpty = [posN, catN, estN, eduN, prevN, sucN, comN].every((arr) => arr.length === 0);
         if (allEmpty) setError("❌ No se pudieron cargar los datos de selección");
+
+        // ✅ Invalida selects si ya no existen (por cambio de academia o data)
+        setFormData((prev) => {
+          const exists = (arr, id) => arr.some((x) => String(x.id) === String(id));
+          const next = { ...prev };
+
+          if (prev.posicion_id && !exists(posN, prev.posicion_id)) next.posicion_id = "";
+          if (prev.categoria_id && !exists(catN, prev.categoria_id)) next.categoria_id = "";
+          if (prev.estado_id && !exists(estN, prev.estado_id)) next.estado_id = "";
+          if (prev.establec_educ_id && !exists(eduN, prev.establec_educ_id)) next.establec_educ_id = "";
+          if (prev.prevision_medica_id && !exists(prevN, prev.prevision_medica_id)) next.prevision_medica_id = "";
+          if (prev.sucursal_id && !exists(sucN, prev.sucursal_id)) next.sucursal_id = "";
+          if (prev.comuna_id && !exists(comN, prev.comuna_id)) next.comuna_id = "";
+
+          return next;
+        });
       } catch (err) {
         const st = err?.status ?? err?.response?.status;
+
         if (st === 401 || st === 403) {
+          // si superadmin y falta header -> error claro
+          if (rolActual === 3) {
+            setError("⚠️ Superadmin: falta x-academia-id. Selecciona una academia para cargar catálogos.");
+            setIsLoading(false);
+            return;
+          }
           clearToken();
           navigate("/login", { replace: true });
           return;
         }
+
         if (!abort.signal.aborted) setError("❌ No se pudieron cargar los datos de selección");
       } finally {
         if (alive && !abort.signal.aborted) setIsLoading(false);
@@ -337,30 +422,23 @@ export default function FormJugador() {
       alive = false;
       abort.abort();
     };
-  }, [navigate, rolActual]);
+  }, [navigate, rolActual, academiaTarget]);
 
   /* ───────── Autoselección si hay una sola opción ───────── */
   useEffect(() => {
     setFormData((prev) => ({
       ...prev,
-      posicion_id:
-        !prev.posicion_id && posiciones.length === 1 ? String(posiciones[0].id) : prev.posicion_id,
-      categoria_id:
-        !prev.categoria_id && categorias.length === 1 ? String(categorias[0].id) : prev.categoria_id,
-      estado_id:
-        !prev.estado_id && estados.length === 1 ? String(estados[0].id) : prev.estado_id,
+      posicion_id: !prev.posicion_id && posiciones.length === 1 ? String(posiciones[0].id) : prev.posicion_id,
+      categoria_id: !prev.categoria_id && categorias.length === 1 ? String(categorias[0].id) : prev.categoria_id,
+      estado_id: !prev.estado_id && estados.length === 1 ? String(estados[0].id) : prev.estado_id,
       establec_educ_id:
         !prev.establec_educ_id && establecimientos.length === 1
           ? String(establecimientos[0].id)
           : prev.establec_educ_id,
       prevision_medica_id:
-        !prev.prevision_medica_id && previsiones.length === 1
-          ? String(previsiones[0].id)
-          : prev.prevision_medica_id,
-      sucursal_id:
-        !prev.sucursal_id && sucursales.length === 1 ? String(sucursales[0].id) : prev.sucursal_id,
-      comuna_id:
-        !prev.comuna_id && comunas.length === 1 ? String(comunas[0].id) : prev.comuna_id,
+        !prev.prevision_medica_id && previsiones.length === 1 ? String(previsiones[0].id) : prev.prevision_medica_id,
+      sucursal_id: !prev.sucursal_id && sucursales.length === 1 ? String(sucursales[0].id) : prev.sucursal_id,
+      comuna_id: !prev.comuna_id && comunas.length === 1 ? String(comunas[0].id) : prev.comuna_id,
     }));
   }, [posiciones, categorias, estados, establecimientos, previsiones, sucursales, comunas]);
 
@@ -384,8 +462,7 @@ export default function FormJugador() {
 
     if (name === "rut_jugador" || name === "rut_apoderado") value = onlyInt(value).slice(0, 8);
     if (name === "edad") value = onlyInt(value).slice(0, 3);
-    if (name === "telefono" || name === "telefono_apoderado")
-      value = onlyPhone(value).slice(0, 15);
+    if (name === "telefono" || name === "telefono_apoderado") value = onlyPhone(value).slice(0, 15);
     if (name === "peso") value = onlyNum(value).slice(0, 6);
     if (name === "estatura") value = onlyInt(value).slice(0, 3);
 
@@ -414,8 +491,7 @@ export default function FormJugador() {
     if (!/^\d{7,8}$/.test(rutJugDigits))
       throw new Error("El RUT del jugador debe ser de 7 u 8 dígitos (sin DV).");
 
-    const comunaNombre =
-      comunas.find((c) => String(c.id) === String(formData.comuna_id))?.nombre || "";
+    const comunaNombre = comunas.find((c) => String(c.id) === String(formData.comuna_id))?.nombre || "";
 
     const data = {
       fecha_contrato: fechaEsLarga(new Date()),
@@ -447,15 +523,13 @@ export default function FormJugador() {
     setMensaje("");
     setError("");
 
-    // Validaciones suaves (lo imprescindible)
     const edadNum = Number(formData.edad || "0");
     if (formData.edad && (edadNum < 5 || edadNum > 100)) {
       return setError("La edad debe estar entre 5 y 100 años si la indicas");
     }
 
     if (formData.telefono) {
-      const okTel =
-        /^\+\d{9,15}$/.test(formData.telefono) || /^\d{9,11}$/.test(formData.telefono);
+      const okTel = /^\+\d{9,15}$/.test(formData.telefono) || /^\d{9,11}$/.test(formData.telefono);
       if (!okTel) return setError("Teléfono inválido: usa +569... o 9–11 dígitos.");
     }
 
@@ -467,9 +541,7 @@ export default function FormJugador() {
     }
 
     if (hasRutApo && !String(formData.nombre_apoderado || "").trim()) {
-      return setError(
-        "Si ingresas RUT de apoderado, debes ingresar también el nombre del apoderado."
-      );
+      return setError("Si ingresas RUT de apoderado, debes ingresar también el nombre del apoderado.");
     }
 
     if ([formData.posicion_id, formData.categoria_id, formData.estado_id].some((v) => !v)) {
@@ -507,13 +579,7 @@ export default function FormJugador() {
 
       const headers = buildHeaders(rolActual);
 
-      console.debug("POST /jugadores payload →", {
-        ...payload,
-        contrato_prestacion: "(base64 oculto)",
-        _headers: headers,
-      });
-
-      // 3) Crear jugador (robusto con / y sin /)
+      // 3) Crear jugador
       const res = await postWithFallback("/jugadores", payload, headers);
       const body = res?.data || {};
 
@@ -524,9 +590,7 @@ export default function FormJugador() {
 
       setMensaje(
         `✅ Jugador registrado: ${nombreOk}${idOk ? ` (ID ${idOk})` : ""}` +
-          (apoderadoCredencial
-            ? " • Apoderado habilitado para portal (credencial temporal) ✅"
-            : "")
+          (apoderadoCredencial ? " • Apoderado habilitado para portal (credencial temporal) ✅" : "")
       );
 
       setCreatedInfo({ nombre: nombreOk, id: idOk, apoderadoCredencial });
@@ -561,12 +625,18 @@ export default function FormJugador() {
       const st = err?.status ?? err?.response?.status ?? 0;
       const data = err?.data ?? err?.response?.data ?? null;
       const text = err?.request?.responseText;
-      const msg =
-        data?.message ??
-        err?.message ??
-        (text ? String(text).slice(0, 300) : "Error");
+      const msg = data?.message ?? err?.message ?? (text ? String(text).slice(0, 300) : "Error");
 
-      if (st === 401 || st === 403) {
+      if (st === 401) {
+        clearToken();
+        return navigate("/login", { replace: true });
+      }
+
+      if (st === 403) {
+        // superadmin sin target o mismatch
+        if (rolActual === 3) {
+          return setError("⚠️ Superadmin: falta x-academia-id o no tienes academia seleccionada.");
+        }
         clearToken();
         return navigate("/login", { replace: true });
       }
@@ -586,12 +656,12 @@ export default function FormJugador() {
       input:
         (darkMode
           ? "bg-[#1f2937] text-white border border-gray-600 placeholder-gray-400"
-          : "bg-white text-black border border-gray-300 placeholder-gray-500") +
-        " w-full box-border",
+          : "bg-white text-black border border-gray-300 placeholder-gray-500") + " w-full box-border",
     }),
     [darkMode]
   );
 
+  // ✅ si rol 3 y no hay academiaTarget: no bloquees con loader eterno
   if (isLoading) return <IsLoading />;
 
   return (
@@ -600,9 +670,7 @@ export default function FormJugador() {
 
       <div className={`${c.tarjeta} shadow-lg rounded-2xl p-4 sm:p-6 w-full max-w-full md:max-w-2xl mx-auto`}>
         {error && (
-          <div className="mb-4 p-3 rounded border border-red-400 text-red-600 bg-red-50">
-            {error}
-          </div>
+          <div className="mb-4 p-3 rounded border border-red-400 text-red-600 bg-red-50">{error}</div>
         )}
 
         <form onSubmit={enviarJugador} className="grid md:grid-cols-1 lg:grid-cols-1 gap-4 text-sm">
@@ -799,9 +867,7 @@ export default function FormJugador() {
             </div>
           )}
 
-          <div className="mt-2 opacity-80">
-            Contrato generado y almacenado en la base de datos.
-          </div>
+          <div className="mt-2 opacity-80">Contrato generado y almacenado en la base de datos.</div>
 
           {createdInfo.apoderadoCredencial && (
             <div className="mt-2 text-xs opacity-90">

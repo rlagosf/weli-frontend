@@ -358,9 +358,6 @@ export default function Dashboard() {
         <h1 className="text-3xl font-extrabold text-center tracking-tight mt-6">
           Panel de Administración
         </h1>
-        <p className="text-center text-sm opacity-70 mt-1">
-          Gestión multi-academia con control por roles.
-        </p>
       </header>
 
       <main className="px-6 pb-20 mt-7">

@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "../../context/ThemeContext";
-import api, { getToken, clearToken } from "../../services/api";
+import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
 import { jwtDecode } from "jwt-decode";
 import IsLoading from "../../components/isLoading";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
@@ -11,12 +11,39 @@ import { Bar } from "react-chartjs-2";
 
 Chart.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
+/* ================= Helpers academia/header ================= */
+
+const getAcademiaIdFromStorage = () => {
+  try {
+    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
+    if (!raw) return null;
+
+    const direct = Number(raw);
+    if (Number.isFinite(direct) && direct > 0) return direct;
+
+    const parsed = JSON.parse(raw);
+    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+};
+
+const buildHeaders = (rol, academiaId) => {
+  const token = getToken();
+  const h = token ? { Authorization: `Bearer ${token}` } : {};
+  if (rol === 3 && academiaId) h["x-academia-id"] = String(academiaId);
+  return h;
+};
+
 export default function PowerbiFinanzas() {
   const { darkMode } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
 
   const [rol, setRol] = useState(null);
+  const [academiaId, setAcademiaId] = useState(() => getAcademiaIdFromStorage());
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [pagos, setPagos] = useState([]);
@@ -48,16 +75,43 @@ export default function PowerbiFinanzas() {
       breadcrumbBootRef.current = true;
       navigate(currentPath, {
         replace: true,
-        state: {
-          ...(location.state || {}),
-          breadcrumb: [{ to: currentPath, label }],
-        },
+        state: { ...(location.state || {}), breadcrumb: [{ to: currentPath, label }] },
       });
     } else {
       breadcrumbBootRef.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.search]);
+
+  // ─────────────────────────────
+  // 🔄 Sync academiaId (superdashboard)
+  // ─────────────────────────────
+  useEffect(() => {
+    let alive = true;
+
+    const tick = () => {
+      if (!alive) return;
+      const a = getAcademiaIdFromStorage();
+      setAcademiaId((prev) => (prev !== a ? a : prev));
+    };
+
+    tick();
+    const iv = setInterval(tick, 1200);
+
+    const onStorage = () => tick();
+    window.addEventListener("storage", onStorage);
+
+    return () => {
+      alive = false;
+      clearInterval(iv);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
+
+  // Limpieza al cambiar academia (evita “ver pagos viejos”)
+  useEffect(() => {
+    if (rol === 3) setPagos([]);
+  }, [academiaId, rol]);
 
   // ─────────────────────────────
   // 🔐 Auth (roles permitidos: 1 y 3)
@@ -70,17 +124,20 @@ export default function PowerbiFinanzas() {
       const decoded = jwtDecode(token);
       const now = Math.floor(Date.now() / 1000);
 
-      // ✅ misma regla fuerte (evita “0.6s y expulsión” por exp indefinido)
       if (!decoded?.exp || decoded.exp <= now) throw new Error("expired");
 
       const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
       const r = Number.isFinite(Number(rawRol)) ? Number(rawRol) : 0;
 
-      // ✅ PowerBI permitido para 1 y 3 (igual que Dashboard)
       if (![1, 3].includes(r)) {
         navigate(dashboardBase, { replace: true });
         setIsLoading(false);
         return;
+      }
+
+      if (r === 3) {
+        const a = getAcademiaIdFromStorage();
+        if (!a) throw new Error("missing-academia-target");
       }
 
       setRol(r);
@@ -92,8 +149,14 @@ export default function PowerbiFinanzas() {
     }
   }, [navigate, dashboardBase]);
 
+  const canLoad = useMemo(() => {
+    if (![1, 3].includes(rol)) return false;
+    if (rol === 3) return !!academiaId;
+    return true;
+  }, [rol, academiaId]);
+
   // ─────────────────────────────
-  // ✅ apiOps estable (no “backend loco”)
+  // ✅ apiOps estable (con headers)
   // ─────────────────────────────
   const getErrStatus = (e) => e?.status ?? e?.response?.status ?? 0;
 
@@ -108,16 +171,13 @@ export default function PowerbiFinanzas() {
         } catch (err) {
           lastErr = err;
           const st = getErrStatus(err);
-          if (st === 401 || st === 403) throw err; // auth corta altiro
+          if (st === 401 || st === 403) throw err;
         }
       }
       throw lastErr || new Error("ENDPOINT_VARIANTS_FAILED");
     };
 
-    return {
-      getVar: withVariants((u, cfg) => api.get(u, cfg)),
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return { getVar: withVariants((u, cfg) => api.get(u, cfg)) };
   }, []);
 
   // ─────────────────────────────
@@ -137,19 +197,15 @@ export default function PowerbiFinanzas() {
     return [];
   };
 
-  // ✅ para estado-cuenta: “pesca pagos donde sea”
   const extractPagosEstadoCuenta = (res) => {
     if (!res || res.status === 204) return [];
     const d = res?.data ?? res;
 
-    // casos típicos
     if (Array.isArray(d?.pagos)) return d.pagos;
     if (Array.isArray(d?.items)) return d.items;
     if (Array.isArray(d?.results)) return d.results;
     if (Array.isArray(d?.data)) return d.data;
     if (Array.isArray(d)) return d;
-
-    // algunos backends: { ok:true, data:{ pagos:[...] } }
     if (d?.ok && Array.isArray(d?.data?.pagos)) return d.data.pagos;
 
     return [];
@@ -226,6 +282,8 @@ export default function PowerbiFinanzas() {
         situacion_pago: { id: situId, nombre: situNombre },
         medio_pago: { id: medioId, nombre: medioNombre },
         observaciones: p?.observaciones ?? "",
+        // defensivo si viene:
+        academia_id: p?.academia_id ?? p?.academiaId ?? p?.academia ?? null,
       };
     });
   };
@@ -236,27 +294,27 @@ export default function PowerbiFinanzas() {
   }, [navigate]);
 
   // ─────────────────────────────
-  // 📥 Carga de datos (1 vez controlada)
+  // 📥 Carga de datos (scoped por academia)
   // ─────────────────────────────
   useEffect(() => {
-    if (![1, 3].includes(rol)) return;
+    if (!canLoad) return;
 
     const abort = new AbortController();
+    const headers = buildHeaders(rol, academiaId);
 
     (async () => {
       setIsLoading(true);
       setError("");
 
       try {
-        // catálogos + jugadores (en paralelo)
+        const cfg = { signal: abort.signal, headers };
+
         const [tiposRes, mediosRes, situacionesRes, jugadoresRes, categoriasRes] = await Promise.all([
-          apiOps.getVar("/tipo-pago", { signal: abort.signal }).catch(() => null),
-          apiOps.getVar("/medio-pago", { signal: abort.signal }).catch(() => null),
-          apiOps
-            .getVar("/situacion-pago", { signal: abort.signal })
-            .catch(() => apiOps.getVar("/estado-pago", { signal: abort.signal }).catch(() => null)),
-          apiOps.getVar("/jugadores", { signal: abort.signal }).catch(() => null),
-          apiOps.getVar("/categorias", { signal: abort.signal }).catch(() => null),
+          apiOps.getVar("/tipo-pago", cfg).catch(() => null),
+          apiOps.getVar("/medio-pago", cfg).catch(() => null),
+          apiOps.getVar("/situacion-pago", cfg).catch(() => apiOps.getVar("/estado-pago", cfg).catch(() => null)),
+          apiOps.getVar("/jugadores", cfg).catch(() => null),
+          apiOps.getVar("/categorias", cfg).catch(() => null),
         ]);
 
         if (abort.signal.aborted) return;
@@ -291,12 +349,27 @@ export default function PowerbiFinanzas() {
           });
         }
 
-        // ✅ Ahora: pagos (estado-cuenta) con variantes y parse robusto
-        const respEstado = await apiOps.getVar("/pagos-jugador/estado-cuenta", { signal: abort.signal });
+        // ✅ Pagos (estado-cuenta) — SCOPED
+        const respEstado = await apiOps.getVar("/pagos-jugador/estado-cuenta", cfg);
         if (abort.signal.aborted) return;
 
         const rawPagos = extractPagosEstadoCuenta(respEstado);
-        const pagosNorm = normalizePagos(rawPagos, {
+
+        // ✅ filtro defensivo SOLO si el backend trae academia_id
+        let rawScoped = rawPagos;
+        if (rol === 3 && academiaId != null) {
+          const hasAcademiaKey = rawPagos.some(
+            (p) => p?.academia_id != null || p?.academiaId != null || p?.academia != null
+          );
+          if (hasAcademiaKey) {
+            rawScoped = rawPagos.filter((p) => {
+              const a = Number(p?.academia_id ?? p?.academiaId ?? p?.academia ?? 0) || 0;
+              return a === Number(academiaId);
+            });
+          }
+        }
+
+        const pagosNorm = normalizePagos(rawScoped, {
           tipoPagoMap,
           medioPagoMap,
           situacionPagoMap,
@@ -317,7 +390,7 @@ export default function PowerbiFinanzas() {
     })();
 
     return () => abort.abort();
-  }, [rol, apiOps, handleAuth]);
+  }, [rol, academiaId, canLoad, apiOps, handleAuth]);
 
   // ─────────────────────────────
   // 🎨 UI
@@ -327,7 +400,6 @@ export default function PowerbiFinanzas() {
     ? "bg-[#1f2937] shadow-lg rounded-lg p-4 border border-gray-700"
     : "bg-white shadow-md rounded-lg p-4 border border-gray-200";
 
-  // 📊 Configuración de gráficos (sin tocar tu paleta)
   const colores = useMemo(
     () => ["#4dc9f6", "#f67019", "#f53794", "#537bc4", "#acc236", "#166a8f", "#00a950", "#58595b", "#8549ba"],
     []
@@ -338,9 +410,7 @@ export default function PowerbiFinanzas() {
       indexAxis: "x",
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {
-        legend: { labels: { color: darkMode ? "white" : "#1d0b0b" } },
-      },
+      plugins: { legend: { labels: { color: darkMode ? "white" : "#1d0b0b" } } },
       scales: {
         x: { ticks: { color: darkMode ? "white" : "#1d0b0b" } },
         y: { ticks: { color: darkMode ? "white" : "#1d0b0b" } },
@@ -402,6 +472,7 @@ export default function PowerbiFinanzas() {
   }, [pagos]);
 
   // ───────── Render ─────────
+  if (!canLoad) return <IsLoading />;
   if (isLoading) return <IsLoading />;
 
   if (error) {
@@ -423,7 +494,7 @@ export default function PowerbiFinanzas() {
 
       {pagos.length === 0 && (
         <p className="text-center text-sm opacity-70 mb-6">
-          No llegaron pagos al frontend. Si el endpoint responde con data, esto era un tema de parseo.
+          No llegaron pagos al frontend (scoping aplicado). Si el endpoint responde con data, era un tema de filtro/header.
         </p>
       )}
 

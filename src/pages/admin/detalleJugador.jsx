@@ -47,7 +47,13 @@ const unwrapOne = (raw) => {
 
   if (Array.isArray(raw?.items) && raw.items.length > 0) return raw.items[0];
 
-  if (!Array.isArray(raw) && typeof raw === "object" && Object.keys(raw).length > 0 && !("ok" in raw) && !("items" in raw))
+  if (
+    !Array.isArray(raw) &&
+    typeof raw === "object" &&
+    Object.keys(raw).length > 0 &&
+    !("ok" in raw) &&
+    !("items" in raw)
+  )
     return raw;
 
   return null;
@@ -58,13 +64,13 @@ const normalizeCatalog = (arr) =>
     .map((x) => ({
       id: Number(
         x?.id ??
-          x?.posicion_id ??
-          x?.categoria_id ??
-          x?.establec_educ_id ??
-          x?.prevision_medica_id ??
-          x?.estado_id ??
-          x?.sucursal_id ??
-          x?.comuna_id
+        x?.posicion_id ??
+        x?.categoria_id ??
+        x?.establec_educ_id ??
+        x?.prevision_medica_id ??
+        x?.estado_id ??
+        x?.sucursal_id ??
+        x?.comuna_id
       ),
       nombre: String(x?.nombre ?? x?.descripcion ?? "").trim(),
     }))
@@ -75,18 +81,41 @@ const num = (v, def = 0) => {
   return Number.isFinite(n) ? n : def;
 };
 
-const getEstadisticaIdFromJugador = (j) => {
-  if (!j || typeof j !== "object") return null;
-  let eid = j.estadistica_id ?? j.estadisticas_id ?? j.id_estadistica ?? null;
-  if (typeof eid === "string" && /^\d+$/.test(eid)) eid = Number(eid);
-  return eid;
-};
-
 const buildFotoDataUrl = (j) => {
   const b64 = j?.foto_base64;
   const mime = j?.foto_mime;
   if (!b64 || !mime) return null;
   return `data:${mime};base64,${b64}`;
+};
+
+/* ─────────────────────────────
+   Stats helpers (joined base + sport)
+───────────────────────────── */
+const safeNum = (v, def = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : def;
+};
+
+const flattenJoinedStats = (payload) => {
+  const base = payload?.base && typeof payload.base === "object" ? payload.base : {};
+  const sport = payload?.sport && typeof payload.sport === "object" ? payload.sport : {};
+  const merged = { ...base, ...sport };
+
+  if (merged?.stats_id == null && merged?.id != null) merged.stats_id = merged.id;
+
+  // intenta normalizar números si vienen como strings
+  const out = {};
+  for (const [k, v] of Object.entries(merged)) {
+    // si es null/undefined, lo dejamos así para que el UI haga ?? 0
+    if (v == null) {
+      out[k] = v;
+      continue;
+    }
+    // si parsea a número, usamos número, si no, dejamos original
+    const n = Number(v);
+    out[k] = Number.isFinite(n) ? n : v;
+  }
+  return out;
 };
 
 /* ─────────────────────────────
@@ -224,8 +253,12 @@ export default function DetalleJugador() {
 
   const css = {
     fondo: darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]",
-    tarjeta: darkMode ? "bg-[#1f2937] border border-gray-700 text-white" : "bg-white border border-gray-200 text-[#1d0b0b]",
-    input: darkMode ? "w-full p-1 rounded bg-[#374151] text-white border border-gray-600" : "w-full p-1 rounded bg-gray-50 border border-gray-300",
+    tarjeta: darkMode
+      ? "bg-[#1f2937] border border-gray-700 text-white"
+      : "bg-white border border-gray-200 text-[#1d0b0b]",
+    input: darkMode
+      ? "w-full p-1 rounded bg-[#374151] text-white border border-gray-600"
+      : "w-full p-1 rounded bg-gray-50 border border-gray-300",
   };
 
   const [rolActual, setRolActual] = useState(0);
@@ -269,7 +302,10 @@ export default function DetalleJugador() {
     if (!last || String(last.label) !== "Detalle Jugador") {
       navigate(currentPath, {
         replace: true,
-        state: { ...(location.state || {}), breadcrumb: [...base, { label: "Detalle Jugador", to: currentPath }] },
+        state: {
+          ...(location.state || {}),
+          breadcrumb: [...base, { label: "Detalle Jugador", to: currentPath }],
+        },
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -315,7 +351,7 @@ export default function DetalleJugador() {
       setErr("");
 
       try {
-        // Jugador
+        // 1) Jugador
         const rj = await getWithFallback(`/jugadores/rut/${encodeURIComponent(rut)}`, {
           signal: abort.signal,
           headers,
@@ -332,45 +368,71 @@ export default function DetalleJugador() {
 
         setFotoDataUrl(buildFotoDataUrl(j));
 
-        // Stats
+        // 2) Stats segmentadas por deporte (joined base + sport)
         let est = {};
         let estId = null;
 
         try {
-          const re = await getWithFallback(`/estadisticas/by-rut/${encodeURIComponent(rut)}`, {
-            signal: abort.signal,
-            headers,
-          });
-          const items = asList(re);
+          const jugadorId = Number(j?.id ?? j?.jugador_id ?? j?.id_jugador ?? 0) || null;
+          const deporteId = Number(j?.deporte_id ?? j?.id_deporte ?? 0) || null;
 
-          if (items.length > 0) {
-            const e0 = items[0] || {};
-            estId = e0?.id ?? null;
-            const norm = Object.fromEntries(Object.entries(e0).map(([k, v]) => [k, num(v, 0)]));
-            if ("partidos_jugador" in norm && !("partidos_jugados" in norm)) norm.partidos_jugados = norm.partidos_jugador;
-            est = norm;
-          } else {
-            const eid = getEstadisticaIdFromJugador(j);
-            if (eid != null) {
-              const re2 = await getWithFallback(`/estadisticas/estadistica/${encodeURIComponent(eid)}`, {
-                signal: abort.signal,
-                headers,
-              });
-              const items2 = asList(re2);
-              if (items2.length > 0) {
-                const e1 = items2[0] || {};
-                estId = e1?.id ?? null;
-                const norm2 = Object.fromEntries(Object.entries(e1).map(([k, v]) => [k, num(v, 0)]));
-                if ("partidos_jugador" in norm2 && !("partidos_jugados" in norm2)) norm2.partidos_jugados = norm2.partidos_jugador;
-                est = norm2;
+          if (jugadorId) {
+            const candidates = [
+              `/estadisticas/by-jugador/${encodeURIComponent(String(jugadorId))}`,
+              deporteId
+                ? `/estadisticas/by-jugador/${encodeURIComponent(String(jugadorId))}?deporte_id=${encodeURIComponent(
+                  String(deporteId)
+                )}`
+                : null,
+              // fallback legacy opcional (si existiera)
+              `/estadisticas/jugador/${encodeURIComponent(String(jugadorId))}`,
+            ].filter(Boolean);
+
+            let joined = null;
+
+            for (const url of candidates) {
+              try {
+                const r = await getWithFallback(url, { signal: abort.signal, headers });
+                const d = r?.data ?? r;
+
+                const item =
+                  d?.item && typeof d.item === "object"
+                    ? d.item
+                    : d?.data?.item && typeof d.data.item === "object"
+                      ? d.data.item
+                      : d;
+
+                joined = item;
+                break;
+              } catch (e) {
+                const st = e?.status ?? e?.response?.status ?? 0;
+                if (st === 401 || st === 403) throw e;
+                continue;
               }
             }
+
+            if (joined) {
+              const flat = flattenJoinedStats(joined);
+
+              estId = flat?.stats_id ?? flat?.id ?? null;
+
+              // compat: si backend manda partidos_jugador
+              if ("partidos_jugador" in flat && !("partidos_jugados" in flat)) {
+                flat.partidos_jugados = safeNum(flat.partidos_jugador, 0);
+              }
+
+              est = flat;
+            } else {
+              est = {};
+            }
+          } else {
+            est = {};
           }
         } catch {
           est = {};
         }
 
-        // Catálogos (rutas mínimas + fallback)
+        // 3) Catálogos (rutas mínimas + fallback)
         const [posList, catList, estbList, prevList, estList, sucList, comList] = await Promise.all([
           tryGetList(["/posiciones"], { signal: abort.signal, headers }),
           tryGetList(["/categorias"], { signal: abort.signal, headers }),
@@ -411,8 +473,10 @@ export default function DetalleJugador() {
           ...j,
           posicion: j.posicion ?? (posMap.has(Number(j.posicion_id)) ? { nombre: posMap.get(Number(j.posicion_id)) } : null),
           categoria: j.categoria ?? (catMap.has(Number(j.categoria_id)) ? { nombre: catMap.get(Number(j.categoria_id)) } : null),
-          establec_educ: j.establec_educ ?? (estbMap.has(Number(j.establec_educ_id)) ? { nombre: estbMap.get(Number(j.establec_educ_id)) } : null),
-          prevision_medica: j.prevision_medica ?? (prevMap.has(Number(j.prevision_medica_id)) ? { nombre: prevMap.get(Number(j.prevision_medica_id)) } : null),
+          establec_educ:
+            j.establec_educ ?? (estbMap.has(Number(j.establec_educ_id)) ? { nombre: estbMap.get(Number(j.establec_educ_id)) } : null),
+          prevision_medica:
+            j.prevision_medica ?? (prevMap.has(Number(j.prevision_medica_id)) ? { nombre: prevMap.get(Number(j.prevision_medica_id)) } : null),
           estado: j.estado ?? (estMap.has(Number(j.estado_id)) ? { nombre: estMap.get(Number(j.estado_id)) } : null),
           sucursal: j.sucursal ?? (sucMap.has(Number(j.sucursal_id)) ? { nombre: sucMap.get(Number(j.sucursal_id)) } : null),
           comuna: j.comuna ?? (comMap.has(Number(j.comuna_id)) ? { nombre: comMap.get(Number(j.comuna_id)) } : null),
@@ -442,7 +506,7 @@ export default function DetalleJugador() {
           fecha_nacimiento: ymd || "",
           estado_id: j?.estado_id ?? null,
           sucursal_id: j?.sucursal_id ?? null,
-          estadistica_id: estId ?? getEstadisticaIdFromJugador(j) ?? null,
+          estadistica_id: estId ?? j?.estadistica_id ?? null,
           comuna_id: j?.comuna_id ?? null,
           direccion: j?.direccion ?? "",
         });
@@ -468,7 +532,10 @@ export default function DetalleJugador() {
   }, [rut, rolActual, navigate, parentPath, location.state]);
 
   /* ───────── Helpers UI ───────── */
-  const labelNombre = useCallback((arr, id) => arr.find((i) => Number(i.id) === Number(id))?.nombre || "-", []);
+  const labelNombre = useCallback(
+    (arr, id) => arr.find((i) => Number(i.id) === Number(id))?.nombre || "-",
+    []
+  );
 
   const formatearFechaLocal = (fecha) => {
     if (!fecha) return "-";
@@ -578,7 +645,20 @@ export default function DetalleJugador() {
       for (const [k, v] of Object.entries(raw)) {
         if (!ALLOWED.has(k)) continue;
 
-        if (["edad", "peso", "estatura", "posicion_id", "categoria_id", "establec_educ_id", "prevision_medica_id", "estado_id", "sucursal_id", "comuna_id"].includes(k)) {
+        if (
+          [
+            "edad",
+            "peso",
+            "estatura",
+            "posicion_id",
+            "categoria_id",
+            "establec_educ_id",
+            "prevision_medica_id",
+            "estado_id",
+            "sucursal_id",
+            "comuna_id",
+          ].includes(k)
+        ) {
           payload[k] = numeric(v);
         } else if (k === "fecha_nacimiento") {
           payload[k] = v || null;
@@ -594,8 +674,10 @@ export default function DetalleJugador() {
         ...payload,
         posicion: posiciones.find((p) => Number(p.id) === Number(payload.posicion_id)) || prev?.posicion || null,
         categoria: categorias.find((c) => Number(c.id) === Number(payload.categoria_id)) || prev?.categoria || null,
-        establec_educ: establecimientos.find((e) => Number(e.id) === Number(payload.establec_educ_id)) || prev?.establec_educ || null,
-        prevision_medica: previsiones.find((p) => Number(p.id) === Number(payload.prevision_medica_id)) || prev?.prevision_medica || null,
+        establec_educ:
+          establecimientos.find((e) => Number(e.id) === Number(payload.establec_educ_id)) || prev?.establec_educ || null,
+        prevision_medica:
+          previsiones.find((p) => Number(p.id) === Number(payload.prevision_medica_id)) || prev?.prevision_medica || null,
         estado: estados.find((e) => Number(e.id) === Number(payload.estado_id)) || prev?.estado || null,
         sucursal: sucursales.find((s) => Number(s.id) === Number(payload.sucursal_id)) || prev?.sucursal || null,
         comuna: comunas.find((c) => Number(c.id) === Number(payload.comuna_id)) || prev?.comuna || null,
@@ -610,7 +692,12 @@ export default function DetalleJugador() {
         clearToken();
         navigate("/login", { replace: true });
       } else {
-        setErr(error?.response?.data?.detail || error?.response?.data?.message || error?.message || "❌ Error al actualizar");
+        setErr(
+          error?.response?.data?.detail ||
+          error?.response?.data?.message ||
+          error?.message ||
+          "❌ Error al actualizar"
+        );
       }
     } finally {
       setIsLoading(false);
@@ -690,17 +777,20 @@ export default function DetalleJugador() {
 
         {/* Tarjeta Datos */}
         <div className={`relative p-4 rounded-lg shadow ${css.tarjeta} w-full`}>
-          <button
-            onClick={() => {
-              setEditMode(true);
-              setErr("");
-            }}
-            className="absolute top-2 right-3 text-xl hover:text-[#e82d89]"
-            title="Editar"
-            aria-label="Editar"
-          >
-            <FiEdit />
-          </button>
+          {rolActual === 1 || rolActual === 3 && (
+            <button
+              onClick={() => {
+                setEditMode(true);
+                setErr("");
+              }}
+              className="absolute top-2 right-3 text-xl hover:text-[#e82d89]"
+              title="Editar"
+              aria-label="Editar"
+            >
+              <FiEdit />
+            </button>
+          )}
+
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             {[
@@ -745,22 +835,22 @@ export default function DetalleJugador() {
                     {key === "posicion_id"
                       ? jugador.posicion?.nombre || labelNombre(posiciones, jugador.posicion_id)
                       : key === "categoria_id"
-                      ? jugador.categoria?.nombre || labelNombre(categorias, jugador.categoria_id)
-                      : key === "establec_educ_id"
-                      ? jugador.establec_educ?.nombre || labelNombre(establecimientos, jugador.establec_educ_id)
-                      : key === "prevision_medica_id"
-                      ? jugador.prevision_medica?.nombre || labelNombre(previsiones, jugador.prevision_medica_id)
-                      : key === "estado_id"
-                      ? jugador.estado?.nombre || labelNombre(estados, jugador.estado_id)
-                      : key === "sucursal_id"
-                      ? jugador.sucursal?.nombre || labelNombre(sucursales, jugador.sucursal_id)
-                      : key === "comuna_id"
-                      ? jugador.comuna?.nombre || labelNombre(comunas, jugador.comuna_id)
-                      : key === "fecha_nacimiento"
-                      ? formatearFechaLocal(jugador.fecha_nacimiento)
-                      : key === "estadistica_id"
-                      ? statsId ?? jugador.estadistica_id ?? "-"
-                      : jugador[key] ?? "-"}
+                        ? jugador.categoria?.nombre || labelNombre(categorias, jugador.categoria_id)
+                        : key === "establec_educ_id"
+                          ? jugador.establec_educ?.nombre || labelNombre(establecimientos, jugador.establec_educ_id)
+                          : key === "prevision_medica_id"
+                            ? jugador.prevision_medica?.nombre || labelNombre(previsiones, jugador.prevision_medica_id)
+                            : key === "estado_id"
+                              ? jugador.estado?.nombre || labelNombre(estados, jugador.estado_id)
+                              : key === "sucursal_id"
+                                ? jugador.sucursal?.nombre || labelNombre(sucursales, jugador.sucursal_id)
+                                : key === "comuna_id"
+                                  ? jugador.comuna?.nombre || labelNombre(comunas, jugador.comuna_id)
+                                  : key === "fecha_nacimiento"
+                                    ? formatearFechaLocal(jugador.fecha_nacimiento)
+                                    : key === "estadistica_id"
+                                      ? statsId ?? jugador.estadistica_id ?? "-"
+                                      : jugador[key] ?? "-"}
                   </span>
                 )}
               </div>
@@ -808,7 +898,9 @@ export default function DetalleJugador() {
             className={`w-full max-w-2xl ${css.tarjeta} border-2 border-[#e82d89] shadow-2xl rounded-xl p-6 space-y-6 overflow-y-auto max-h-[90vh]`}
           >
             <div className="flex justify-between items-center mb-6 border-b border-gray-300 pb-2">
-              <h3 className="text-xl font-bold text-[#e82d89] text-center w-full">Editar Información del Jugador</h3>
+              <h3 className="text-xl font-bold text-[#e82d89] text-center w-full">
+                Editar Información del Jugador
+              </h3>
               <button
                 type="button"
                 onClick={() => setEditMode(false)}
@@ -835,13 +927,25 @@ export default function DetalleJugador() {
               ].map(([label, key, type]) => (
                 <div key={key}>
                   <label className="block text-sm font-semibold mb-1">{label}</label>
-                  <input type={type} name={key} value={formData[key] ?? ""} onChange={handleChange} className={css.input} />
+                  <input
+                    type={type}
+                    name={key}
+                    value={formData[key] ?? ""}
+                    onChange={handleChange}
+                    className={css.input}
+                  />
                 </div>
               ))}
 
               <div>
                 <label className="block text-sm font-semibold mb-1">Fecha Nacimiento</label>
-                <input type="date" name="fecha_nacimiento" value={formData.fecha_nacimiento || ""} onChange={handleChange} className={css.input} />
+                <input
+                  type="date"
+                  name="fecha_nacimiento"
+                  value={formData.fecha_nacimiento || ""}
+                  onChange={handleChange}
+                  className={css.input}
+                />
               </div>
 
               {[
@@ -855,7 +959,12 @@ export default function DetalleJugador() {
               ].map(([label, key, arr]) => (
                 <div key={key}>
                   <label className="block text-sm font-semibold mb-1">{label}</label>
-                  <select name={key} value={formData[key] || ""} onChange={handleChange} className={css.input}>
+                  <select
+                    name={key}
+                    value={formData[key] || ""}
+                    onChange={handleChange}
+                    className={css.input}
+                  >
                     <option value="">Seleccione</option>
                     {arr.map((x) => (
                       <option key={x.id} value={x.id}>
@@ -868,29 +977,51 @@ export default function DetalleJugador() {
 
               <div>
                 <label className="block text-sm font-semibold mb-1">Dirección</label>
-                <input type="text" name="direccion" value={formData.direccion ?? ""} onChange={handleChange} className={css.input} placeholder="Ej: Av. Siempre Viva 742" />
+                <input
+                  type="text"
+                  name="direccion"
+                  value={formData.direccion ?? ""}
+                  onChange={handleChange}
+                  className={css.input}
+                  placeholder="Ej: Av. Siempre Viva 742"
+                />
               </div>
 
               <div>
                 <label className="block text-sm font-semibold mb-1">Estadística ID</label>
-                <input type="text" name="estadistica_id" value={formData.estadistica_id ?? ""} disabled className={`${css.input} opacity-70 cursor-not-allowed`} />
+                <input
+                  type="text"
+                  name="estadistica_id"
+                  value={formData.estadistica_id ?? ""}
+                  disabled
+                  className={`${css.input} opacity-70 cursor-not-allowed`}
+                />
                 <p className="text-xs text-gray-500 mt-1">Campo informativo (no editable)</p>
               </div>
 
               <div className="sm:col-span-2">
                 <label className="block text-sm font-semibold mb-1">Contrato firmado</label>
-                <div className={`${darkMode ? "bg-[#111827]" : "bg-gray-50"} border border-gray-300/30 rounded p-2 flex items-center gap-2`}>
+                <div
+                  className={`${darkMode ? "bg-[#111827]" : "bg-gray-50"
+                    } border border-gray-300/30 rounded p-2 flex items-center gap-2`}
+                >
                   <FileText size={18} color={darkMode ? "#ffffff" : "#D32F2F"} />
                   <span className="text-sm opacity-80">Disponible en la tarjeta (Ver contrato)</span>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">Se abre en una nueva pestaña como PDF (estilo histórico).</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Se abre en una nueva pestaña como PDF (estilo histórico).
+                </p>
               </div>
             </div>
 
             {err && <p className="text-red-500 text-sm">{err}</p>}
 
             <div className="flex justify-end gap-3 pt-2">
-              <button type="button" onClick={() => setEditMode(false)} className="py-1 px-4 border border-gray-500 rounded hover:bg-gray-200 dark:hover:bg-[#111827]">
+              <button
+                type="button"
+                onClick={() => setEditMode(false)}
+                className="py-1 px-4 border border-gray-500 rounded hover:bg-gray-200 dark:hover:bg-[#111827]"
+              >
                 Cancelar
               </button>
               <button type="submit" className="py-1 px-4 bg-blue-600 text-white rounded hover:bg-blue-700">
@@ -901,7 +1032,11 @@ export default function DetalleJugador() {
         </div>
       )}
 
-      {msg && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-green-600 text-white px-4 py-2 rounded shadow-lg z-40">{msg}</div>}
+      {msg && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-green-600 text-white px-4 py-2 rounded shadow-lg z-40">
+          {msg}
+        </div>
+      )}
     </div>
   );
 }
