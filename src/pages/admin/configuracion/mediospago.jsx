@@ -7,8 +7,6 @@ import { useTheme } from "../../../context/ThemeContext";
 import Modal from "../../../components/modal";
 import { useMobileAutoScrollTop } from "../../../hooks/useMobileScrollTop";
 
-const ACCENT = "#e82d89";
-
 /**
  * =========================================================
  *  ✅ Gate GLOBAL (anti “backend loco” incluso con StrictMode)
@@ -32,10 +30,25 @@ function once(key, fn) {
   return p;
 }
 
-const normalizeBase = (u) => (String(u || "").endsWith("/") ? String(u).slice(0, -1) : String(u));
+const normalizeBase = (u) =>
+  String(u || "").endsWith("/") ? String(u).slice(0, -1) : String(u);
+
 const variants = (base) => {
   const b = String(base || "");
   return b.endsWith("/") ? [b, b.slice(0, -1)] : [b, `${b}/`];
+};
+
+/* =======================
+   🎨 Conjunto X (SuperDashboard vibe)
+======================= */
+const PALETTE_X = {
+  copper: "#aa5013",
+  brown: "#6d5829",
+  gold: "#b79f69",
+  cream: "#e8dac4",
+  sand: "#ffdda1",
+  caramel: "#dda272",
+  terracotta: "#e2773b",
 };
 
 export default function MediosPago() {
@@ -65,15 +78,14 @@ export default function MediosPago() {
       : "/admin";
   }, [location.pathname]);
 
-  // ✅ Debe quedar así: /super-dashboard/admin/dashboard/configuracion
   const configPath = useMemo(() => `${dashboardBase}/configuracion`, [dashboardBase]);
 
   // Guards locales anti-loop UI (breadcrumb) — NO red
   const breadcrumbBootRef = useRef(false);
 
-  // ───────────────────────────────
-  // Breadcrumb dorado (sin loop + sin hardcode /admin)
-  // ───────────────────────────────
+  /* ───────────────────────────────
+     Breadcrumb dorado (sin loop + sin hardcode /admin)
+  ─────────────────────────────── */
   useEffect(() => {
     if (breadcrumbBootRef.current) return;
 
@@ -101,10 +113,10 @@ export default function MediosPago() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.search, configPath]);
 
-  // ───────────────────────────────
-  // Auth primero -> recién ahí se permite red
-  // (si quieres SOLO rol 1, cambia [1,3] -> [1])
-  // ───────────────────────────────
+  /* ───────────────────────────────
+     Auth primero -> recién ahí se permite red
+     (si quieres SOLO rol 1, cambia [1,3] -> [1])
+  ─────────────────────────────── */
   useEffect(() => {
     try {
       const token = getToken();
@@ -129,9 +141,9 @@ export default function MediosPago() {
     }
   }, [navigate, dashboardBase]);
 
-  // ───────────────────────────────
-  // Utils
-  // ───────────────────────────────
+  /* ───────────────────────────────
+     Utils
+  ─────────────────────────────── */
   const sanitizar = (texto) =>
     String(texto || "")
       .replace(/[<>;"']/g, "")
@@ -213,14 +225,14 @@ export default function MediosPago() {
   /**
    * =========================================================
    *  ✅ Resolver endpoint SOLO UNA VEZ (y cachearlo)
-   *  - Máximo 2 candidatos reales (NO 8, NO spam)
+   *  - Máximo 2 candidatos reales (NO spam)
    *  - Cada candidato prueba con y sin slash final (máx 2)
    * =========================================================
    */
   const resolveBaseEndpoint = useCallback(async (signal) => {
     if (__resolvedBase) return __resolvedBase;
 
-    const candidates = ["/medio-pago", "/medios-pago"]; // ← lo normal en tu backend
+    const candidates = ["/medio-pago", "/medios-pago"];
     let lastErr = null;
 
     for (const base of candidates) {
@@ -229,15 +241,15 @@ export default function MediosPago() {
           const res = await api.get(u, { signal });
           if (signal?.aborted) return "";
           __resolvedBase = normalizeBase(u);
-          // Seteamos lista inmediatamente (primer fetch ya trae data)
+
+          // Primer GET ya trae data
           setMedios(toArray(res));
           return __resolvedBase;
         } catch (e) {
           lastErr = e;
           const st = getErrStatus(e);
-          if (st === 401 || st === 403) throw e;     // auth: no seguir probando
-          if (isNetworkDown(e)) throw e;             // red: no seguir probando
-          // 404/500: probar siguiente variante/candidato
+          if (st === 401 || st === 403) throw e;
+          if (isNetworkDown(e)) throw e;
         }
       }
     }
@@ -259,12 +271,10 @@ export default function MediosPago() {
       return once("mediosPago:bootstrap", async () => {
         setError("");
 
-        // Resuelve endpoint + ya deja medios cargados si el primer GET funcionó
         const base = await resolveBaseEndpoint(signal);
         if (!base || signal?.aborted) return;
 
-        // Si resolveBaseEndpoint ya seteo medios con el GET exitoso,
-        // igual revalidamos solo 1 vez (y no spam) por consistencia:
+        // Revalidación controlada (1 vez)
         const res = await api.get(base, { signal });
         if (signal?.aborted) return;
         setMedios(toArray(res));
@@ -337,18 +347,17 @@ export default function MediosPago() {
     throw lastErr;
   }, []);
 
-  // ───────────────────────────────
-  // CRUD
-  // ───────────────────────────────
+  // Re-fetch controlado después de mutaciones
   const refreshAfterMutation = useCallback(async () => {
-    // Re-fetch “controlado”: no crea tormenta
-    // Forzamos una llave distinta para permitir un refresh real
     return once("mediosPago:refresh", async () => {
       const res = await api.get(baseEndpoint);
       setMedios(toArray(res));
     });
   }, [baseEndpoint]);
 
+  /* ───────────────────────────────
+     CRUD
+  ─────────────────────────────── */
   const crearMedio = async () => {
     const nombre = sanitizar(nuevoMedio);
     if (nombre.length < 3) return setError("⚠️ El nombre debe tener al menos 3 caracteres.");
@@ -411,170 +420,290 @@ export default function MediosPago() {
     }
   };
 
-  // ───────────────────────────────
-  // UI (no tocamos paleta)
-  // ───────────────────────────────
-  const fondo = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";
-  const tarjeta = darkMode ? "bg-[#1f2937] border-gray-700" : "bg-white border-gray-200";
+  /* =======================
+     UI estilo SuperDashboard
+  ======================= */
+  const ui = useMemo(() => {
+    const shell = darkMode
+      ? "bg-[#111827] text-white"
+      : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
 
-  const inputBase =
-    (darkMode
-      ? "bg-[#111827] text-white border border-white/10 placeholder-white/40"
-      : "bg-white text-black border border-black/10 placeholder-black/40") +
-    " w-full p-2 rounded-xl";
+    const titleMain = darkMode ? "text-white" : "text-ra-marron";
+    const subText = darkMode ? "text-white/70" : "text-ra-marron/70";
 
-  const selectBase = inputBase + " appearance-none";
+    const card =
+      "rounded-2xl border shadow-lg transition " +
+      (darkMode ? "bg-white/10 border-white/15" : "bg-white/60 border-ra-marron/15");
 
-  const btnBase =
-    "mt-4 w-full py-2 rounded-xl font-bold transition disabled:opacity-60 disabled:cursor-not-allowed text-white";
+    const sectionTitle = darkMode ? "text-white/90" : "text-ra-marron";
 
-  const btnPrimaryStyle = busy ? { backgroundColor: "#9ca3af" } : { backgroundColor: ACCENT };
-  const btnWarnStyle = busy || !editarId ? { backgroundColor: "#9ca3af" } : { backgroundColor: "#f59e0b" };
-  const btnDangerStyle =
-    !medioSeleccionado || busy ? { backgroundColor: "#9ca3af" } : { backgroundColor: "#dc2626" };
+    const input =
+      "w-full p-2 rounded-xl outline-none border text-sm " +
+      "focus:ring-2 focus:ring-[rgba(170,80,19,0.25)] focus:border-[rgba(170,80,19,0.35)] " +
+      (darkMode
+        ? "bg-black/25 text-white border-white/10 placeholder-white/45"
+        : "bg-white/70 text-ra-marron border-ra-marron/15 placeholder-ra-marron/45");
+
+    const select = input + " appearance-none";
+
+    const btn =
+      "w-full py-2 rounded-xl font-extrabold transition shadow-sm " +
+      "disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.99]";
+
+    const btnPrimaryStyle = busy
+      ? { backgroundColor: "rgba(255,255,255,0.18)", color: "rgba(255,255,255,0.85)" }
+      : {
+          background: `linear-gradient(135deg, ${PALETTE_X.copper}, ${PALETTE_X.terracotta})`,
+          color: "#fff",
+        };
+
+    const btnWarnStyle =
+      busy || !editarId
+        ? { backgroundColor: "rgba(255,255,255,0.18)", color: "rgba(255,255,255,0.85)" }
+        : { backgroundColor: "#f59e0b", color: "#1a1208" };
+
+    const btnDangerStyle =
+      !medioSeleccionado || busy
+        ? { backgroundColor: "rgba(255,255,255,0.18)", color: "rgba(255,255,255,0.85)" }
+        : { backgroundColor: "#dc2626", color: "#fff" };
+
+    const danger =
+      "rounded-2xl border px-5 py-4 font-semibold " +
+      (darkMode
+        ? "border-red-200/20 bg-red-500/10 text-red-100"
+        : "border-red-200 bg-red-50 text-red-700");
+
+    const ok =
+      "rounded-2xl border px-5 py-4 font-semibold " +
+      (darkMode
+        ? "border-emerald-200/20 bg-emerald-500/10 text-emerald-100"
+        : "border-emerald-200 bg-emerald-50 text-emerald-900");
+
+    const listItem =
+      "flex items-center justify-between gap-3 py-2 border-b last:border-b-0 " +
+      (darkMode ? "border-white/10" : "border-ra-marron/12");
+
+    const pill =
+      "inline-flex items-center px-2 py-1 rounded-full text-xs font-bold border " +
+      (darkMode
+        ? "bg-black/20 border-white/15 text-white/75"
+        : "bg-white/60 border-ra-marron/15 text-ra-marron/70");
+
+    return {
+      shell,
+      titleMain,
+      subText,
+      card,
+      sectionTitle,
+      input,
+      select,
+      btn,
+      btnPrimaryStyle,
+      btnWarnStyle,
+      btnDangerStyle,
+      danger,
+      ok,
+      listItem,
+      pill,
+    };
+  }, [darkMode, busy, editarId, medioSeleccionado]);
 
   return (
-    <div className={`${fondo} min-h-screen px-4 pt-4 pb-16 font-realacademy`}>
-      <h2 className="text-2xl font-bold mb-6 text-center">Gestión de Medios de Pago</h2>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-6xl mx-auto">
-        {/* Listado */}
-        <div className={`${tarjeta} border shadow-md rounded-2xl p-6`}>
-          <h3 className="text-lg font-extrabold mb-4">📋 Listado</h3>
-          {medios.length === 0 ? (
-            <p className="opacity-60">Sin medios registrados.</p>
-          ) : (
-            <ul className="list-disc pl-5 space-y-1">
-              {medios.map((m) => (
-                <li key={m.id} className="font-semibold opacity-90">
-                  {m.nombre ?? m.descripcion ?? `#${m.id}`}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* Crear */}
-        <div className={`${tarjeta} border shadow-md rounded-2xl p-6`}>
-          <h3 className="text-lg font-extrabold mb-4">➕ Crear</h3>
-          <input
-            type="text"
-            value={nuevoMedio}
-            onChange={(e) => {
-              setNuevoMedio(e.target.value);
-              setError("");
-              setMensaje("");
-            }}
-            placeholder="Nombre medio"
-            className={inputBase}
-            disabled={busy}
-          />
-          <button
-            onClick={crearMedio}
-            disabled={busy}
-            className={btnBase}
-            style={btnPrimaryStyle}
-            title={busy ? "Procesando..." : "Crear medio"}
-          >
-            {busy ? "Procesando..." : "Guardar"}
-          </button>
-        </div>
-
-        {/* Editar */}
-        <div className={`${tarjeta} border shadow-md rounded-2xl p-6`}>
-          <h3 className="text-lg font-extrabold mb-4">✏️ Editar</h3>
-
-          <select
-            value={editarId || ""}
-            onChange={(e) => {
-              const id = Number(e.target.value);
-              setEditarId(id || null);
-              const sel = medios.find((x) => Number(x.id) === id);
-              setEditarNombre(sel?.nombre ?? sel?.descripcion ?? "");
-              setError("");
-              setMensaje("");
-            }}
-            className={`${selectBase} mb-2`}
-            disabled={busy}
-          >
-            <option value="">Selecciona medio</option>
-            {medios.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.nombre ?? m.descripcion ?? `#${m.id}`}
-              </option>
-            ))}
-          </select>
-
-          <input
-            type="text"
-            value={editarNombre}
-            onChange={(e) => {
-              setEditarNombre(e.target.value);
-              setError("");
-              setMensaje("");
-            }}
-            placeholder="Nuevo nombre"
-            className={inputBase}
-            disabled={busy || !editarId}
-          />
-
-          <button
-            onClick={actualizarMedio}
-            disabled={busy || !editarId}
-            className={btnBase}
-            style={btnWarnStyle}
-            title={!editarId ? "Selecciona un medio" : busy ? "Procesando..." : "Actualizar"}
-          >
-            {busy ? "Procesando..." : "Actualizar"}
-          </button>
-        </div>
-
-        {/* Eliminar */}
-        <div className={`${tarjeta} border shadow-md rounded-2xl p-6`}>
-          <h3 className="text-lg font-extrabold mb-4">🗑️ Eliminar</h3>
-
-          <select
-            value={medioSeleccionado?.id || ""}
-            onChange={(e) => {
-              const id = Number(e.target.value);
-              const sel = medios.find((x) => Number(x.id) === id);
-              setMedioSeleccionado(sel || null);
-              setError("");
-              setMensaje("");
-            }}
-            className={selectBase}
-            disabled={busy}
-          >
-            <option value="">Selecciona medio</option>
-            {medios.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.nombre ?? m.descripcion ?? `#${m.id}`}
-              </option>
-            ))}
-          </select>
-
-          <button
-            onClick={() => {
-              if (busy || !medioSeleccionado) return;
-              setMostrarModal(true);
-            }}
-            disabled={!medioSeleccionado || busy}
-            className={btnBase}
-            style={btnDangerStyle}
-            title={!medioSeleccionado ? "Selecciona un medio" : busy ? "Procesando..." : "Eliminar"}
-          >
-            {busy ? "Procesando..." : "Eliminar"}
-          </button>
-        </div>
-      </div>
-
-      {(mensaje || error) && (
-        <p className={`text-center mt-6 font-bold ${mensaje ? "text-green-500" : "text-red-500"}`}>
-          {mensaje || error}
+    <div className={`${ui.shell} min-h-screen font-sans`}>
+      {/* Header tipo SuperDashboard */}
+      <header className="px-6 pt-6 text-center">
+        <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>
+          Medios de Pago
+        </h1>
+        <p className={`text-sm mt-2 ${ui.subText}`}>
+          Administra el catálogo de medios de pago (crear, editar, eliminar).
         </p>
-      )}
+      </header>
 
-      <Modal visible={mostrarModal} onConfirm={confirmarEliminacion} onCancel={() => setMostrarModal(false)} />
+      <main className="px-6 pb-20">
+        <div className="max-w-6xl mx-auto mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Listado (2 columnas en desktop) */}
+          <section className={`${ui.card} p-6 lg:col-span-2`}>
+            <div className="flex items-baseline justify-between gap-3 mb-4">
+              <h2 className={`text-lg font-extrabold ${ui.sectionTitle}`}>📋 Listado</h2>
+              <span className={ui.pill}>
+                {medios.length} medio{medios.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+
+            {medios.length === 0 ? (
+              <p className={ui.subText}>Sin medios registrados.</p>
+            ) : (
+              <div className="max-h-[520px] overflow-auto pr-1">
+                {medios.map((m) => {
+                  const nombre = m?.nombre ?? m?.descripcion ?? `#${m?.id}`;
+                  return (
+                    <div key={m.id} className={ui.listItem}>
+                      <div className="min-w-0">
+                        <p className="font-extrabold truncate">{nombre}</p>
+                        <p className={ui.subText}>ID: {m.id}</p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          className="px-3 py-1 rounded-lg text-xs font-extrabold border transition hover:brightness-110"
+                          style={{
+                            borderColor: darkMode
+                              ? "rgba(255,255,255,0.18)"
+                              : "rgba(109,88,41,0.18)",
+                            background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.65)",
+                          }}
+                          onClick={() => {
+                            setError("");
+                            setMensaje("");
+                            setEditarId(Number(m.id));
+                            setEditarNombre(String(m.nombre ?? m.descripcion ?? ""));
+                            setMedioSeleccionado(m); // UX: listo para eliminar también
+                          }}
+                          disabled={busy}
+                          title="Seleccionar"
+                        >
+                          Seleccionar
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* Acciones */}
+          <aside className="lg:col-span-1 space-y-6">
+            {/* Crear */}
+            <section className={`${ui.card} p-6`}>
+              <h2 className={`text-lg font-extrabold mb-3 ${ui.sectionTitle}`}>➕ Crear</h2>
+              <input
+                value={nuevoMedio}
+                onChange={(e) => {
+                  setNuevoMedio(e.target.value);
+                  setError("");
+                  setMensaje("");
+                }}
+                placeholder="Nombre (mín. 3)"
+                className={ui.input}
+                disabled={busy}
+              />
+              <button
+                type="button"
+                onClick={crearMedio}
+                disabled={busy}
+                className={`${ui.btn} mt-3`}
+                style={ui.btnPrimaryStyle}
+                title={busy ? "Procesando..." : "Crear medio"}
+              >
+                {busy ? "Procesando..." : "Guardar"}
+              </button>
+            </section>
+
+            {/* Editar */}
+            <section className={`${ui.card} p-6`}>
+              <h2 className={`text-lg font-extrabold mb-3 ${ui.sectionTitle}`}>✏️ Editar</h2>
+
+              <select
+                value={editarId || ""}
+                onChange={(e) => {
+                  const id = Number(e.target.value);
+                  setEditarId(id || null);
+                  const sel = medios.find((x) => Number(x.id) === id);
+                  setEditarNombre(sel?.nombre ?? sel?.descripcion ?? "");
+                  setError("");
+                  setMensaje("");
+                }}
+                className={ui.select}
+                disabled={busy}
+              >
+                <option value="">Selecciona medio</option>
+                {medios.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.nombre ?? m.descripcion ?? `#${m.id}`}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                value={editarNombre}
+                onChange={(e) => {
+                  setEditarNombre(e.target.value);
+                  setError("");
+                  setMensaje("");
+                }}
+                placeholder="Nuevo nombre (mín. 3)"
+                className={`${ui.input} mt-3`}
+                disabled={busy || !editarId}
+              />
+
+              <button
+                type="button"
+                onClick={actualizarMedio}
+                disabled={busy || !editarId}
+                className={`${ui.btn} mt-3`}
+                style={ui.btnWarnStyle}
+                title={!editarId ? "Selecciona un medio primero" : busy ? "Procesando..." : "Actualizar"}
+              >
+                {busy ? "Procesando..." : "Actualizar"}
+              </button>
+            </section>
+
+            {/* Eliminar */}
+            <section className={`${ui.card} p-6`}>
+              <h2 className={`text-lg font-extrabold mb-3 ${ui.sectionTitle}`}>🗑️ Eliminar</h2>
+
+              <select
+                value={medioSeleccionado?.id || ""}
+                onChange={(e) => {
+                  const id = Number(e.target.value);
+                  const sel = medios.find((x) => Number(x.id) === id);
+                  setMedioSeleccionado(sel || null);
+                  setError("");
+                  setMensaje("");
+                }}
+                className={ui.select}
+                disabled={busy}
+              >
+                <option value="">Selecciona medio</option>
+                {medios.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.nombre ?? m.descripcion ?? `#${m.id}`}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (busy || !medioSeleccionado) return;
+                  setMostrarModal(true);
+                }}
+                disabled={!medioSeleccionado || busy}
+                className={`${ui.btn} mt-3`}
+                style={ui.btnDangerStyle}
+                title={!medioSeleccionado ? "Selecciona un medio" : busy ? "Procesando..." : "Eliminar"}
+              >
+                {busy ? "Procesando..." : "Eliminar"}
+              </button>
+            </section>
+          </aside>
+        </div>
+
+        {/* Mensajes */}
+        <div className="max-w-6xl mx-auto mt-6 space-y-3">
+          {!!mensaje && <div className={ui.ok}>{mensaje}</div>}
+          {!!error && <div className={ui.danger}>{error}</div>}
+        </div>
+
+        <Modal
+          visible={mostrarModal}
+          onConfirm={confirmarEliminacion}
+          onCancel={() => setMostrarModal(false)}
+        />
+      </main>
     </div>
   );
 }

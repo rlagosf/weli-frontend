@@ -1,12 +1,10 @@
 // src/pages/admin/superDashboard.jsx
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import api, { getToken, clearToken } from "../../services/api";
+import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
 import { useTheme } from "../../context/ThemeContext";
 import { LogOut, Plus, Building2, Sun, Moon } from "lucide-react";
 import { jwtDecode } from "jwt-decode";
-
-const STORAGE_KEY = "weli_selected_academia";
 
 // rutas estables: api.js ya asegura baseURL termina en /api
 const academiasPath = "/academias";
@@ -14,7 +12,7 @@ const deportesPath = "/deportes";
 
 function pickAcademias(payload) {
   if (!payload) return [];
-  if (Array.isArray(payload?.items)) return payload.items;       // ✅ estándar catálogos: { ok, count, items }
+  if (Array.isArray(payload?.items)) return payload.items; // ✅ estándar catálogos: { ok, count, items }
   if (Array.isArray(payload?.data)) return payload.data;
   if (Array.isArray(payload?.academias)) return payload.academias;
   if (Array.isArray(payload?.rows)) return payload.rows;
@@ -24,13 +22,30 @@ function pickAcademias(payload) {
 
 function pickDeportes(payload) {
   if (!payload) return [];
-  if (Array.isArray(payload?.items)) return payload.items;       // ✅ estándar
+  if (Array.isArray(payload?.items)) return payload.items; // ✅ estándar
   if (Array.isArray(payload?.data)) return payload.data;
   if (Array.isArray(payload?.deportes)) return payload.deportes;
   if (Array.isArray(payload?.rows)) return payload.rows;
   if (Array.isArray(payload)) return payload;
   return [];
 }
+
+/* ───────────── Auth helpers (backend rules) ───────────── */
+const isExpired = (decoded) => {
+  const now = Math.floor(Date.now() / 1000);
+  return !decoded?.exp || decoded.exp <= now;
+};
+
+const extractRol = (decoded) => {
+  const raw = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const buildAuthHeaders = () => {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 /* ───────────── Modal ───────────── */
 const Modal = ({ open, onClose, title, subtitle, darkMode, children }) => {
@@ -58,7 +73,9 @@ const Modal = ({ open, onClose, title, subtitle, darkMode, children }) => {
             onClick={onClose}
             className={[
               "rounded-xl px-3 py-2 border transition",
-              darkMode ? "bg-white/10 hover:bg-white/15 border-white/10 text-white" : "bg-white hover:bg-ra-cream border-ra-marron/15 text-ra-marron",
+              darkMode
+                ? "bg-white/10 hover:bg-white/15 border-white/10 text-white"
+                : "bg-white hover:bg-ra-cream border-ra-marron/15 text-ra-marron",
             ].join(" ")}
             aria-label="Cerrar"
           >
@@ -89,18 +106,19 @@ export default function SuperDashboard() {
 
   const [form, setForm] = useState({ nombre: "", deporte_id: "", estado_id: "1" });
 
-  /* ───────── Guard: solo rol 3 ───────── */
+  /* ───────── Guard: solo rol 3 + token válido ───────── */
   useEffect(() => {
     try {
       const token = getToken();
       if (!token) throw new Error("no-token");
 
       const decoded = jwtDecode(token);
-      const rol = Number(decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? 0);
+      if (isExpired(decoded)) throw new Error("expired");
 
+      const rol = extractRol(decoded);
       if (rol !== 3) {
-        // Si no es superadmin, fuera
         navigate("/admin", { replace: true });
+        return;
       }
     } catch {
       clearToken();
@@ -115,13 +133,12 @@ export default function SuperDashboard() {
     try {
       const res = await api.get(academiasPath, {
         signal,
-        headers: { "Cache-Control": "no-cache" },
+        headers: { ...buildAuthHeaders(), "Cache-Control": "no-cache" },
       });
       setAcademias(pickAcademias(res?.data ?? {}));
     } catch (err) {
       if (signal?.aborted) return;
 
-      // api.js normaliza error a {status,message,data}
       const status = err?.status ?? err?.response?.status ?? 0;
       const message =
         err?.data?.message ||
@@ -133,6 +150,11 @@ export default function SuperDashboard() {
       else if (status === 403) setMsg("Acceso denegado: requiere rol superadmin.");
       else if (status === 404) setMsg("Endpoint no encontrado.");
       else setMsg(String(message));
+
+      // si backend ya cortó sesión → limpiar
+      if (status === 401 || status === 403) {
+        clearToken();
+      }
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
@@ -144,7 +166,7 @@ export default function SuperDashboard() {
     try {
       const res = await api.get(deportesPath, {
         signal,
-        headers: { "Cache-Control": "no-cache" },
+        headers: { ...buildAuthHeaders(), "Cache-Control": "no-cache" },
       });
 
       const raw = pickDeportes(res?.data ?? {});
@@ -197,7 +219,11 @@ export default function SuperDashboard() {
     };
 
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+      // ✅ key unificada (misma que usan los módulos scoping)
+      localStorage.setItem(ACADEMIA_STORAGE_KEY, JSON.stringify(snapshot));
+
+      // ✅ evento para módulos que escuchan selector super
+      window.dispatchEvent(new Event("weli:selectedAcademiaChanged"));
     } catch {}
 
     // salto real
@@ -205,18 +231,16 @@ export default function SuperDashboard() {
   };
 
   const handleCerrarSesion = useCallback(async () => {
-    const token = getToken();
+    const headers = buildAuthHeaders();
 
     try {
-      await api.post("/auth/logout", null, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      await api.post("/auth/logout", null, { headers });
     } catch {
       // idempotente
     } finally {
       clearToken();
       try {
-        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(ACADEMIA_STORAGE_KEY);
       } catch {}
       window.location.replace("/");
     }
@@ -242,7 +266,12 @@ export default function SuperDashboard() {
 
     setCreating(true);
     try {
-      await api.post(academiasPath, { nombre, deporte_id, estado_id });
+      await api.post(
+        academiasPath,
+        { nombre, deporte_id, estado_id },
+        { headers: buildAuthHeaders() }
+      );
+
       setOpenCreate(false);
 
       const ctrl = new AbortController();
@@ -259,6 +288,11 @@ export default function SuperDashboard() {
       else if (status === 401) setMsg("No autorizado. Inicia sesión nuevamente.");
       else if (status === 403) setMsg("Acceso denegado: requiere rol superadmin.");
       else setMsg(String(message));
+
+      if (status === 401 || status === 403) {
+        clearToken();
+        navigate("/login", { replace: true });
+      }
     } finally {
       setCreating(false);
     }

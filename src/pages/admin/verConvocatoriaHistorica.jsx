@@ -11,6 +11,17 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { formatRutWithDV } from "../../services/rut";
 
+/* ================= Conjunto X (UI) ================= */
+const PALETTE = {
+  copper: "#aa5013",
+  brown: "#6d5829",
+  gold: "#b79f69",
+  cream: "#e8dac4",
+  sand: "#ffdda1",
+  caramel: "#dda272",
+  terracotta: "#e2773b",
+};
+
 /* ================= Helpers ================= */
 
 const toArray = (resp) => {
@@ -32,7 +43,7 @@ const getStatus = (e) => e?.status ?? e?.response?.status;
 const getMessage = (e, fallback = "Error") =>
   e?.message || e?.data?.message || e?.response?.data?.message || fallback;
 
-const FUCHSIA = [232, 45, 137]; // #e82d89
+const FUCHSIA = [232, 45, 137]; // PDF
 
 const isNonEmptyStr = (s) => typeof s === "string" && s.trim().length > 0;
 const coalesceStr = (...vals) => vals.find(isNonEmptyStr) || "";
@@ -45,7 +56,6 @@ const calcEdad = (fnac) => {
   return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
 };
 
-// Normaliza rut para usarlo como clave en Map (solo dígitos; rut sin DV)
 const normalizeRutKey = (val) => {
   if (val == null) return "";
   const s = String(val).trim();
@@ -72,12 +82,11 @@ const isExpired = (decoded) => {
 };
 
 const extractRol = (decoded) => {
-  const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
+  const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
   const parsed = Number(rawRol);
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-/** Soporta "1" o JSON {"id":1} */
 const getAcademiaIdFromStorage = () => {
   try {
     const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
@@ -125,7 +134,6 @@ export default function VerConvocacionHistorica() {
   const location = useLocation();
 
   const [rolActual, setRolActual] = useState(0);
-
   const [academiaId, setAcademiaId] = useState(() => getAcademiaIdFromStorage());
 
   const [historicos, setHistoricos] = useState([]);
@@ -136,29 +144,34 @@ export default function VerConvocacionHistorica() {
   const [modal, setModal] = useState({ open: false, evento: null, jugadores: [] });
   const generatingRef = useRef(false);
 
-  // mapa rutNormalizado -> { nombre, fnac, edad }
-  // Lo usamos como "set" de jugadores activos (estado_id=1).
   const jugadoresMapRef = useRef(new Map());
 
   useMobileAutoScrollTop();
 
-  /* ========= Breadcrumb ========= */
-  useEffect(() => {
-    if (!Array.isArray(location.state?.breadcrumb)) {
-      navigate(location.pathname + location.search, {
-        replace: true,
-        state: {
-          ...(location.state || {}),
-          breadcrumb: [{ to: location.pathname, label: "Histórico de Convocatorias" }],
-        },
-      });
-    }
-  }, [location, navigate]);
+  /* ========= Breadcrumb (ANTI-LOOP) ========= */
+  const breadcrumbBootRef = useRef(false);
 
-  /* ========= Sync academiaId (superdashboard) =========
-     - storage event no dispara en mismo tab cuando el mismo código escribe localStorage,
-       así que hacemos poll liviano para garantizar consistencia.
-  */
+  useEffect(() => {
+    if (breadcrumbBootRef.current) return;
+
+    const currentPath = location.pathname + location.search;
+    const bc = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : [];
+    const last = bc[bc.length - 1];
+    const label = "Histórico de Convocatorias";
+
+    if (!last || last.label !== label) {
+      breadcrumbBootRef.current = true;
+      navigate(currentPath, {
+        replace: true,
+        state: { ...(location.state || {}), breadcrumb: [{ to: currentPath, label }] },
+      });
+    } else {
+      breadcrumbBootRef.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, location.search]);
+
+  /* ========= Sync academiaId (superdashboard) ========= */
   useEffect(() => {
     let alive = true;
 
@@ -168,20 +181,22 @@ export default function VerConvocacionHistorica() {
       setAcademiaId((prev) => (prev !== a ? a : prev));
     };
 
+    const onChanged = () => tick();
+
     tick();
     const iv = setInterval(tick, 1200);
 
-    const onStorage = () => tick();
-    window.addEventListener("storage", onStorage);
+    window.addEventListener("storage", onChanged);
+    window.addEventListener("weli:selectedAcademiaChanged", onChanged);
 
     return () => {
       alive = false;
       clearInterval(iv);
-      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("storage", onChanged);
+      window.removeEventListener("weli:selectedAcademiaChanged", onChanged);
     };
   }, []);
 
-  // Limpieza inmediata al cambiar academia (evita “ver datos viejos”)
   useEffect(() => {
     if (rolActual === 3) {
       setHistoricos([]);
@@ -245,15 +260,13 @@ export default function VerConvocacionHistorica() {
         const ev = toArray(evRes);
         let hist = toArray(hRes);
 
-        // ✅ Filtro defensivo SOLO si backend trae academia_id (no inventamos)
         if (rolActual === 3 && academiaId != null) {
           const hasAcademiaKey = hist.some(
             (x) => x?.academia_id != null || x?.academiaId != null || x?.academia != null
           );
           if (hasAcademiaKey) {
             hist = hist.filter((x) => {
-              const a =
-                Number(x?.academia_id ?? x?.academiaId ?? x?.academia ?? 0) || 0;
+              const a = Number(x?.academia_id ?? x?.academiaId ?? x?.academia ?? 0) || 0;
               return a === Number(academiaId);
             });
           }
@@ -290,15 +303,12 @@ export default function VerConvocacionHistorica() {
     (async () => {
       try {
         const resp = await getWithFallback("/jugadores", { signal: abort.signal, headers });
-
         if (abort.signal.aborted) return;
 
         const js = toArray(resp);
         const map = new Map();
 
         for (const j of js) {
-          const estadoId = Number(j?.estado_id ?? j?.estadoId ?? j?.estado ?? 0);
-
           const rutRaw = j?.rut_jugador ?? j?.rut ?? j?.id;
           const rutKey = normalizeRutKey(rutRaw);
           if (!rutKey) continue;
@@ -306,8 +316,7 @@ export default function VerConvocacionHistorica() {
           const nombre = nombreDesdeJugador(j);
           if (!isNonEmptyStr(nombre)) continue;
 
-          const fnac =
-            j?.fecha_nacimiento ?? j?.fechaNacimiento ?? j?.fnac ?? j?.fecha_nac ?? null;
+          const fnac = j?.fecha_nacimiento ?? j?.fechaNacimiento ?? j?.fnac ?? j?.fecha_nac ?? null;
 
           const edadRaw = j?.edad ?? j?.edad_actual ?? null;
           const edad =
@@ -319,12 +328,9 @@ export default function VerConvocacionHistorica() {
               ? calcEdad(fnac)
               : "";
 
-          // ✅ activos: estado_id=1 si viene informado
-          if (Number.isFinite(estadoId) && estadoId !== 0 && estadoId !== 1) continue;
-          if (Number.isFinite(estadoId) && estadoId !== 1 && estadoId !== 0) continue;
-          if (Number.isFinite(estadoId) && estadoId !== 0 && estadoId !== 1) continue;
-          if (Number.isFinite(estadoId) && estadoId !== 1 && estadoId !== 0) continue;
-          if (Number.isFinite(estadoId) && estadoId !== 1) continue;
+          const estadoIdRaw = j?.estado_id ?? j?.estadoId ?? j?.estado ?? null;
+          const estadoId = estadoIdRaw == null ? null : Number(estadoIdRaw);
+          if (Number.isFinite(estadoId) && estadoId > 0 && estadoId !== 1) continue;
 
           map.set(rutKey, { nombre, fnac, edad });
         }
@@ -345,14 +351,29 @@ export default function VerConvocacionHistorica() {
     return () => abort.abort();
   }, [navigate, rolActual, academiaId, canLoad]);
 
-  /* ========= Helpers UI/datos ========= */
+  /* ========= Helpers UI ========= */
+  const shell = darkMode
+    ? "bg-[#111827] text-white"
+    : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
 
-  const fondoClase = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";
-  const tablaCabecera = darkMode ? "bg-[#1f2937] text-white" : "bg-gray-100 text-[#1d0b0b]";
-  const filaHover = darkMode ? "hover:bg-[#1f2937]" : "hover:bg-gray-50";
+  const tablaCabecera = darkMode ? "bg-[#1f2937] text-white" : "bg-white/60 text-ra-marron";
+  const filaHover = darkMode ? "hover:bg-white/5" : "hover:bg-white/40";
+
   const tarjetaClase = darkMode
-    ? "bg-[#1f2937] shadow-lg rounded-lg p-4 border border-gray-700"
-    : "bg-white shadow-md rounded-lg p-4 border border-gray-200";
+    ? "bg-white/10 shadow-lg rounded-2xl p-4 border border-white/15"
+    : "bg-white/60 shadow-lg rounded-2xl p-4 border border-ra-marron/15";
+
+  // ✅ Botón estilo SuperDashboard / Conjunto X
+  const btnVerClass =
+    "inline-flex items-center justify-center px-3 py-1.5 rounded-lg font-extrabold transition " +
+    "border disabled:opacity-60 disabled:cursor-not-allowed " +
+    (darkMode ? "border-white/15 hover:bg-white/10" : "border-ra-marron/15 hover:bg-white/70");
+
+  const btnVerStyle = {
+    backgroundColor: PALETTE.sand,
+    color: PALETTE.brown,
+    boxShadow: darkMode ? "0 10px 25px rgba(0,0,0,0.25)" : "0 10px 25px rgba(109,88,41,0.12)",
+  };
 
   const getEventoById = (id) => eventos.find((e) => Number(e.id) === Number(id)) || null;
 
@@ -369,7 +390,6 @@ export default function VerConvocacionHistorica() {
     return arr;
   };
 
-  // ✅ Regla de negocio: solo mostramos jugadores vigentes (estado_id=1).
   const filtrarSoloActivos = (lista) => {
     const map = jugadoresMapRef.current;
     if (!map || map.size === 0) return Array.isArray(lista) ? lista : [];
@@ -402,7 +422,6 @@ export default function VerConvocacionHistorica() {
   };
 
   /* ========= PDF ========= */
-
   const exportarPDFDesdeDatos = async (evento, jugadores) => {
     const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
 
@@ -497,7 +516,6 @@ export default function VerConvocacionHistorica() {
   };
 
   /* ========= Acciones ========= */
-
   const fetchConvocadosHistorico = useCallback(
     async ({ evento_id, convocatoria_id }) => {
       const headers = buildHeaders(rolActual, academiaId);
@@ -577,12 +595,11 @@ export default function VerConvocacionHistorica() {
   };
 
   /* ========= Render ========= */
-
   if (!canLoad) return <IsLoading />;
   if (isLoading) return <IsLoading />;
 
   return (
-    <div className={`${fondoClase} px-2 sm:px-4 pt-4 pb-16 font-weli`}>
+    <div className={`${shell} min-h-[calc(100vh-100px)] px-2 sm:px-4 pt-4 pb-16 font-weli`}>
       {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
 
       <h2 className="text-2xl font-bold mb-6 text-center">Histórico de Convocatorias</h2>
@@ -590,12 +607,12 @@ export default function VerConvocacionHistorica() {
       <div className={tarjetaClase}>
         <div className="w-full overflow-x-auto">
           {historicos.length === 0 ? (
-            <p className="text-center text-gray-400 py-4">No hay convocatorias históricas registradas.</p>
+            <p className="text-center opacity-70 py-4">No hay convocatorias históricas registradas.</p>
           ) : (
             <table className="w-full text-xs sm:text-sm table-fixed sm:table-auto">
               <thead className={`${tablaCabecera} text-[10px] sm:text-xs`}>
                 <tr>
-                  <th className="p-2 border text-center w-12">ID</th>
+                  {/* ✅ ELIMINADA: Columna ID */}
                   <th className="p-2 border text-center w-56">Nombre evento</th>
                   <th className="p-2 border text-center w-20">Convocatoria</th>
                   <th className="p-2 border text-center w-44">Fecha generación</th>
@@ -609,7 +626,7 @@ export default function VerConvocacionHistorica() {
                   const evento = getEventoById(h.evento_id);
                   return (
                     <tr key={h.id} className={filaHover}>
-                      <td className="p-2 border text-center">{h.id}</td>
+                      {/* ✅ ELIMINADA: Celda ID */}
                       <td className="p-2 border text-center break-words">
                         {evento ? nombreEvento(evento) : "—"}
                       </td>
@@ -633,7 +650,8 @@ export default function VerConvocacionHistorica() {
                       <td className="p-2 border text-center">
                         <button
                           onClick={() => verConvocadosDeHistorico(h)}
-                          className="px-3 py-1 rounded bg-[#e82d89] text-white hover:brightness-95"
+                          className={btnVerClass}
+                          style={btnVerStyle}
                         >
                           Ver
                         </button>
@@ -649,11 +667,11 @@ export default function VerConvocacionHistorica() {
 
       {/* Modal convocados */}
       {modal.open && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50">
+        <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 px-3">
           <div
             className={`${
-              darkMode ? "bg-[#1f2937] text-white" : "bg-white text-[#1d0b0b]"
-            } w-[95%] max-w-3xl rounded-lg p-6 shadow-lg`}
+              darkMode ? "bg-[#111827] text-white border-white/15" : "bg-white/90 text-ra-marron border-ra-marron/15"
+            } w-[95%] max-w-3xl rounded-2xl p-6 shadow-2xl border backdrop-blur`}
           >
             <div className="flex justify-between items-center mb-4 gap-3">
               <h3 className="text-lg font-bold">
@@ -663,7 +681,7 @@ export default function VerConvocacionHistorica() {
 
               <button
                 onClick={() => setModal({ open: false, evento: null, jugadores: [] })}
-                className="p-2 rounded hover:bg-black/10 dark:hover:bg-white/10"
+                className="p-2 rounded-xl hover:bg-black/10 dark:hover:bg-white/10"
                 title="Cerrar"
                 aria-label="Cerrar modal"
               >

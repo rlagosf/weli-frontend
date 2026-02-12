@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { useTheme } from "../../context/ThemeContext";
-import api, { getToken, clearToken, setToken } from "../../services/api";
+import api, { getToken, clearToken, setToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
 import IsLoading from "../../components/isLoading";
 import {
   LogOut,
@@ -27,7 +27,9 @@ import {
 } from "lucide-react";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
-/* ───────────────── RA Theme ───────────────── */
+/* =======================
+   🎨 Conjunto X
+======================= */
 const RA = {
   copper: "#aa5013",
   brown: "#6d5829",
@@ -69,15 +71,25 @@ const extractRol = (decoded) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-/* ───────────────── Academia snapshot ───────────────── */
-const STORAGE_KEY = "weli_selected_academia";
+/* =======================
+   Academia snapshot (normado)
+======================= */
+const STORAGE_KEY = ACADEMIA_STORAGE_KEY || "weli_selected_academia";
 
 const readSelectedAcademia = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
+
+    // acepta "12"
+    const direct = Number(raw);
+    if (Number.isFinite(direct) && direct > 0) {
+      return { id: direct, nombre: null, deporte_nombre: null, estado_nombre: null, ts: null };
+    }
+
+    // acepta JSON
     const p = JSON.parse(raw);
-    const id = Number(p?.id ?? 0);
+    const id = Number(p?.id ?? p?.academia_id ?? p?.academy_id ?? 0);
     if (!Number.isFinite(id) || id <= 0) return null;
 
     return {
@@ -89,6 +101,54 @@ const readSelectedAcademia = () => {
     };
   } catch {
     return null;
+  }
+};
+
+/**
+ * ✅ Guard normado:
+ * - Árbol super: SOLO rol 3 + academia seleccionada
+ * - Árbol admin: roles 1/2/3, pero exige scope (academia seleccionada)
+ */
+const ensureScopeOrRedirect = ({ navigate, isSuperTree }) => {
+  const token = getToken?.() || "";
+  if (!token) {
+    clearToken?.();
+    navigate("/login", { replace: true });
+    return { ok: false, rol: 0, snap: null };
+  }
+
+  try {
+    let decoded = jwtDecode(token);
+
+    if (isExpired(decoded)) {
+      return { ok: true, rol: extractRol(decoded), snap: null, needsRefresh: true };
+    }
+
+    const rol = extractRol(decoded);
+
+    if (isSuperTree && rol !== 3) {
+      navigate("/admin", { replace: true });
+      return { ok: false, rol, snap: null };
+    }
+
+    const snap = readSelectedAcademia();
+
+    if (isSuperTree && !snap) {
+      navigate("/super-dashboard", { replace: true });
+      return { ok: false, rol, snap: null };
+    }
+
+    if (!isSuperTree && !snap) {
+      clearToken?.();
+      navigate("/login", { replace: true });
+      return { ok: false, rol, snap: null };
+    }
+
+    return { ok: true, rol, snap, needsRefresh: false };
+  } catch {
+    clearToken?.();
+    navigate("/login", { replace: true });
+    return { ok: false, rol: 0, snap: null };
   }
 };
 
@@ -120,38 +180,32 @@ export default function Dashboard() {
   const ROOT = isSuperTree ? "/super-dashboard/admin/dashboard" : "/admin";
   const BASE = ROOT;
 
-  /* ───────────────── Cards (roles reales, sin “3->1”) ───────────────── */
+  /* =======================
+     Cards (roles reales)
+  ======================= */
   const cards = useMemo(
     () => [
-      // jugadores
       { to: `${BASE}/crear-jugador`, label: "Crear Jugador", roles: [1, 3], Icon: UserPlus },
       { to: `${BASE}/listar-jugadores`, label: "Listar Jugadores", roles: [1, 2, 3], Icon: Users },
 
-      // estadísticas
       { to: `${BASE}/registrar-estadisticas`, label: "Registrar Estadísticas", roles: [1, 2, 3], Icon: ClipboardList },
       { to: `${BASE}/estadisticas`, label: "Estadísticas Globales", roles: [1, 2, 3], Icon: BarChart3 },
 
-      // convocatorias / agenda
       { to: `${BASE}/convocatorias`, label: "Crear Convocatorias", roles: [1, 3], Icon: CalendarPlus },
       { to: `${BASE}/ver-convocaciones-historicas`, label: "Historial Convocatorias", roles: [1, 2, 3], Icon: History },
       { to: `${BASE}/agenda`, label: "Agenda de eventos", roles: [1, 2, 3], Icon: CalendarDays },
 
-      // pagos
       { to: `${BASE}/gestionar-pagos`, label: "Gestión de pagos", roles: [1, 3], Icon: Banknote },
       { to: `${BASE}/power-bi`, label: "POWER BI FINANCIERO", roles: [1, 3], Icon: PieChart },
 
-      // noticias
-      { to: `${BASE}/noticias`, label: "Registro Noticias", roles: [1, 2, 3], Icon: Newspaper },
+      { to: `${BASE}/noticias`, label: "Registro Noticias", roles: [1, 2, 3], Icon: Newspaper, disabled: true },
 
-      // usuarios / configuración
       { to: `${BASE}/crear-usuario`, label: "Crear Usuario", roles: [1, 3], Icon: UserCog },
-
-      // ⚠️ Si “Configuración” es SOLO por academia, superadmin también debería verla (tenantizado)
       { to: `${BASE}/configuracion`, label: "Configuración", roles: [1, 3], Icon: Settings },
 
       {
         to: `${BASE}/seguimiento-medico`,
-        label: "Seguimiento médico (próximamente)",
+        label: "Seguimiento médico",
         roles: [1, 2, 3],
         Icon: Stethoscope,
         disabled: true,
@@ -160,62 +214,64 @@ export default function Dashboard() {
     [BASE]
   );
 
-  /* ───────────────── Auth + guard superadmin ───────────────── */
+  /* =======================
+     Auth + refresh + guard
+  ======================= */
   useEffect(() => {
     (async () => {
       try {
-        let token = getToken();
-        if (!token) {
-          clearToken();
-          navigate("/login", { replace: true });
-          return;
-        }
+        const g0 = ensureScopeOrRedirect({ navigate, isSuperTree });
+        if (!g0.ok && !g0.needsRefresh) return;
 
-        let decoded;
-        try {
-          decoded = jwtDecode(token);
-        } catch {
-          clearToken();
-          navigate("/login", { replace: true });
-          return;
-        }
+        let token = getToken?.() || "";
+        let decoded = null;
 
-        // Refresh si expira (si tu backend lo soporta)
-        if (isExpired(decoded)) {
+        if (g0.needsRefresh) {
           try {
-            const r = await api.post("/auth/refresh");
-            const newToken = r?.data?.access_token;
+            const r = await api.post("/auth/refresh", null, { meta: { isPublic: false } });
+            const newToken =
+              r?.data?.access_token || r?.data?.token || r?.data?.weli_token || r?.data?.jwt || null;
             if (!newToken) throw new Error("no-refresh-token");
-            setToken(newToken);
-            token = newToken;
-            decoded = jwtDecode(token);
+            setToken(String(newToken));
+            token = String(newToken);
           } catch {
-            clearToken();
+            clearToken?.();
             navigate("/login", { replace: true });
             return;
           }
         }
 
+        try {
+          decoded = jwtDecode(token);
+        } catch {
+          clearToken?.();
+          navigate("/login", { replace: true });
+          return;
+        }
+
         const r = extractRol(decoded);
         if (mountedRef.current) setRol(r);
 
-        // si está en árbol super-dashboard, SOLO rol 3
         if (isSuperTree && r !== 3) {
           navigate("/admin", { replace: true });
           return;
         }
 
-        // rol 3 dentro del árbol super: exige academia seleccionada
-        if (r === 3 && isSuperTree) {
-          const snap = readSelectedAcademia();
-          if (mountedRef.current) setSelectedAcademia(snap);
-          if (!snap) {
-            navigate("/super-dashboard", { replace: true });
-            return;
-          }
+        const snap = readSelectedAcademia();
+        if (mountedRef.current) setSelectedAcademia(snap);
+
+        if (isSuperTree && r === 3 && !snap) {
+          navigate("/super-dashboard", { replace: true });
+          return;
+        }
+
+        if (!isSuperTree && !snap) {
+          clearToken?.();
+          navigate("/login", { replace: true });
+          return;
         }
       } catch {
-        clearToken();
+        clearToken?.();
         navigate("/login", { replace: true });
       } finally {
         if (mountedRef.current) setIsLoading(false);
@@ -224,18 +280,15 @@ export default function Dashboard() {
   }, [navigate, isSuperTree]);
 
   const handleCerrarSesion = useCallback(async () => {
-    const token = getToken();
     try {
-      await api.post("/auth/logout", null, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      await api.post("/auth/logout", null, { meta: { isPublic: false } });
     } catch {
       // idempotente
     } finally {
-      clearToken();
+      clearToken?.();
       try {
         localStorage.removeItem(STORAGE_KEY);
-      } catch {}
+      } catch { }
       window.location.replace("/");
     }
   }, []);
@@ -243,7 +296,7 @@ export default function Dashboard() {
   const handleCambiarAcademia = useCallback(() => {
     try {
       localStorage.removeItem(STORAGE_KEY);
-    } catch {}
+    } catch { }
     navigate("/super-dashboard", { replace: true });
   }, [navigate]);
 
@@ -269,24 +322,28 @@ export default function Dashboard() {
 
   const isRoot = location.pathname === ROOT;
 
-  /* ───────────────── UI Skin ───────────────── */
-  const pageBg = darkMode
-    ? "bg-gradient-to-br from-[#160a05] via-[#111827] to-[#0b1220] text-white"
-    : "bg-gradient-to-br from-[#fff7ef] via-[#fff] to-[#fffbf5] text-[#1d0b0b]";
+  /* =======================
+     ✅ ESTILO = SuperDashboard (tal cual)
+  ======================= */
+  const shell = darkMode
+    ? "bg-[#111827] text-white"
+    : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
 
-  const cardBase = darkMode
-    ? "bg-white/5 border border-white/10 hover:border-[#aa5013] hover:bg-white/7"
-    : "bg-white border border-black/5 hover:border-[#aa5013] hover:shadow-md";
+  const headerSub = darkMode ? "text-white/70" : "text-ra-marron/70";
+  const buttonIcon = darkMode ? "hover:bg-white/10" : "hover:bg-white/30";
 
-  const actionBtn = darkMode ? "hover:bg-white/10" : "hover:bg-black/5";
+  const card = darkMode
+    ? "bg-white/10 border-white/15 hover:bg-white/15 hover:border-white/25"
+    : "bg-white/60 border-ra-marron/15 hover:bg-white/80 hover:border-ra-terracotta";
 
-  const academiaPill = darkMode
-    ? "bg-white/5 border-white/15 text-white"
-    : "bg-white border-black/10 text-[#1d0b0b]";
+  const badge = darkMode
+    ? "bg-white/10 border-white/10 text-white/80"
+    : "bg-white/60 border-ra-marron/10 text-ra-marron/80";
 
   return (
-    <div className={`${pageBg} min-h-screen font-weli`}>
+    <div className={`${shell} min-h-screen font-sans`}>
       <header className="px-6 pt-6">
+        {/* fila 1: breadcrumb (izq) + acciones (der) */}
         <div className="flex items-center justify-between gap-3">
           <nav className="text-sm min-w-0" aria-label="breadcrumb">
             <ol className="flex flex-wrap items-center gap-2 min-w-0">
@@ -294,13 +351,12 @@ export default function Dashboard() {
                 <li key={`${b.to}-${i}`} className="flex items-center gap-2 min-w-0">
                   {i !== 0 && <span className="opacity-50">/</span>}
                   {b.last ? (
-                    <span className="font-semibold truncate" style={{ color: RA.copper }}>
+                    <span className={`font-semibold truncate ${darkMode ? "text-white/90" : "text-ra-marron/90"}`}>
                       {b.label}
                     </span>
                   ) : (
                     <Link
-                      className="hover:opacity-90 truncate"
-                      style={{ color: darkMode ? "#fff" : RA.brown }}
+                      className={`hover:opacity-90 truncate ${darkMode ? "text-white/80" : "text-ra-marron/80"}`}
                       to={b.to}
                     >
                       {b.label}
@@ -313,20 +369,25 @@ export default function Dashboard() {
 
           <div className="flex items-center gap-2 flex-shrink-0">
             {rol === 3 && isSuperTree && selectedAcademia && (
-              <div className={`hidden sm:flex items-center gap-2 ${academiaPill} px-3 py-1.5 rounded-xl border`}>
+              <div
+                className={[
+                  "hidden sm:flex items-center gap-2 rounded-2xl px-4 py-2 border",
+                  darkMode ? "bg-white/10 border-white/15" : "bg-white/60 border-ra-marron/15",
+                ].join(" ")}
+              >
                 <Building2 className="w-4 h-4" />
                 <span className="text-xs opacity-80">Academia:</span>
-                <span className="text-xs font-extrabold" style={{ color: RA.copper }}>
+                <span className="text-xs font-extrabold">
                   {selectedAcademia.nombre ?? `#${selectedAcademia.id}`}
                 </span>
 
                 <button
                   type="button"
                   onClick={handleCambiarAcademia}
-                  className="ml-1 inline-flex items-center gap-1 px-2 py-1 rounded-lg border transition"
-                  style={{ borderColor: `${RA.copper}55` }}
-                  onMouseEnter={(e) => (e.currentTarget.style.borderColor = RA.copper)}
-                  onMouseLeave={(e) => (e.currentTarget.style.borderColor = `${RA.copper}55`)}
+                  className={[
+                    "ml-1 inline-flex items-center gap-1 px-2 py-1 rounded-lg border transition hover:opacity-90",
+                    darkMode ? "border-white/20" : "border-ra-marron/15",
+                  ].join(" ")}
                   title="Cambiar academia"
                 >
                   <CornerUpLeft className="w-4 h-4" />
@@ -335,63 +396,72 @@ export default function Dashboard() {
               </div>
             )}
 
-            <button
-              title="Cambiar tema"
-              onClick={toggleTheme}
-              className={`p-2 rounded-xl transition ${actionBtn}`}
-              aria-label="Cambiar tema"
-            >
+            <button title="Cambiar tema" onClick={toggleTheme} className={`p-2 rounded-xl transition ${buttonIcon}`}>
               {darkMode ? <Sun size={20} /> : <Moon size={20} />}
             </button>
 
-            <button
-              title="Cerrar sesión"
-              onClick={handleCerrarSesion}
-              className={`p-2 rounded-xl transition ${actionBtn}`}
-              aria-label="Cerrar sesión"
-            >
+            <button title="Cerrar sesión" onClick={handleCerrarSesion} className={`p-2 rounded-xl transition ${buttonIcon}`}>
               <LogOut size={20} />
             </button>
           </div>
         </div>
 
+        {/* fila 2: título centrado bajo breadcrumb */}
         <h1 className="text-3xl font-extrabold text-center tracking-tight mt-6">
           Panel de Administración
         </h1>
       </header>
 
-      <main className="px-6 pb-20 mt-7">
+
+      <main className="px-6 pb-20">
         {isRoot ? (
-          <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <div className="mt-8 grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {cards
               .filter((c) => !c.roles || c.roles.includes(rol))
               .sort((a, b) => (a.label || "").localeCompare(b.label || "", "es", { sensitivity: "base" }))
               .map(({ to, label, Icon, disabled }) => {
-                const common =
-                  `${cardBase} rounded-2xl p-6 shadow-sm transition transform ` +
-                  "flex flex-col items-center justify-center gap-3 h-40";
-
-                const iconBg = darkMode
-                  ? `linear-gradient(135deg, rgba(170,80,19,.22), rgba(221,162,114,.10))`
-                  : `linear-gradient(135deg, rgba(170,80,19,.12), rgba(221,162,114,.08))`;
+                const iconWrap =
+                  darkMode
+                    ? "bg-ra-terracotta/90 border border-white/10"
+                    : "bg-ra-terracotta/90 border border-white/20";
 
                 if (disabled) {
                   return (
-                    <div key={to} className={`${common} opacity-60 cursor-not-allowed`} title="Próximamente">
-                      <div className="rounded-2xl p-3" style={{ background: iconBg, border: `1px solid ${RA.copper}22` }}>
-                        <Icon className="w-10 h-10" style={{ color: RA.copper }} />
+                    <div
+                      key={to}
+                      className={`${card} rounded-2xl p-6 shadow-lg transition transform flex flex-col items-center justify-center gap-3 h-44 text-center opacity-60 cursor-not-allowed`}
+                      title="Próximamente"
+                    >
+                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${iconWrap}`}>
+                        <Icon className="w-8 h-8 text-white" />
                       </div>
-                      <div className="text-center font-bold leading-tight">{label}</div>
+
+                      <div className={`font-extrabold text-lg leading-tight ${darkMode ? "text-white" : "text-ra-marron"}`}>
+                        {label}
+                      </div>
+
+                      <div className={`text-xs inline-flex items-center gap-2 rounded-full px-3 py-1 border ${badge}`}>
+                        <span>Próximamente</span>
+                      </div>
                     </div>
                   );
                 }
 
                 return (
-                  <Link key={to} to={to} className={`${common} hover:-translate-y-1 hover:shadow-lg`}>
-                    <div className="rounded-2xl p-3" style={{ background: iconBg, border: `1px solid ${RA.copper}22` }}>
-                      <Icon className="w-10 h-10" style={{ color: RA.copper }} />
+                  <Link
+                    key={to}
+                    to={to}
+                    className={`${card} rounded-2xl p-6 shadow-lg transition transform flex flex-col items-center justify-center gap-3 h-44 hover:-translate-y-1 text-center`}
+                    aria-label={label}
+                  >
+                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${iconWrap}`}>
+                      <Icon className="w-8 h-8 text-white" />
                     </div>
-                    <div className="text-center font-bold leading-tight">{label}</div>
+
+                    <div className={`font-extrabold text-lg leading-tight ${darkMode ? "text-white" : "text-ra-marron"}`}>
+                      {label}
+                    </div>
+
                   </Link>
                 );
               })}

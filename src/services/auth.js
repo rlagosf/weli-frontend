@@ -18,12 +18,24 @@ function normalizeRut(rut) {
   return String(rut ?? "").replace(/\D/g, "").slice(0, 8);
 }
 
+/**
+ * ✅ Lector robusto (alineado con src/services/api.js)
+ * Soporta:
+ *  - "1" (string/number)
+ *  - {"id":1}, {"academia_id":1}, {"academiaId":1}
+ */
 function readSelectedAcademiaId() {
   try {
     const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
     if (!raw) return null;
+
+    // Caso 1: guardado como número/string: "1"
+    const direct = Number(raw);
+    if (Number.isFinite(direct) && direct > 0) return direct;
+
+    // Caso 2: JSON
     const parsed = JSON.parse(raw);
-    const id = Number(parsed?.id ?? 0);
+    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
     return Number.isFinite(id) && id > 0 ? id : null;
   } catch {
     return null;
@@ -137,7 +149,11 @@ async function postWithTimeout(path, body, opts = {}) {
 ──────────────────────────────── */
 export async function login(nombre_usuario, password, options = {}) {
   try {
-    const academia_id = readSelectedAcademiaId(); // ✅ si existe, la mandamos
+    // ✅ Si hay academia seleccionada, la mandamos.
+    // Backend debe:
+    // - exigirla solo si el usuario resultó rol 3
+    // - ignorarla para roles 1/2 (su academia viene del JWT/DB)
+    const academia_id = readSelectedAcademiaId();
 
     const body = {
       nombre_usuario,
@@ -145,11 +161,10 @@ export async function login(nombre_usuario, password, options = {}) {
       ...(academia_id ? { academia_id } : {}),
     };
 
-    const res = await postWithTimeout(
-      "/auth/login",
-      body,
-      { timeoutMs: DEFAULT_TIMEOUT_MS, ...options }
-    );
+    const res = await postWithTimeout("/auth/login", body, {
+      timeoutMs: DEFAULT_TIMEOUT_MS,
+      ...options,
+    });
 
     const data = res?.data ?? {};
     if (data?.token) setToken(String(data.token));
@@ -181,7 +196,12 @@ export async function loginApoderado(rut, password, options = {}) {
       if (typeof data?.must_change_password !== "undefined") {
         localStorage.setItem(
           "apoderado_must_change_password",
-          String(data.must_change_password === true || Number(data.must_change_password) === 1 ? 1 : 0)
+          String(
+            data.must_change_password === true ||
+              Number(data.must_change_password) === 1
+              ? 1
+              : 0
+          )
         );
       }
     } catch {}
@@ -213,7 +233,7 @@ function clearLocalAuth() {
   try {
     localStorage.removeItem("user_info");
     localStorage.removeItem("apoderado_must_change_password");
-    localStorage.removeItem("weli_auth_debug");
+    localStorage.removeItem("weli_auth_debug"); // si quieres persistir debug, quita esta línea
   } catch {}
 }
 

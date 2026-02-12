@@ -9,15 +9,19 @@ import IsLoading from "../../components/isLoading";
 import logoOficial from "../../statics/logo/logo-oficial.png";
 import logoWeli from "../../statics/logo/logo-weli.png";
 
-// ✅ importa api para ping al backend
+// ✅ api + token helpers
 import api, { getToken, setToken, clearToken } from "../../services/api";
 
 const REQUEST_TIMEOUT_MS = 10_000;
 const ACCENT = "#aa5013";
 
-// ✅ Rutas finales (conforme a routes.jsx final)
+// ✅ Rutas finales
 const SUPER_DASH_PATH = "/super-dashboard";
 const ADMIN_DASH_PATH = "/admin";
+
+// ✅ Storage keys normados
+const USER_INFO_KEY = "user_info";
+const SELECTED_ACADEMIA_KEY = "weli_selected_academia";
 
 /* ───────────────────────── Helpers ───────────────────────── */
 function safeJsonStringify(obj) {
@@ -72,22 +76,76 @@ function defaultByRole(rol_id) {
 
 function isAllowedRedirectForRole(path, rol_id) {
   if (!path) return false;
-  // ✅ Superadmin: solo permitir caer en /super-dashboard o /admin*
+  // ✅ Superadmin: permitir /super-dashboard o /admin*
   if (rol_id === 3) return path === SUPER_DASH_PATH || path.startsWith("/admin");
   // ✅ Admin/Staff: solo /admin*
   return path.startsWith("/admin");
 }
 
+// ✅ AcademiaId: payload o token
+function academiaIdFromPayloadOrToken(payload, token) {
+  // 1) payload directo o dentro de user
+  const rawPayload =
+    payload?.academia_id ??
+    payload?.academy_id ??
+    payload?.academiaId ??
+    payload?.academyId ??
+    payload?.user?.academia_id ??
+    payload?.user?.academy_id ??
+    payload?.user?.academiaId ??
+    payload?.user?.academyId ??
+    null;
+
+  const asNumPayload = Number(rawPayload);
+  if (Number.isFinite(asNumPayload) && asNumPayload > 0) return asNumPayload;
+
+  // 2) token
+  try {
+    const decoded = jwtDecode(token);
+    const rawToken =
+      decoded?.academia_id ??
+      decoded?.academy_id ??
+      decoded?.academiaId ??
+      decoded?.academyId ??
+      decoded?.tenant_id ?? // por si usaste tenant_id
+      null;
+
+    const asNumToken = Number(rawToken);
+    if (Number.isFinite(asNumToken) && asNumToken > 0) return asNumToken;
+  } catch {}
+
+  return 0;
+}
+
+// ✅ Persistir scope (lo que usa api para header x-academia-id)
+function setAcademiaScope(academia_id) {
+  try {
+    if (academia_id && Number(academia_id) > 0) {
+      localStorage.setItem(SELECTED_ACADEMIA_KEY, String(Number(academia_id)));
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
+function clearAcademiaScope() {
+  try {
+    localStorage.removeItem(SELECTED_ACADEMIA_KEY);
+  } catch {}
+}
+
+// ✅ Limpieza dura (panel)
 function hardClearLocal() {
   try {
     clearToken();
   } catch {}
+
   try {
-    localStorage.removeItem("user_info");
-    localStorage.removeItem("apoderado_must_change_password");
+    localStorage.removeItem(USER_INFO_KEY);
+    localStorage.removeItem("apoderado_must_change_password"); // por si quedó sucio de antes
     localStorage.removeItem("rafc_token");
     localStorage.removeItem("rafc_auth_debug");
-    localStorage.removeItem("weli_selected_academia");
+    clearAcademiaScope();
   } catch {}
 }
 
@@ -126,7 +184,13 @@ export default function Login() {
     setIsLoading(v);
   }, []);
 
-  // ✅ Boot: si hay token, valida exp + ping backend, y redirige SEGÚN ROL
+  /**
+   * ✅ Boot:
+   * - Si hay token: valida exp
+   * - Ping backend
+   * - Reconstruye scope x-academia-id según rol (admin/staff obligados)
+   * - Redirige por rol
+   */
   useEffect(() => {
     let alive = true;
 
@@ -138,7 +202,7 @@ export default function Login() {
 
       if (!t) return;
 
-      // 1) Exp local (corta tokens vencidos)
+      // 1) Exp local
       try {
         const decoded = jwtDecode(t);
         const now = Math.floor(Date.now() / 1000);
@@ -151,7 +215,7 @@ export default function Login() {
         return;
       }
 
-      // 2) Ping rápido al backend (si no responde, NO redirigir)
+      // 2) Ping rápido (si no responde, no redirigir)
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 1500);
 
@@ -163,11 +227,25 @@ export default function Login() {
 
         if (!alive) return;
 
-        // ✅ Rol desde token
+        // 3) Rol desde token
         const decoded = jwtDecode(t);
-        const raw = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? 0;
-        const rol_id = Number(raw);
+        const rolRaw = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? 0;
+        const rol_id = Number(rolRaw);
         const rol = Number.isFinite(rol_id) ? rol_id : 0;
+
+        // 4) Scope academia
+        if (rol === 3) {
+          // superadmin: que el selector decida (evita scopes “fantasma”)
+          clearAcademiaScope();
+        } else {
+          // admin/staff: debe existir SIEMPRE
+          const acad = academiaIdFromPayloadOrToken(null, t);
+          const ok = setAcademiaScope(acad);
+          if (!ok) {
+            hardClearLocal();
+            return;
+          }
+        }
 
         navigate(defaultByRole(rol), { replace: true });
       } catch {
@@ -213,7 +291,7 @@ export default function Login() {
 
     setLoadingSafe(true);
 
-    // limpiar sesión previa
+    // limpiar sesión previa (panel)
     hardClearLocal();
 
     const controller = new AbortController();
@@ -244,18 +322,36 @@ export default function Login() {
         return;
       }
 
-      // ✅ ÚNICA forma correcta de persistir: setToken (weli_token + header)
+      // ✅ Persistir token (weli_token)
       setToken(String(token));
 
+      // ✅ user_info (si viene)
       const user = pickUserFromPayload(payload);
       if (user) {
         try {
-          localStorage.setItem("user_info", safeJsonStringify(user));
+          localStorage.setItem(USER_INFO_KEY, safeJsonStringify(user));
         } catch {}
       }
 
-      // ✅ Rol: payload o token (fallback)
+      // ✅ Rol: payload o token
       const rol_id = roleFromPayloadOrToken(payload, String(token));
+
+      // ✅ Scope x-academia-id
+      if (rol_id === 3) {
+        // superadmin: que seleccione academia después (evita tenant incorrecto)
+        clearAcademiaScope();
+      } else {
+        // admin/staff: set obligatorio desde payload o token
+        const acad = academiaIdFromPayloadOrToken(payload, String(token));
+        const ok = setAcademiaScope(acad);
+        if (!ok) {
+          // si no puedo asegurar scope, corto de raíz (evita 403-loop)
+          hardClearLocal();
+          setMsgSafe("❌ No se pudo determinar la academia del usuario (scope).");
+          return;
+        }
+      }
+
       const fallback = defaultByRole(rol_id);
 
       // ✅ Redirect solicitado (si es válido para el rol); si no, fallback por rol
@@ -385,7 +481,14 @@ export default function Login() {
               <div className="mt-8 space-y-4">
                 {/* Usuario */}
                 <div className="flex items-center w-full bg-transparent border border-white/20 h-12 rounded-full overflow-hidden pl-5 gap-3">
-                  <svg width="16" height="11" viewBox="0 0 16 11" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <svg
+                    width="16"
+                    height="11"
+                    viewBox="0 0 16 11"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden="true"
+                  >
                     <path
                       fillRule="evenodd"
                       clipRule="evenodd"
@@ -408,7 +511,14 @@ export default function Login() {
 
                 {/* Password */}
                 <div className="flex items-center w-full bg-transparent border border-white/20 h-12 rounded-full overflow-hidden pl-5 gap-3">
-                  <svg width="13" height="17" viewBox="0 0 13 17" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <svg
+                    width="13"
+                    height="17"
+                    viewBox="0 0 13 17"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden="true"
+                  >
                     <path
                       d="M13 8.5c0-.938-.729-1.7-1.625-1.7h-.812V4.25C10.563 1.907 8.74 0 6.5 0S2.438 1.907 2.438 4.25V6.8h-.813C.729 6.8 0 7.562 0 8.5v6.8c0 .938.729 1.7 1.625 1.7h9.75c.896 0 1.625-.762 1.625-1.7zM4.063 4.25c0-1.406 1.093-2.55 2.437-2.55s2.438 1.144 2.438 2.55V6.8H4.061z"
                       fill="rgba(255,255,255,0.65)"
@@ -429,7 +539,9 @@ export default function Login() {
                 </div>
 
                 {mensaje && (
-                  <div className="text-center text-sm font-bold text-red-300">{mensaje}</div>
+                  <div className="text-center text-sm font-bold text-red-300">
+                    {mensaje}
+                  </div>
                 )}
 
                 <button

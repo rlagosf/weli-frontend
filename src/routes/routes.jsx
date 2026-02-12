@@ -165,7 +165,23 @@ const ApoderadoPwdGate = ({ children }) => (
 /* -------------------- Children Admin (reutilizables) -------------------- */
 const adminChildren = [
   { path: "crear-jugador", element: <CrearJugador /> },
+
+  // ✅ LISTAR
   { path: "listar-jugadores", element: <ListarJugadores /> },
+
+  // ✅ DETALLE (RUTA LIMPIA, SIN :rut) — ESTA ES LA QUE TU BREADCRUMB NECESITA
+  // /admin/listar-jugadores/detalle-jugador
+  // /super-dashboard/admin/dashboard/listar-jugadores/detalle-jugador
+  { path: "listar-jugadores/detalle-jugador", element: <DetalleJugador /> },
+
+  // ✅ (Opcional, recomendado) Compatibilidad legacy si algún link aún trae /:rut
+  // /admin/listar-jugadores/detalle-jugador/:rut
+  // /super-dashboard/admin/dashboard/listar-jugadores/detalle-jugador/:rut
+  { path: "listar-jugadores/detalle-jugador/:rut", element: <DetalleJugador /> },
+
+  // ✅ (Opcional) Compatibilidad “hermana”
+  { path: "detalle-jugador/:rut", element: <DetalleJugador /> },
+
   { path: "estadisticas", element: <Estadisticas /> },
   { path: "crear-usuario", element: <CrearUsuario /> },
   { path: "agenda", element: <Agenda /> },
@@ -185,13 +201,9 @@ const adminChildren = [
   { path: "configuracion/sucursales", element: <Sucursales /> },
 
   { path: "convocatorias", element: <CrearConvocatoria /> },
-  { path: "listar-jugadores/detalle-jugador", element: <DetalleJugador /> },
-  { path: "detalle-jugador/:rut", element: <DetalleJugador /> },
   { path: "ver-convocaciones-historicas", element: <VerConvocacionHistorica /> },
 
   { path: "registrar-estadisticas", element: <RegistrarEstadisticas /> },
-
-  // ✅ CAMBIO: ruta limpia sin :rut (RAFC style)
   { path: "registrar-estadisticas/detalle-estadistica", element: <DetalleEstadistica /> },
 
   { path: "noticias", element: <RegistroNoticias /> },

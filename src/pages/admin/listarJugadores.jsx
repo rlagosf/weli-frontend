@@ -2,15 +2,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "../../context/ThemeContext";
-import api, {
-  getToken,
-  clearToken,
-  ACADEMIA_STORAGE_KEY,
-} from "../../services/api";
+import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
 import IsLoading from "../../components/isLoading";
 import { jwtDecode } from "jwt-decode";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 import { formatRutWithDV } from "../../services/rut";
+
+/* =======================
+   🎨 Conjunto X
+======================= */
+const PALETTE = {
+  copper: "#aa5013",
+  brown: "#6d5829",
+  gold: "#b79f69",
+  cream: "#e8dac4",
+  sand: "#ffdda1",
+  caramel: "#dda272",
+  terracotta: "#e2773b",
+};
 
 /* ─────────────────────────────
    Auth / Headers (WELI) — MISMO PATRÓN
@@ -21,7 +30,7 @@ const isExpired = (decoded) => {
 };
 
 const extractRol = (decoded) => {
-  const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
+  const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
   const parsed = Number(rawRol);
   return Number.isFinite(parsed) ? parsed : 0;
 };
@@ -68,30 +77,12 @@ const normalizeListResponse = (res) => {
   return [];
 };
 
-const getWithFallback = async (path, { signal, headers } = {}) => {
-  const urls = path.endsWith("/")
-    ? [path, path.slice(0, -1)]
-    : [path, `${path}/`];
-
-  let lastErr = null;
-  for (const url of urls) {
-    try {
-      return await api.get(url, { signal, headers });
-    } catch (e) {
-      lastErr = e;
-      const st = e?.status ?? e?.response?.status;
-      if (st === 401 || st === 403) throw e;
-    }
-  }
-  throw lastErr ?? new Error("GET failed");
-};
-
 const tryGetList = async (paths, { signal, headers } = {}) => {
   const list = Array.isArray(paths) ? paths : [paths];
 
   const variants = [];
   for (const p of list) {
-    const base = p.startsWith("/") ? p : `/${p}`;
+    const base = String(p || "").startsWith("/") ? String(p || "") : `/${String(p || "")}`;
     variants.push(base, base.endsWith("/") ? base.slice(0, -1) : `${base}/`);
   }
   const uniq = [...new Set(variants)];
@@ -103,8 +94,6 @@ const tryGetList = async (paths, { signal, headers } = {}) => {
     } catch (e) {
       const st = e?.status ?? e?.response?.status ?? 0;
       if (st === 401 || st === 403) throw e;
-      // 404 u otros -> probamos siguiente
-      continue;
     }
   }
   return [];
@@ -123,10 +112,7 @@ export default function ListarJugadores() {
 
   useMobileAutoScrollTop();
 
-  /* 🧭 Breadcrumb por defecto (MISMO PATRÓN que listarPagos.jsx)
-     - No hardcodea rutas
-     - Respeta trazabilidad si vienes con breadcrumb desde SuperDashboard
-  */
+  /* 🧭 Breadcrumb por defecto (MISMO PATRÓN) */
   useEffect(() => {
     if (!Array.isArray(location.state?.breadcrumb)) {
       navigate(location.pathname + location.search, {
@@ -150,13 +136,11 @@ export default function ListarJugadores() {
 
       const rol = extractRol(decoded);
 
-      // ✅ Admin (1), Staff (2), Superadmin (3)
       if (![1, 2, 3].includes(rol)) {
         navigate("/admin", { replace: true });
         return;
       }
 
-      // ✅ Si es superadmin, exige academia seleccionada (patrón WELI)
       if (rol === 3) {
         const a = getAcademiaIdFromStorage();
         if (!a) throw new Error("missing-academia-target");
@@ -181,37 +165,42 @@ export default function ListarJugadores() {
       setError("");
 
       try {
-        // ✅ Misma lógica: rutas con fallback, sin inventar 20 endpoints
         const jugadoresPaths = ["/jugadores?include_inactivos=1", "/jugadores"];
 
         const [rawJugadores, posList, catList, estList] = await Promise.all([
           tryGetList(jugadoresPaths, { signal: abort.signal, headers }),
-          tryGetList(["/posiciones"], { signal: abort.signal, headers }),
-          tryGetList(["/categorias"], { signal: abort.signal, headers }),
+          tryGetList(["/posiciones", "/posicion"], { signal: abort.signal, headers }),
+          tryGetList(["/categorias", "/categoria"], { signal: abort.signal, headers }),
           tryGetList(["/estado", "/estados"], { signal: abort.signal, headers }),
         ]);
 
         if (abort.signal.aborted) return;
 
         const posMap = new Map(
-          (posList ?? []).map((p) => [
-            Number(p?.id ?? p?.posicion_id),
-            String(p?.nombre ?? p?.descripcion ?? "").trim(),
-          ])
+          (posList ?? [])
+            .map((p) => [
+              Number(p?.id ?? p?.posicion_id),
+              String(p?.nombre ?? p?.descripcion ?? "").trim(),
+            ])
+            .filter(([id, nombre]) => Number.isFinite(id) && id > 0 && !!nombre)
         );
 
         const catMap = new Map(
-          (catList ?? []).map((c) => [
-            Number(c?.id ?? c?.categoria_id),
-            String(c?.nombre ?? c?.descripcion ?? "").trim(),
-          ])
+          (catList ?? [])
+            .map((c) => [
+              Number(c?.id ?? c?.categoria_id),
+              String(c?.nombre ?? c?.descripcion ?? "").trim(),
+            ])
+            .filter(([id, nombre]) => Number.isFinite(id) && id > 0 && !!nombre)
         );
 
         const estMap = new Map(
-          (estList ?? []).map((e) => [
-            Number(e?.id ?? e?.estado_id),
-            String(e?.nombre ?? e?.descripcion ?? "").trim(),
-          ])
+          (estList ?? [])
+            .map((e) => [
+              Number(e?.id ?? e?.estado_id),
+              String(e?.nombre ?? e?.descripcion ?? "").trim(),
+            ])
+            .filter(([id, nombre]) => Number.isFinite(id) && id > 0 && !!nombre)
         );
 
         const safeJugadores = Array.isArray(rawJugadores) ? rawJugadores : [];
@@ -223,30 +212,22 @@ export default function ListarJugadores() {
 
           const posicion =
             j?.posicion ??
-            (Number.isFinite(posId) && posMap.has(posId)
-              ? { nombre: posMap.get(posId) }
-              : null);
+            (Number.isFinite(posId) && posMap.has(posId) ? { nombre: posMap.get(posId) } : null);
 
           const categoria =
             j?.categoria ??
-            (Number.isFinite(catId) && catMap.has(catId)
-              ? { nombre: catMap.get(catId) }
-              : null);
+            (Number.isFinite(catId) && catMap.has(catId) ? { nombre: catMap.get(catId) } : null);
 
           const estado =
             j?.estado ??
-            (Number.isFinite(estId) && estMap.has(estId)
-              ? { nombre: estMap.get(estId) }
-              : null);
+            (Number.isFinite(estId) && estMap.has(estId) ? { nombre: estMap.get(estId) } : null);
 
           return { ...j, posicion, categoria, estado };
         });
 
         setJugadores(data);
 
-        if (!data.length) {
-          setError("⚠️ No se encontraron jugadores.");
-        }
+        if (!data.length) setError("⚠️ No se encontraron jugadores.");
       } catch (err) {
         if (abort.signal.aborted) return;
 
@@ -273,33 +254,104 @@ export default function ListarJugadores() {
     return () => abort.abort();
   }, [rolActual, navigate]);
 
-  /* 🎨 clases */
-  const fondoClase = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";
-  const tablaCabecera = darkMode ? "bg-[#1f2937] text-white" : "bg-gray-100 text-[#1d0b0b]";
-  const filaHover = darkMode ? "hover:bg-[#1f2937]" : "hover:bg-gray-100";
+  /* =======================
+     UI (clon SuperDashboard)
+     + encabezados marrón
+     + divisores más notables
+======================= */
+  const ui = useMemo(() => {
+    // mismo “shell” que superDashboard (pero sin romper tu layout: dejamos el fondo al layout)
+    const page = "min-h-screen font-sans bg-transparent px-6 pt-6 pb-20";
 
-  const tarjetaClase = darkMode
-    ? "bg-[#1f2937] shadow-lg rounded-lg p-4 border border-gray-700 hover:border-[#24C6FF] transition-colors"
-    : "bg-white shadow-md rounded-lg p-4 border border-gray-200 hover:border-[#24C6FF] transition-colors";
+    const title = darkMode ? "text-white" : "text-ra-marron";
+    const subtitle = darkMode ? "text-white/70" : "text-ra-marron/70";
+
+    const msgBox =
+      "rounded-2xl border px-5 py-4 font-semibold " +
+      (darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
+
+    const warnBox =
+      "rounded-2xl border px-5 py-4 font-semibold " +
+      (darkMode ? "border-amber-200/20 bg-amber-500/10 text-amber-100" : "border-amber-200 bg-amber-50 text-amber-800");
+
+    // card idéntica a las cards del panel
+    const card =
+      "max-w-6xl mx-auto rounded-2xl shadow-2xl border p-6 " +
+      (darkMode ? "bg-white/10 border-white/15" : "bg-white/60 border-ra-marron/15");
+
+    // divisores más notables (pedido)
+    const line = darkMode ? "rgba(255,255,255,0.18)" : "rgba(109,88,41,0.22)";
+    const border = `1px solid ${line}`;
+
+    const tableWrap = "w-full overflow-x-auto";
+
+    // tabla con bordes más marcados
+    const table = "w-full text-xs sm:text-sm min-w-[900px] border-separate border-spacing-0";
+
+    // encabezado marrón
+    const thead =
+      "text-[10px] sm:text-xs " +
+      (darkMode ? "bg-black/20" : "bg-ra-cream/90");
+
+    const thBase =
+      "p-2 text-center whitespace-nowrap font-extrabold " +
+      (darkMode ? "text-[#ffdda1]" : "text-[#6d5829]"); // sand en dark, brown en light
+
+    // bordes en th/td más notorios
+    const cellBorderStyle = { borderRight: border, borderBottom: border };
+    const headBorderStyle = { borderRight: border, borderBottom: border, borderTop: border };
+
+    const tr =
+      "cursor-pointer transition " +
+      (darkMode ? "hover:bg-white/10" : "hover:bg-white/70");
+
+    const tdBase =
+      "p-2 text-center " +
+      (darkMode ? "text-white/90" : "text-ra-marron");
+
+    const badge =
+      "text-xs inline-flex items-center gap-2 rounded-full px-3 py-1 border " +
+      (darkMode ? "bg-white/10 border-white/10 text-white/80" : "bg-white/60 border-ra-marron/10 text-ra-marron/80");
+
+    return {
+      page,
+      title,
+      subtitle,
+      msgBox,
+      warnBox,
+      card,
+      tableWrap,
+      table,
+      thead,
+      thBase,
+      tr,
+      tdBase,
+      badge,
+      cellBorderStyle,
+      headBorderStyle,
+      border,
+      line,
+    };
+  }, [darkMode]);
 
   const handleClick = (rut, stateBreadcrumb) => {
     const base = String(location.pathname || "").replace(/\/$/, "");
-    // /super-dashboard/admin/dashboard/listar-jugadores
+    const rutClean = String(rut ?? "").trim();
+    if (!rutClean) return;
 
-    const to = `${base}/detalle-jugador/`;
+    const to = `${base}/detalle-jugador`;
 
     navigate(to, {
       state: {
-        rut: String(rut),            // ✅ el rut viaja por state (RAFC style)
-        from: base,                  // ✅ para volver bien
-        breadcrumb:
-          stateBreadcrumb ??
-          [{ label: "Listar Jugadores", to: base }],
+        rut: rutClean,
+        from: base,
+        breadcrumb: [
+          ...(stateBreadcrumb ?? [{ label: "Listar Jugadores", to: base }]),
+          { label: "Detalle Jugador", to },
+        ],
       },
     });
   };
-
-
 
   /* 🧩 Agrupar por categoría */
   const grupos = useMemo(() => {
@@ -316,84 +368,123 @@ export default function ListarJugadores() {
 
   if (error && !jugadores.length) {
     return (
-      <div className={`${fondoClase} min-h-screen flex justify-center items-center`}>
-        <p className="text-red-500 text-lg">{error}</p>
+      <div className={`${ui.page} flex justify-center items-center`}>
+        <div className={ui.msgBox}>{error}</div>
       </div>
     );
   }
 
   return (
-    <div className={`${fondoClase} px-2 sm:px-4 pt-4 pb-16 font-weli`}>
-      <h2 className="text-2xl font-bold mb-6 text-center">Lista de Jugadores</h2>
+    <div className={ui.page}>
+      {/* Header estilo SuperDashboard */}
+      <header className="max-w-6xl mx-auto">
+        <div className="text-center">
+          <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.title}`}>
+            Lista de Jugadores
+          </h1>
+          <p className={`text-sm mt-2 ${ui.subtitle}`}>
+            Selecciona un jugador para ver su detalle.
+          </p>
+        </div>
+      </header>
 
-      {!!error && (
-        <div className="max-w-5xl mx-auto mb-4">
-          <div className={tarjetaClase}>
-            <p className="text-yellow-400 text-center">{error}</p>
+      <main className="mt-8">
+        {!!error && (
+          <div className="max-w-6xl mx-auto mb-6">
+            <div className={ui.warnBox}>{error}</div>
           </div>
-        </div>
-      )}
+        )}
 
-      {grupos.length === 0 ? (
-        <div className={tarjetaClase}>
-          <p className="text-center text-gray-400 py-4">No hay jugadores registrados.</p>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {grupos.map(([categoriaNombre, lista]) => (
-            <div key={categoriaNombre} className={tarjetaClase}>
-              <h3 className="text-xl font-semibold mb-3 text-center">
-                Categoría {categoriaNombre}
-              </h3>
+        {grupos.length === 0 ? (
+          <div className={ui.card}>
+            <p className={`text-center py-6 ${ui.subtitle}`}>No hay jugadores registrados.</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {grupos.map(([categoriaNombre, lista]) => (
+              <div key={categoriaNombre} className={ui.card}>
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className={`text-xl font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}>
+                    Categoría {categoriaNombre}
+                  </h3>
+                  <span className={ui.badge}>Jugadores: {lista.length}</span>
+                </div>
 
-              <div className="w-full overflow-x-auto">
-                <table className="w-full text-xs sm:text-sm min-w-[820px]">
-                  <thead className={`${tablaCabecera} text-[10px] sm:text-xs`}>
-                    <tr>
-                      <th className="p-2 border text-center w-40">Nombre</th>
-                      <th className="p-2 border text-center w-28">RUT</th>
-                      <th className="p-2 border text-center w-16">Edad</th>
-                      <th className="p-2 border text-center w-28">Teléfono</th>
-                      <th className="p-2 border text-center w-40">Email</th>
-                      <th className="p-2 border text-center w-28">Posición</th>
-                      <th className="p-2 border text-center w-24">Estado</th>
-                    </tr>
-                  </thead>
+                <div className="mt-4" style={{ height: 1, background: ui.line }} />
 
-                  <tbody>
-                    {lista.map((jugador) => {
-                      const rutCrudo = jugador?.rut_jugador ?? jugador?.rut ?? jugador?.id ?? null;
-                      const rutFmt = rutCrudo ? formatRutWithDV(rutCrudo) : "-";
+                <div className={`mt-4 ${ui.tableWrap}`}>
+                  <table className={ui.table}>
+                    <thead className={ui.thead}>
+                      <tr>
+                        <th className={`${ui.thBase} w-44`} style={{ ...ui.headBorderStyle, borderLeft: ui.border }}>
+                          Nombre
+                        </th>
+                        <th className={`${ui.thBase} w-28`} style={ui.headBorderStyle}>
+                          RUT
+                        </th>
+                        <th className={`${ui.thBase} w-16`} style={ui.headBorderStyle}>
+                          Edad
+                        </th>
+                        <th className={`${ui.thBase} w-28`} style={ui.headBorderStyle}>
+                          Teléfono
+                        </th>
+                        <th className={`${ui.thBase} w-44`} style={ui.headBorderStyle}>
+                          Email
+                        </th>
+                        <th className={`${ui.thBase} w-28`} style={ui.headBorderStyle}>
+                          Posición
+                        </th>
+                        <th className={`${ui.thBase} w-24`} style={ui.headBorderStyle}>
+                          Estado
+                        </th>
+                      </tr>
+                    </thead>
 
-                      return (
-                        <tr
-                          key={jugador?.rut_jugador ?? jugador?.id ?? `${categoriaNombre}-${String(rutCrudo ?? Math.random())}`}
-                          className={`${filaHover} cursor-pointer`}
-                          onClick={() => handleClick(jugador?.rut_jugador ?? jugador?.rut ?? rutCrudo)}
-                          title="Ver detalle del jugador"
-                        >
-                          <td className="p-2 border text-center">{jugador?.nombre_jugador ?? "—"}</td>
-                          <td className="p-2 border text-center">{rutFmt || rutCrudo || "-"}</td>
-                          <td className="p-2 border text-center">{jugador?.edad ?? "-"}</td>
-                          <td className="p-2 border text-center">{jugador?.telefono ?? "-"}</td>
-                          <td className="p-2 border text-center break-all">{jugador?.email ?? "-"}</td>
-                          <td className="p-2 border text-center">
-                            {jugador?.posicion?.nombre ?? jugador?.posicion_id ?? "-"}
-                          </td>
-                          <td className="p-2 border text-center">
-                            {jugador?.estado?.nombre ?? jugador?.estado_id ?? "-"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                    <tbody>
+                      {lista.map((jugador) => {
+                        const rutCrudo = jugador?.rut_jugador ?? jugador?.rut ?? jugador?.id ?? null;
+                        const rutFmt = rutCrudo ? formatRutWithDV(rutCrudo) : "-";
+                        const rutKey = String(jugador?.rut_jugador ?? jugador?.rut ?? jugador?.id ?? "");
+
+                        return (
+                          <tr
+                            key={`${categoriaNombre}-${rutKey || "no-rut"}`}
+                            className={ui.tr}
+                            onClick={() => handleClick(jugador?.rut_jugador ?? jugador?.rut ?? rutCrudo)}
+                            title="Ver detalle del jugador"
+                          >
+                            <td className={ui.tdBase} style={{ ...ui.cellBorderStyle, borderLeft: ui.border }}>
+                              {jugador?.nombre_jugador ?? "—"}
+                            </td>
+                            <td className={ui.tdBase} style={ui.cellBorderStyle}>
+                              {rutFmt || rutCrudo || "-"}
+                            </td>
+                            <td className={ui.tdBase} style={ui.cellBorderStyle}>
+                              {jugador?.edad ?? "-"}
+                            </td>
+                            <td className={ui.tdBase} style={ui.cellBorderStyle}>
+                              {jugador?.telefono ?? "-"}
+                            </td>
+                            <td className={`${ui.tdBase} break-all`} style={ui.cellBorderStyle}>
+                              {jugador?.email ?? "-"}
+                            </td>
+                            <td className={ui.tdBase} style={ui.cellBorderStyle}>
+                              {jugador?.posicion?.nombre ?? jugador?.posicion_id ?? "-"}
+                            </td>
+                            <td className={ui.tdBase} style={{ ...ui.cellBorderStyle, borderRight: ui.border }}>
+                              {jugador?.estado?.nombre ?? jugador?.estado_id ?? "-"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </main>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 // src/pages/admin/configuracion.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "../../context/ThemeContext";
 import { jwtDecode } from "jwt-decode";
@@ -18,6 +18,7 @@ import {
 import { getToken, clearToken } from "../../services/api";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
+/* ───────────────── Auth helpers ───────────────── */
 function isTokenExpired(decoded) {
   const now = Math.floor(Date.now() / 1000);
   return !decoded?.exp || decoded.exp <= now;
@@ -36,7 +37,6 @@ export default function Configuracion() {
 
   useMobileAutoScrollTop();
 
-  // ✅ Estrategia dorada: detecta árbol actual
   const dashboardBase = useMemo(() => {
     const p = location.pathname || "";
     return p.startsWith("/super-dashboard/admin/dashboard")
@@ -44,11 +44,15 @@ export default function Configuracion() {
       : "/admin";
   }, [location.pathname]);
 
-  // ✅ rol actual (para filtrar tarjetas como en dashboard)
   const [rol, setRol] = useState(null);
 
-  // 🔐 Validación de sesión y autorización (permitimos 1 y 3)
+  // anti-loop extra (por si alguien navega raro)
+  const bootRef = useRef(false);
+
   useEffect(() => {
+    if (bootRef.current) return;
+    bootRef.current = true;
+
     try {
       const token = getToken();
       if (!token) throw new Error("no-token");
@@ -74,14 +78,6 @@ export default function Configuracion() {
     }
   }, [navigate, dashboardBase]);
 
-  // 🎨 Estilos según tema (alineados al dashboard)
-  const estiloFondo = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";
-
-  const cardBase = darkMode
-    ? "bg-[#1f2937] border border-[#2b3341] hover:border-[#e82d89]"
-    : "bg-white border border-[#eee] hover:border-[#e82d89]";
-
-  // 📚 Rutas de configuración con roles por tarjeta
   const entidades = useMemo(() => {
     const base = dashboardBase;
     return [
@@ -90,10 +86,7 @@ export default function Configuracion() {
       { nombre: "Gestionar posiciones", ruta: `${base}/configuracion/posiciones`, Icon: Goal, roles: [1, 3] },
       { nombre: "Gestionar medios de pago", ruta: `${base}/configuracion/medios-pago`, Icon: CreditCard, roles: [1, 3] },
       { nombre: "Gestionar tipos de pago", ruta: `${base}/configuracion/tipos-pago`, Icon: ListChecks, roles: [1, 3] },
-
-      // 👑 SOLO rol 3
       { nombre: "Gestionar roles", ruta: `${base}/configuracion/roles`, Icon: ShieldCheck, roles: [3] },
-
       {
         nombre: "Gestionar colegios",
         ruta: `${base}/configuracion/establecimientos-educacionales`,
@@ -110,40 +103,121 @@ export default function Configuracion() {
     ];
   }, [dashboardBase]);
 
-  // 🔒 Mientras no tenemos rol, evitamos parpadeos (y links que “duran 0.6s”)
-  if (rol === null) {
-    return (
-      <div className={`${estiloFondo} min-h-[calc(100vh-100px)] px-4 pt-4 pb-16 font-weli`}>
-        <h2 className="text-2xl font-bold mb-8 text-center flex items-center justify-center gap-2">
-          <SettingsIcon className="w-6 h-6" /> Panel de Configuración
-        </h2>
-        <p className="text-center opacity-70">Cargando permisos…</p>
-      </div>
-    );
-  }
+  const visibles = useMemo(() => {
+    if (rol == null) return [];
+    return entidades
+      .filter((e) => !e.roles || e.roles.includes(rol))
+      .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || "", "es", { sensitivity: "base" }));
+  }, [entidades, rol]);
 
-  const visibles = entidades
-    .filter((e) => !e.roles || e.roles.includes(rol))
-    .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || "", "es", { sensitivity: "base" }));
+  /* =======================
+     🎨 UI estilo SuperDashboard.jsx
+  ======================= */
+  const PALETTE_X = {
+    copper: "#aa5013",
+    brown: "#6d5829",
+    cream: "#e8dac4",
+    sand: "#ffdda1",
+    terracotta: "#e2773b",
+  };
+
+  const ui = useMemo(() => {
+    const shell = darkMode
+      ? "bg-[#111827] text-white"
+      : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
+
+    const titleMain = darkMode ? "text-white" : "text-ra-marron";
+    const subText = darkMode ? "text-white/70" : "text-ra-marron/70";
+
+    const card =
+      "rounded-2xl border shadow-lg transition transform " +
+      (darkMode
+        ? "bg-white/10 border-white/15 hover:bg-white/12 hover:border-white/20"
+        : "bg-white/60 border-ra-marron/15 hover:bg-white/75 hover:border-ra-marron/20") +
+      " hover:-translate-y-1 hover:shadow-xl";
+
+    const iconBadge =
+      "w-14 h-14 rounded-2xl flex items-center justify-center border " +
+      (darkMode
+        ? "bg-white/12 border-white/18"
+        : "bg-[rgba(109,88,41,0.08)] border-[rgba(109,88,41,0.18)]");
+
+    const iconStyle = { color: darkMode ? PALETTE_X.cream : PALETTE_X.brown };
+
+    // botón/indicador mini
+    const chip =
+      "inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border " +
+      (darkMode
+        ? "bg-black/20 border-white/15 text-white/80"
+        : "bg-white/70 border-ra-marron/15 text-ra-marron/70");
+
+    // tarjeta clickable (todo el link)
+    const cardInner = "p-6 h-40 flex flex-col items-center justify-center gap-3 text-center";
+
+    const cardTitle = darkMode ? "text-white/90 font-extrabold" : "text-ra-marron font-extrabold";
+    const cardHint = darkMode ? "text-white/70" : "text-ra-marron/70";
+
+    return {
+      shell,
+      titleMain,
+      subText,
+      card,
+      iconBadge,
+      iconStyle,
+      chip,
+      cardInner,
+      cardTitle,
+      cardHint,
+    };
+  }, [darkMode]);
 
   return (
-    <div className={`${estiloFondo} min-h-[calc(100vh-100px)] px-4 pt-4 pb-16 font-weli`}>
-      <h2 className="text-2xl font-bold mb-8 text-center flex items-center justify-center gap-2">
-        <SettingsIcon className="w-6 h-6" /> Panel de Configuración
-      </h2>
+    <div className={`${ui.shell} min-h-screen font-sans`}>
+      {/* Header centrado tipo SuperDashboard */}
+      <header className="px-6 pt-6 text-center">
+        <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.titleMain} flex items-center justify-center gap-3`}>
+          <SettingsIcon className="w-8 h-8" style={ui.iconStyle} />
+          Configuración
+        </h1>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-        {visibles.map(({ nombre, ruta, Icon }) => (
-          <Link key={ruta} to={ruta} className="block" aria-label={nombre}>
-            <div
-              className={`${cardBase} rounded-2xl p-6 shadow transition transform hover:-translate-y-1 hover:shadow-lg flex flex-col items-center justify-center gap-3 h-40`}
-            >
-              <Icon className="w-12 h-12 opacity-90" />
-              <h3 className="text-center font-semibold">{nombre}</h3>
+        <p className={`text-sm mt-2 ${ui.subText}`}>
+          Administra catálogos y parámetros del sistema.
+        </p>
+      </header>
+
+      <main className="px-6 pb-20">
+        {rol === null ? (
+          <div className="max-w-5xl mx-auto mt-8">
+            <div className={`${ui.card} p-6 text-center`}>
+              <p className={ui.subText}>Cargando permisos…</p>
             </div>
-          </Link>
-        ))}
-      </div>
+          </div>
+        ) : (
+          <div className="max-w-5xl mx-auto mt-8">
+            {visibles.length === 0 ? (
+              <div className={`${ui.card} p-6 text-center`}>
+                <p className={ui.subText}>No hay módulos disponibles para tu rol.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                {visibles.map(({ nombre, ruta, Icon }) => (
+                  <Link key={ruta} to={ruta} className="block" aria-label={nombre}>
+                    <div className={ui.card}>
+                      <div className={ui.cardInner}>
+                        <div className={ui.iconBadge} aria-hidden="true">
+                          <Icon className="w-8 h-8" style={ui.iconStyle} />
+                        </div>
+
+                        <h3 className={ui.cardTitle}>{nombre}</h3>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </main>
     </div>
   );
 }

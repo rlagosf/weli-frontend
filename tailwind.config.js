@@ -12,7 +12,7 @@ module.exports = {
           fucsia: "#aa5013", // cobre (acento principal)
           marron: "#6d5829", // base oscura cálida
           gold: "#b79f69",
-          cream: "#e8dac4",
+          fucsia: "#aa5013",
           sand: "#ffdda1",
           caramel: "#dda272",
           terracotta: "#e2773b",

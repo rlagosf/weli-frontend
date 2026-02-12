@@ -13,6 +13,19 @@ import { fillContratoTemplate } from "../../services/contratoFill";
 import { buildContratoPdfBlob } from "../../services/contratoPdf";
 import { formatRutWithDV } from "../../services/rut";
 
+/* =======================
+   🎨 Conjunto X
+======================= */
+const PALETTE = {
+  copper: "#aa5013",
+  brown: "#6d5829",
+  gold: "#b79f69",
+  cream: "#e8dac4",
+  sand: "#ffdda1",
+  caramel: "#dda272",
+  terracotta: "#e2773b",
+};
+
 /* ───────── Helpers robustos ───────── */
 const asList = (raw) => {
   if (!raw) return [];
@@ -74,23 +87,32 @@ const blobToBase64 = (blob) =>
     reader.readAsDataURL(blob);
   });
 
-/* ───────── Modal simple ───────── */
+/* ───────── Modal simple (ESTILO SuperDashboard) ───────── */
 function Modal({ open, title, children, onClose, darkMode }) {
   if (!open) return null;
+
+  const card =
+    "relative w-full max-w-md rounded-2xl border backdrop-blur-md shadow-[0_10px_40px_rgba(0,0,0,0.25)] p-5 " +
+    (darkMode ? "bg-white/10 border-white/15 text-white" : "bg-white/60 border-ra-marron/15 text-ra-marron");
+
+  const titleColor = darkMode ? "text-white" : "text-ra-marron";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div
-        className={`relative w-full max-w-md rounded-2xl shadow-xl p-5 ${
-          darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]"
-        }`}
-      >
-        <h3 className="text-lg font-bold mb-2">{title}</h3>
-        <div className="text-sm mb-4">{children}</div>
+      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+      <div className={card}>
+        <h3 className={`text-lg font-extrabold mb-2 ${titleColor}`}>{title}</h3>
+        <div className={darkMode ? "text-sm mb-4 text-white/85" : "text-sm mb-4 text-ra-marron/80"}>
+          {children}
+        </div>
         <div className="flex justify-end">
           <button
             onClick={onClose}
-            className="bg-[#24C6FF] text-white py-2 px-4 rounded hover:brightness-90"
+            className="py-2 px-4 rounded-xl font-bold border border-white/15 hover:opacity-90 active:scale-[0.99] transition"
+            style={{
+              background: `linear-gradient(135deg, ${PALETTE.copper}, ${PALETTE.terracotta})`,
+              color: "white",
+            }}
           >
             OK
           </button>
@@ -120,7 +142,7 @@ const getAcademiaIdFromStorage = () => {
 };
 
 const extractRol = (decoded) => {
-  const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
+  const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
   const n = Number(rawRol);
   return Number.isFinite(n) ? n : 0;
 };
@@ -144,19 +166,17 @@ const isExpired = (decoded) => {
 };
 
 /**
- * ✅ Headers multi-academia (alineado con backend nuevo):
+ * ✅ Headers multi-academia (alineado backend nuevo):
  * - Authorization siempre
- * - x-academia-id SOLO para rol 3 (superadmin) y solo si existe en storage
+ * - x-academia-id SOLO para rol 3 y solo si existe en storage
  */
 const buildHeaders = (rolActual) => {
   const token = getToken();
   const h = token ? { Authorization: `Bearer ${token}` } : {};
-
   if (rolActual === 3) {
     const a = getAcademiaIdFromStorage();
     if (a) h["x-academia-id"] = String(a);
   }
-
   return h;
 };
 
@@ -177,7 +197,6 @@ const tryGetList = async (paths, { signal, headers }) => {
       if (e?.name === "CanceledError" || e?.code === "ERR_CANCELED") return [];
       const st = e?.status ?? e?.response?.status;
       if (st === 401 || st === 403) throw e;
-      // otros errores: probamos siguiente variante
     }
   }
   return [];
@@ -274,7 +293,7 @@ export default function FormJugador() {
       const tokenAcademia = extractAcademiaFromToken(decoded);
       const storedAcademia = getAcademiaIdFromStorage();
 
-      // ✅ rol 1/2: no usamos x-academia-id; si hay basura guardada, la limpiamos para evitar confusiones
+      // ✅ rol 1/2: NO usamos x-academia-id; si hay basura guardada distinta, la limpiamos
       if ((rol === 1 || rol === 2) && storedAcademia && tokenAcademia && storedAcademia !== tokenAcademia) {
         try {
           localStorage.removeItem(ACADEMIA_STORAGE_KEY);
@@ -286,7 +305,7 @@ export default function FormJugador() {
       if (rol === 3 && !a) {
         setRolActual(rol);
         setAcademiaTarget(null);
-        setError("⚠️ Superadmin: selecciona una academia (x-academia-id) para cargar catálogos.");
+        setError("⚠️ Superadmin: selecciona una academia para cargar catálogos (x-academia-id).");
         setIsLoading(false);
         return;
       }
@@ -323,7 +342,7 @@ export default function FormJugador() {
     };
   }, []);
 
-  /* ───────── Cargar catálogos (resistente + abort + headers) ───────── */
+  /* ───────── Cargar catálogos (por academia) ───────── */
   useEffect(() => {
     if (![1, 2, 3].includes(rolActual)) return;
 
@@ -380,7 +399,7 @@ export default function FormJugador() {
         setComunas(comN);
 
         const allEmpty = [posN, catN, estN, eduN, prevN, sucN, comN].every((arr) => arr.length === 0);
-        if (allEmpty) setError("❌ No se pudieron cargar los datos de selección");
+        if (allEmpty) setError("❌ No se pudieron cargar los datos de selección para esta academia.");
 
         // ✅ Invalida selects si ya no existen (por cambio de academia o data)
         setFormData((prev) => {
@@ -401,9 +420,8 @@ export default function FormJugador() {
         const st = err?.status ?? err?.response?.status;
 
         if (st === 401 || st === 403) {
-          // si superadmin y falta header -> error claro
           if (rolActual === 3) {
-            setError("⚠️ Superadmin: falta x-academia-id. Selecciona una academia para cargar catálogos.");
+            setError("⚠️ Superadmin: falta x-academia-id o no tienes academia seleccionada.");
             setIsLoading(false);
             return;
           }
@@ -412,7 +430,7 @@ export default function FormJugador() {
           return;
         }
 
-        if (!abort.signal.aborted) setError("❌ No se pudieron cargar los datos de selección");
+        if (!abort.signal.aborted) setError("❌ No se pudieron cargar los datos de selección.");
       } finally {
         if (alive && !abort.signal.aborted) setIsLoading(false);
       }
@@ -432,9 +450,7 @@ export default function FormJugador() {
       categoria_id: !prev.categoria_id && categorias.length === 1 ? String(categorias[0].id) : prev.categoria_id,
       estado_id: !prev.estado_id && estados.length === 1 ? String(estados[0].id) : prev.estado_id,
       establec_educ_id:
-        !prev.establec_educ_id && establecimientos.length === 1
-          ? String(establecimientos[0].id)
-          : prev.establec_educ_id,
+        !prev.establec_educ_id && establecimientos.length === 1 ? String(establecimientos[0].id) : prev.establec_educ_id,
       prevision_medica_id:
         !prev.prevision_medica_id && previsiones.length === 1 ? String(previsiones[0].id) : prev.prevision_medica_id,
       sucursal_id: !prev.sucursal_id && sucursales.length === 1 ? String(sucursales[0].id) : prev.sucursal_id,
@@ -525,7 +541,7 @@ export default function FormJugador() {
 
     const edadNum = Number(formData.edad || "0");
     if (formData.edad && (edadNum < 5 || edadNum > 100)) {
-      return setError("La edad debe estar entre 5 y 100 años si la indicas");
+      return setError("La edad debe estar entre 5 y 100 años si la indicas.");
     }
 
     if (formData.telefono) {
@@ -545,7 +561,12 @@ export default function FormJugador() {
     }
 
     if ([formData.posicion_id, formData.categoria_id, formData.estado_id].some((v) => !v)) {
-      return setError("Debes seleccionar posición, categoría y estado");
+      return setError("Debes seleccionar posición, categoría y estado.");
+    }
+
+    // ✅ rol 3 exige academia target
+    if (rolActual === 3 && !getAcademiaIdFromStorage()) {
+      return setError("⚠️ Superadmin: selecciona una academia antes de guardar (x-academia-id).");
     }
 
     try {
@@ -590,7 +611,7 @@ export default function FormJugador() {
 
       setMensaje(
         `✅ Jugador registrado: ${nombreOk}${idOk ? ` (ID ${idOk})` : ""}` +
-          (apoderadoCredencial ? " • Apoderado habilitado para portal (credencial temporal) ✅" : "")
+          (apoderadoCredencial ? " • Apoderado habilitado para portal ✅" : "")
       );
 
       setCreatedInfo({ nombre: nombreOk, id: idOk, apoderadoCredencial });
@@ -633,10 +654,7 @@ export default function FormJugador() {
       }
 
       if (st === 403) {
-        // superadmin sin target o mismatch
-        if (rolActual === 3) {
-          return setError("⚠️ Superadmin: falta x-academia-id o no tienes academia seleccionada.");
-        }
+        if (rolActual === 3) return setError("⚠️ Superadmin: falta x-academia-id o academia no autorizada.");
         clearToken();
         return navigate("/login", { replace: true });
       }
@@ -648,32 +666,66 @@ export default function FormJugador() {
     }
   };
 
-  /* ───────── Clases ───────── */
-  const c = useMemo(
-    () => ({
-      fondo: darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]",
-      tarjeta: darkMode ? "bg-[#1f2937] text-white" : "bg-white text-[#1d0b0b]",
-      input:
-        (darkMode
-          ? "bg-[#1f2937] text-white border border-gray-600 placeholder-gray-400"
-          : "bg-white text-black border border-gray-300 placeholder-gray-500") + " w-full box-border",
-    }),
-    [darkMode]
-  );
+  /* ───────── UI (ESTILO SuperDashboard) ───────── */
+  const ui = useMemo(() => {
+    const page =
+      "min-h-screen px-4 pt-4 pb-16 font-sans overflow-x-hidden " +
+      (darkMode
+        ? "bg-[#111827] text-white"
+        : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron");
 
-  // ✅ si rol 3 y no hay academiaTarget: no bloquees con loader eterno
+    const card =
+      "w-full max-w-full md:max-w-2xl mx-auto rounded-2xl border shadow-lg " +
+      (darkMode ? "bg-white/10 border-white/15" : "bg-white/60 border-ra-marron/15");
+
+    const input =
+      "w-full box-border rounded-xl px-3 py-2 border outline-none transition " +
+      (darkMode
+        ? "bg-white/10 border-white/15 text-white placeholder-white/40 focus:border-white/30 focus:ring-2 focus:ring-white/10"
+        : "bg-white/60 border-ra-marron/15 text-ra-marron placeholder-ra-marron/40 focus:border-ra-terracotta focus:ring-2 focus:ring-[rgba(170,80,19,0.18)]");
+
+    const select = input;
+    const textarea = input + " h-24 resize-none";
+
+    const bannerErr =
+      "mb-4 p-3 rounded-2xl border " +
+      (darkMode ? "bg-red-500/10 border-red-300/20 text-red-100" : "bg-red-500/10 border-red-600/25 text-red-800");
+
+    const bannerWarn =
+      "mb-4 p-3 rounded-2xl border " +
+      (darkMode
+        ? "bg-amber-500/10 border-amber-300/20 text-amber-100"
+        : "bg-amber-500/10 border-amber-600/25 text-amber-900");
+
+    const btn =
+      "py-2 px-4 rounded-xl font-extrabold border border-white/15 hover:opacity-90 active:scale-[0.99] transition disabled:opacity-60 disabled:cursor-not-allowed";
+
+    const btnBg = {
+      background: `linear-gradient(135deg, ${PALETTE.copper}, ${PALETTE.terracotta})`,
+      color: "white",
+    };
+
+    const titleColor = darkMode ? "text-white" : "text-ra-marron";
+
+    return { page, card, input, select, textarea, bannerErr, bannerWarn, btn, btnBg, titleColor };
+  }, [darkMode]);
+
   if (isLoading) return <IsLoading />;
 
   return (
-    <div className={`${c.fondo} px-4 pt-4 pb-16 font-weli`}>
-      <h2 className="text-2xl font-bold mb-4 text-center">Registrar Jugador</h2>
+    <div className={ui.page}>
+      <h2 className={`text-2xl font-extrabold mb-4 text-center ${ui.titleColor}`}>Registrar Jugador</h2>
 
-      <div className={`${c.tarjeta} shadow-lg rounded-2xl p-4 sm:p-6 w-full max-w-full md:max-w-2xl mx-auto`}>
-        {error && (
-          <div className="mb-4 p-3 rounded border border-red-400 text-red-600 bg-red-50">{error}</div>
+      <div className={`${ui.card} p-4 sm:p-6`}>
+        {rolActual === 3 && !academiaTarget && (
+          <div className={ui.bannerWarn}>
+            ⚠️ Superadmin: selecciona una academia para operar (se enviará <b>x-academia-id</b>).
+          </div>
         )}
 
-        <form onSubmit={enviarJugador} className="grid md:grid-cols-1 lg:grid-cols-1 gap-4 text-sm">
+        {error && <div className={ui.bannerErr}>{error}</div>}
+
+        <form onSubmit={enviarJugador} className="grid gap-4 text-sm">
           {(() => {
             const fields = [
               ["nombre_jugador", "Nombre", true],
@@ -705,7 +757,7 @@ export default function FormJugador() {
                 onChange={handleChange}
                 placeholder={placeholder}
                 required={!!req}
-                className={`${c.input} p-2 rounded`}
+                className={ui.input}
               />
             );
 
@@ -717,7 +769,7 @@ export default function FormJugador() {
                   name="comuna_id"
                   value={formData.comuna_id ?? ""}
                   onChange={handleChange}
-                  className={`${c.input} p-2 rounded`}
+                  className={ui.select}
                 >
                   <option value="">Comuna</option>
                   {comunas.map((co) => (
@@ -737,7 +789,7 @@ export default function FormJugador() {
             value={formData.posicion_id}
             onChange={handleChange}
             required
-            className={`${c.input} p-2 rounded`}
+            className={ui.select}
           >
             <option value="">Posición</option>
             {posiciones.map((p) => (
@@ -752,7 +804,7 @@ export default function FormJugador() {
             value={formData.categoria_id}
             onChange={handleChange}
             required
-            className={`${c.input} p-2 rounded`}
+            className={ui.select}
           >
             <option value="">Categoría</option>
             {categorias.map((cc) => (
@@ -767,7 +819,7 @@ export default function FormJugador() {
             value={formData.estado_id}
             onChange={handleChange}
             required
-            className={`${c.input} p-2 rounded`}
+            className={ui.select}
           >
             <option value="">Estado</option>
             {estados.map((e) => (
@@ -781,7 +833,7 @@ export default function FormJugador() {
             name="establec_educ_id"
             value={formData.establec_educ_id}
             onChange={handleChange}
-            className={`${c.input} p-2 rounded`}
+            className={ui.select}
           >
             <option value="">Establecimiento Educacional</option>
             {establecimientos.map((e) => (
@@ -795,7 +847,7 @@ export default function FormJugador() {
             name="prevision_medica_id"
             value={formData.prevision_medica_id}
             onChange={handleChange}
-            className={`${c.input} p-2 rounded`}
+            className={ui.select}
           >
             <option value="">Previsión Médica</option>
             {previsiones.map((p) => (
@@ -809,7 +861,7 @@ export default function FormJugador() {
             name="sucursal_id"
             value={formData.sucursal_id}
             onChange={handleChange}
-            className={`${c.input} p-2 rounded`}
+            className={ui.select}
           >
             <option value="">Sucursal</option>
             {sucursales.map((s) => (
@@ -824,39 +876,37 @@ export default function FormJugador() {
             value={formData.observaciones}
             onChange={handleChange}
             placeholder="Observaciones"
-            className={`${c.input} col-span-full p-2 rounded h-24 resize-none`}
+            className={ui.textarea}
           />
 
           {/* ✅ Un solo botón Guardar (contrato + jugador) */}
-          <div className="col-span-full flex gap-3">
+          <div className="flex gap-3">
             <button
               type="submit"
-              disabled={isSubmitting}
-              className={`${
-                isSubmitting ? "opacity-60 cursor-not-allowed" : ""
-              } bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700`}
+              disabled={isSubmitting || (rolActual === 3 && !academiaTarget)}
+              className={ui.btn}
+              style={ui.btnBg}
             >
               {isSubmitting ? "Guardando… (generando contrato)" : "Guardar"}
             </button>
           </div>
 
           {isSubmitting && (
-            <div className="col-span-full text-xs opacity-80">
-              Procesando contrato y guardando jugador… no cierres esta pestaña 😄
+            <div className={darkMode ? "text-xs text-white/75" : "text-xs text-ra-marron/70"}>
+              Procesando contrato y guardando jugador… si lo cierras, el sistema te cobra “IVA emocional” 😄
             </div>
           )}
         </form>
 
-        {mensaje && <p className="text-green-500 mt-4 text-center">{mensaje}</p>}
+        {mensaje && (
+          <p className={darkMode ? "text-emerald-200 mt-4 text-center font-bold" : "text-emerald-700 mt-4 text-center font-bold"}>
+            {mensaje}
+          </p>
+        )}
       </div>
 
       {/* ✅ Modal "jugador creado" */}
-      <Modal
-        open={createdOpen}
-        onClose={() => setCreatedOpen(false)}
-        title="✅ Jugador creado"
-        darkMode={darkMode}
-      >
+      <Modal open={createdOpen} onClose={() => setCreatedOpen(false)} title="✅ Jugador creado" darkMode={darkMode}>
         <div>
           <div>
             <b>Nombre:</b> {createdInfo.nombre}
@@ -867,11 +917,13 @@ export default function FormJugador() {
             </div>
           )}
 
-          <div className="mt-2 opacity-80">Contrato generado y almacenado en la base de datos.</div>
+          <div className={darkMode ? "mt-2 text-white/80" : "mt-2 text-ra-marron/75"}>
+            Contrato generado y almacenado en la base de datos.
+          </div>
 
           {createdInfo.apoderadoCredencial && (
-            <div className="mt-2 text-xs opacity-90">
-              ✅ Apoderado habilitado para portal: credencial temporal creada.
+            <div className={darkMode ? "mt-2 text-xs text-white/85" : "mt-2 text-xs text-ra-marron/80"}>
+              ✅ Apoderado habilitado para portal (credencial temporal creada).
             </div>
           )}
         </div>

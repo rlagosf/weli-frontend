@@ -11,8 +11,34 @@ import { Bar } from "react-chartjs-2";
 
 Chart.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
-/* ================= Helpers academia/header ================= */
+/* =======================
+   🎨 Conjunto X (UI)
+======================= */
+const PALETTE_X = {
+  copper: "#aa5013",
+  brown: "#6d5829",
+  gold: "#b79f69",
+  cream: "#e8dac4",
+  sand: "#ffdda1",
+  caramel: "#dda272",
+  terracotta: "#e2773b",
+};
 
+/* ✅ Colores de gráficos */
+const EVENT_COLORS = [
+  "#2563EB",
+  "#0EA5E9",
+  "#14B8A6",
+  "#22C55E",
+  "#A855F7",
+  "#F97316",
+  "#EF4444",
+  "#F59E0B",
+  "#06B6D4",
+  "#64748B",
+];
+
+/* ================= Helpers academia/header ================= */
 const getAcademiaIdFromStorage = () => {
   try {
     const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
@@ -84,7 +110,7 @@ export default function PowerbiFinanzas() {
   }, [location.pathname, location.search]);
 
   // ─────────────────────────────
-  // 🔄 Sync academiaId (superdashboard)
+  // 🔄 Sync academiaId
   // ─────────────────────────────
   useEffect(() => {
     let alive = true;
@@ -108,13 +134,13 @@ export default function PowerbiFinanzas() {
     };
   }, []);
 
-  // Limpieza al cambiar academia (evita “ver pagos viejos”)
+  // Limpieza al cambiar academia
   useEffect(() => {
     if (rol === 3) setPagos([]);
   }, [academiaId, rol]);
 
   // ─────────────────────────────
-  // 🔐 Auth (roles permitidos: 1 y 3)
+  // 🔐 Auth (roles: 1 y 3)
   // ─────────────────────────────
   useEffect(() => {
     try {
@@ -123,7 +149,6 @@ export default function PowerbiFinanzas() {
 
       const decoded = jwtDecode(token);
       const now = Math.floor(Date.now() / 1000);
-
       if (!decoded?.exp || decoded.exp <= now) throw new Error("expired");
 
       const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
@@ -156,7 +181,7 @@ export default function PowerbiFinanzas() {
   }, [rol, academiaId]);
 
   // ─────────────────────────────
-  // ✅ apiOps estable (con headers)
+  // ✅ apiOps estable
   // ─────────────────────────────
   const getErrStatus = (e) => e?.status ?? e?.response?.status ?? 0;
 
@@ -181,7 +206,7 @@ export default function PowerbiFinanzas() {
   }, []);
 
   // ─────────────────────────────
-  // Normalizadores robustos
+  // Normalizadores
   // ─────────────────────────────
   const normalizeListResponse = (res) => {
     if (!res || res.status === 204) return [];
@@ -193,7 +218,6 @@ export default function PowerbiFinanzas() {
     if (Array.isArray(d?.rows)) return d.rows;
     if (d?.ok && Array.isArray(d?.data)) return d.data;
     if (d?.ok && Array.isArray(d?.items)) return d.items;
-
     return [];
   };
 
@@ -207,7 +231,6 @@ export default function PowerbiFinanzas() {
     if (Array.isArray(d?.data)) return d.data;
     if (Array.isArray(d)) return d;
     if (d?.ok && Array.isArray(d?.data?.pagos)) return d.data.pagos;
-
     return [];
   };
 
@@ -282,7 +305,6 @@ export default function PowerbiFinanzas() {
         situacion_pago: { id: situId, nombre: situNombre },
         medio_pago: { id: medioId, nombre: medioNombre },
         observaciones: p?.observaciones ?? "",
-        // defensivo si viene:
         academia_id: p?.academia_id ?? p?.academiaId ?? p?.academia ?? null,
       };
     });
@@ -294,7 +316,7 @@ export default function PowerbiFinanzas() {
   }, [navigate]);
 
   // ─────────────────────────────
-  // 📥 Carga de datos (scoped por academia)
+  // 📥 Load data
   // ─────────────────────────────
   useEffect(() => {
     if (!canLoad) return;
@@ -349,13 +371,11 @@ export default function PowerbiFinanzas() {
           });
         }
 
-        // ✅ Pagos (estado-cuenta) — SCOPED
         const respEstado = await apiOps.getVar("/pagos-jugador/estado-cuenta", cfg);
         if (abort.signal.aborted) return;
 
         const rawPagos = extractPagosEstadoCuenta(respEstado);
 
-        // ✅ filtro defensivo SOLO si el backend trae academia_id
         let rawScoped = rawPagos;
         if (rol === 3 && academiaId != null) {
           const hasAcademiaKey = rawPagos.some(
@@ -380,9 +400,7 @@ export default function PowerbiFinanzas() {
       } catch (e) {
         if (abort.signal.aborted) return;
         const st = getErrStatus(e);
-
         if (st === 401 || st === 403) return handleAuth();
-
         setError("❌ No se pudieron cargar los datos financieros para los gráficos.");
       } finally {
         if (!abort.signal.aborted) setIsLoading(false);
@@ -393,37 +411,86 @@ export default function PowerbiFinanzas() {
   }, [rol, academiaId, canLoad, apiOps, handleAuth]);
 
   // ─────────────────────────────
-  // 🎨 UI
+  // 🎨 UI (SuperDashboard clone)
   // ─────────────────────────────
-  const estiloFondo = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";
-  const tarjetaClase = darkMode
-    ? "bg-[#1f2937] shadow-lg rounded-lg p-4 border border-gray-700"
-    : "bg-white shadow-md rounded-lg p-4 border border-gray-200";
+  const ui = useMemo(() => {
+    const shell = darkMode
+      ? "bg-[#111827] text-white"
+      : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
 
-  const colores = useMemo(
-    () => ["#4dc9f6", "#f67019", "#f53794", "#537bc4", "#acc236", "#166a8f", "#00a950", "#58595b", "#8549ba"],
-    []
-  );
+    const headerSub = darkMode ? "text-white/70" : "text-ra-marron/70";
 
+    const msgBox = darkMode
+      ? "border-red-200/20 bg-red-500/10 text-red-100"
+      : "border-red-200 bg-red-50 text-red-700";
+
+    const card = darkMode
+      ? "bg-white/10 border-white/15"
+      : "bg-white/60 border-ra-marron/15";
+
+    // Color “título de panel” (igual que el admin)
+    const titleMain = darkMode ? "text-white" : "text-ra-marron";
+
+    // Títulos internos (tipo/medio/categoría/mes): marrón en light, blanco en dark
+    const sectionTitleStyle = darkMode ? {} : { color: PALETTE_X.brown };
+
+    // Texto dentro del chart en light debe ir oscuro/cálido (mismo que títulos)
+    const chartText = darkMode ? "rgba(255,255,255,0.88)" : PALETTE_X.brown;
+    const chartGrid = darkMode ? "rgba(255,255,255,0.10)" : "rgba(109,88,41,0.18)";
+
+    return { shell, headerSub, msgBox, card, titleMain, sectionTitleStyle, chartText, chartGrid };
+  }, [darkMode]);
+
+  // ─────────────────────────────
+  // 📊 Charts (EVENT_COLORS + texto adaptativo)
+  // ─────────────────────────────
   const chartOpts = useMemo(
     () => ({
       indexAxis: "x",
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: darkMode ? "white" : "#1d0b0b" } } },
+      plugins: {
+        legend: { labels: { color: ui.chartText } },
+        tooltip: {
+          titleColor: ui.chartText,
+          bodyColor: ui.chartText,
+          backgroundColor: darkMode ? "rgba(0,0,0,0.75)" : "rgba(255,255,255,0.92)",
+          borderColor: darkMode ? "rgba(255,255,255,0.10)" : "rgba(109,88,41,0.20)",
+          borderWidth: 1,
+        },
+      },
       scales: {
-        x: { ticks: { color: darkMode ? "white" : "#1d0b0b" } },
-        y: { ticks: { color: darkMode ? "white" : "#1d0b0b" } },
+        x: {
+          ticks: { color: ui.chartText },
+          grid: { color: ui.chartGrid },
+        },
+        y: {
+          ticks: { color: ui.chartText },
+          grid: { color: ui.chartGrid },
+          beginAtZero: true,
+        },
       },
     }),
-    [darkMode]
+    [ui.chartText, ui.chartGrid, darkMode]
   );
 
   const datasetFrom = (labels, data, label = "Total (CLP)") => ({
     labels,
-    datasets: [{ label, data, backgroundColor: labels.map((_, i) => colores[i % colores.length]) }],
+    datasets: [
+      {
+        label,
+        data,
+        backgroundColor: labels.map((_, i) => EVENT_COLORS[i % EVENT_COLORS.length]),
+        borderColor: darkMode ? "rgba(255,255,255,0.14)" : "rgba(109,88,41,0.18)",
+        borderWidth: 1,
+        borderRadius: 10,
+      },
+    ],
   });
 
+  // ─────────────────────────────
+  // Aggregations
+  // ─────────────────────────────
   const datosPorTipo = useMemo(() => {
     const agg = new Map();
     for (const p of pagos) {
@@ -477,56 +544,77 @@ export default function PowerbiFinanzas() {
 
   if (error) {
     return (
-      <div className={`${estiloFondo} min-h-[calc(100vh-100px)] flex items-center justify-center`}>
-        <p className="text-red-500 text-sm sm:text-base">{error}</p>
+      <div className={`${ui.shell} min-h-screen font-sans`}>
+        <div className="px-6 pt-6">
+          <div className={`mt-8 rounded-2xl border px-5 py-4 font-semibold ${ui.msgBox}`}>{error}</div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className={`${estiloFondo} min-h-[calc(100vh-100px)] px-4 pt-4 pb-16 font-realacademy`}>
-      <h2 className="text-2xl font-bold mb-2 text-center">Power BI Financiero — Resumen de Pagos</h2>
-
-      <p className="text-center mb-6 text-sm opacity-80">
-        Visualización consolidada de <span className="font-semibold">pagos_jugador</span> vía{" "}
-        <span className="font-semibold">/pagos-jugador/estado-cuenta</span>.
-      </p>
-
-      {pagos.length === 0 && (
-        <p className="text-center text-sm opacity-70 mb-6">
-          No llegaron pagos al frontend (scoping aplicado). Si el endpoint responde con data, era un tema de filtro/header.
-        </p>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className={tarjetaClase}>
-          <h4 className="text-sm font-semibold mb-3 text-center">Total por Tipo de Pago</h4>
-          <div style={{ height: "360px" }}>
-            <Bar data={datasetFrom(datosPorTipo.labels, datosPorTipo.data)} options={chartOpts} />
-          </div>
+    <div className={`${ui.shell} min-h-screen font-sans`}>
+      {/* ✅ Título principal centrado */}
+      <header className="px-6 pt-6">
+        <div className="text-center">
+          <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>
+            Power BI Financiero — Resumen de Pagos
+          </h1>
+          <p className={`text-sm mt-2 ${ui.headerSub}`}>
+            Visualización consolidada de la totalidad de pagos recibidos por tipo y medio de pago
+          </p>
         </div>
+      </header>
 
-        <div className={tarjetaClase}>
-          <h4 className="text-sm font-semibold mb-3 text-center">Total por Medio de Pago</h4>
-          <div style={{ height: "360px" }}>
-            <Bar data={datasetFrom(datosPorMedio.labels, datosPorMedio.data)} options={chartOpts} />
+      <main className="px-6 pb-20">
+        {pagos.length === 0 && (
+          <div
+            className={`mt-8 rounded-2xl border px-5 py-4 font-semibold ${
+              darkMode ? "border-white/15 bg-white/10 text-white/80" : "border-ra-marron/15 bg-white/60 text-ra-marron"
+            }`}
+          >
+            No llegaron pagos al frontend (scoping aplicado). Si el endpoint responde con data, revisa filtro/header.
           </div>
-        </div>
+        )}
 
-        <div className={tarjetaClase}>
-          <h4 className="text-sm font-semibold mb-3 text-center">Total por Categoría</h4>
-          <div style={{ height: "360px" }}>
-            <Bar data={datasetFrom(datosPorCategoria.labels, datosPorCategoria.data)} options={chartOpts} />
-          </div>
-        </div>
+        <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <section className={`${ui.card} rounded-2xl p-6 shadow-lg transition`}>
+            <h2 className="text-lg font-extrabold text-center" style={ui.sectionTitleStyle}>
+              Total por Tipo de Pago
+            </h2>
+            <div className="mt-4" style={{ height: 360 }}>
+              <Bar data={datasetFrom(datosPorTipo.labels, datosPorTipo.data)} options={chartOpts} />
+            </div>
+          </section>
 
-        <div className={tarjetaClase}>
-          <h4 className="text-sm font-semibold mb-3 text-center">Total por Mes (últimos 6)</h4>
-          <div style={{ height: "360px" }}>
-            <Bar data={datasetFrom(datosPorMes.labels, datosPorMes.data)} options={chartOpts} />
-          </div>
+          <section className={`${ui.card} rounded-2xl p-6 shadow-lg transition`}>
+            <h2 className="text-lg font-extrabold text-center" style={ui.sectionTitleStyle}>
+              Total por Medio de Pago
+            </h2>
+            <div className="mt-4" style={{ height: 360 }}>
+              <Bar data={datasetFrom(datosPorMedio.labels, datosPorMedio.data)} options={chartOpts} />
+            </div>
+          </section>
+
+          <section className={`${ui.card} rounded-2xl p-6 shadow-lg transition`}>
+            <h2 className="text-lg font-extrabold text-center" style={ui.sectionTitleStyle}>
+              Total por Categoría
+            </h2>
+            <div className="mt-4" style={{ height: 360 }}>
+              <Bar data={datasetFrom(datosPorCategoria.labels, datosPorCategoria.data)} options={chartOpts} />
+            </div>
+          </section>
+
+          <section className={`${ui.card} rounded-2xl p-6 shadow-lg transition`}>
+            <h2 className="text-lg font-extrabold text-center" style={ui.sectionTitleStyle}>
+              Total por Mes (últimos 6)
+            </h2>
+            <div className="mt-4" style={{ height: 360 }}>
+              <Bar data={datasetFrom(datosPorMes.labels, datosPorMes.data)} options={chartOpts} />
+            </div>
+          </section>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

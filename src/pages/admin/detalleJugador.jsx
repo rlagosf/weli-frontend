@@ -1,6 +1,6 @@
 // src/pages/admin/detalleJugador.jsx
 import { useNavigate, useLocation, useParams } from "react-router-dom";
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useTheme } from "../../context/ThemeContext";
 import { FiEdit, FiX } from "react-icons/fi";
 import { FileText } from "lucide-react";
@@ -20,8 +20,22 @@ import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
 ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
+/* =======================
+   🎨 Conjunto X
+======================= */
+const PALETTE = {
+  copper: "#aa5013",
+  brown: "#6d5829",
+  gold: "#b79f69",
+  cream: "#e8dac4",
+  sand: "#ffdda1",
+  caramel: "#dda272",
+  terracotta: "#e2773b",
+};
+const ACCENT = PALETTE.copper;
+
 /* ─────────────────────────────
-   Helpers base (estándar dorado)
+   Helpers base
 ───────────────────────────── */
 const asList = (raw) => {
   if (!raw) return [];
@@ -64,22 +78,17 @@ const normalizeCatalog = (arr) =>
     .map((x) => ({
       id: Number(
         x?.id ??
-        x?.posicion_id ??
-        x?.categoria_id ??
-        x?.establec_educ_id ??
-        x?.prevision_medica_id ??
-        x?.estado_id ??
-        x?.sucursal_id ??
-        x?.comuna_id
+          x?.posicion_id ??
+          x?.categoria_id ??
+          x?.establec_educ_id ??
+          x?.prevision_medica_id ??
+          x?.estado_id ??
+          x?.sucursal_id ??
+          x?.comuna_id
       ),
       nombre: String(x?.nombre ?? x?.descripcion ?? "").trim(),
     }))
     .filter((x) => Number.isFinite(x.id) && x.nombre);
-
-const num = (v, def = 0) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : def;
-};
 
 const buildFotoDataUrl = (j) => {
   const b64 = j?.foto_base64;
@@ -103,15 +112,12 @@ const flattenJoinedStats = (payload) => {
 
   if (merged?.stats_id == null && merged?.id != null) merged.stats_id = merged.id;
 
-  // intenta normalizar números si vienen como strings
   const out = {};
   for (const [k, v] of Object.entries(merged)) {
-    // si es null/undefined, lo dejamos así para que el UI haga ?? 0
     if (v == null) {
       out[k] = v;
       continue;
     }
-    // si parsea a número, usamos número, si no, dejamos original
     const n = Number(v);
     out[k] = Number.isFinite(n) ? n : v;
   }
@@ -119,7 +125,7 @@ const flattenJoinedStats = (payload) => {
 };
 
 /* ─────────────────────────────
-   Auth / Headers (WELI) — dorado
+   Auth / Scope (Conjunto X)
 ───────────────────────────── */
 const isExpired = (decoded) => {
   const now = Math.floor(Date.now() / 1000);
@@ -127,12 +133,11 @@ const isExpired = (decoded) => {
 };
 
 const extractRol = (decoded) => {
-  const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
+  const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
   const parsed = Number(rawRol);
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-/** Soporta "1" o JSON {"id":1} */
 const getAcademiaIdFromStorage = () => {
   try {
     const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
@@ -149,8 +154,11 @@ const getAcademiaIdFromStorage = () => {
   }
 };
 
-const buildHeaders = (rol) => {
-  const token = getToken();
+/**
+ * ✅ headers fallback (solo si tu api no inyecta por interceptor)
+ */
+const buildHeadersFallback = (rol) => {
+  const token = getToken?.() || "";
   const h = token ? { Authorization: `Bearer ${token}` } : {};
   if (rol === 3) {
     const a = getAcademiaIdFromStorage();
@@ -159,7 +167,7 @@ const buildHeaders = (rol) => {
   return h;
 };
 
-const tryGetList = async (paths, { signal, headers }) => {
+const tryGetList = async (paths, { signal, headers } = {}) => {
   const variants = [];
   for (const p of paths) {
     variants.push(p.endsWith("/") ? p : `${p}/`);
@@ -229,12 +237,20 @@ const openBlobUrlLikeHistorico = (blobUrl) => {
 export default function DetalleJugador() {
   const navigate = useNavigate();
   const location = useLocation();
-  const params = useParams(); // fallback legacy
+  const params = useParams();
   const { darkMode } = useTheme();
 
   useMobileAutoScrollTop();
 
-  // ✅ RUT: primero state (ruta nueva), luego params (ruta vieja)
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // ✅ RUT: state -> params
   const rut = useMemo(() => {
     const fromState = location.state?.rut;
     const fromParams = params?.rut;
@@ -242,24 +258,99 @@ export default function DetalleJugador() {
     return r != null ? String(r).trim() : "";
   }, [location.state, params]);
 
-  // ✅ Parent path: respeta esquema (no hardcode)
+  // ✅ Parent path (no hardcode)
   const parentPath = useMemo(() => {
     if (location.state?.from) return String(location.state.from);
-    // corta .../detalle-jugador o .../detalle-jugador/:rut
     return String(location.pathname || "")
       .replace(/\/detalle-jugador\/[^/]+\/?$/, "")
       .replace(/\/detalle-jugador\/?$/, "");
   }, [location.pathname, location.state]);
 
-  const css = {
-    fondo: darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]",
-    tarjeta: darkMode
-      ? "bg-[#1f2937] border border-gray-700 text-white"
-      : "bg-white border border-gray-200 text-[#1d0b0b]",
-    input: darkMode
-      ? "w-full p-1 rounded bg-[#374151] text-white border border-gray-600"
-      : "w-full p-1 rounded bg-gray-50 border border-gray-300",
-  };
+  const superTree = useMemo(
+    () => String(location.pathname || "").startsWith("/super-dashboard/admin/dashboard"),
+    [location.pathname]
+  );
+  const basePath = superTree ? "/super-dashboard/admin/dashboard" : "/admin";
+
+  /* =======================
+     UI estilo SuperDashboard.jsx
+     - nada de "cuadritos" para campos
+  ======================= */
+  const ui = useMemo(() => {
+    const shell = darkMode
+      ? "bg-[#111827] text-white"
+      : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
+
+    const titleMain = darkMode ? "text-white" : "text-ra-marron";
+    const subText = darkMode ? "text-white/70" : "text-ra-marron/70";
+
+    const card =
+      "rounded-2xl border shadow-lg transition " +
+      (darkMode ? "bg-white/10 border-white/15" : "bg-white/60 border-ra-marron/15");
+
+    const sectionCard =
+      "rounded-2xl border shadow-md " +
+      (darkMode ? "bg-white/8 border-white/15" : "bg-white/55 border-ra-marron/15");
+
+    // filas limpias (sin caja)
+    const row =
+      "py-3 flex items-start justify-between gap-4 border-b last:border-b-0 " +
+      (darkMode ? "border-white/10" : "border-ra-marron/15");
+
+    const rowLabel = darkMode ? "text-white/75 text-sm font-semibold" : "text-ra-marron/70 text-sm font-semibold";
+    const rowValue = darkMode ? "text-white text-sm font-bold text-right" : "text-ra-marron text-sm font-bold text-right";
+
+    // inputs overlay edición
+    const input =
+      "w-full p-2 rounded-lg text-sm outline-none border transition " +
+      "focus:ring-2 focus:ring-[rgba(170,80,19,0.22)] focus:border-[rgba(170,80,19,0.35)] " +
+      (darkMode
+        ? "bg-black/25 text-white border-white/15 placeholder-white/60"
+        : "bg-white/75 text-ra-marron border-ra-marron/20 placeholder-ra-marron/50");
+
+    const btnGhost =
+      "px-5 py-2 rounded-xl font-extrabold border transition-all shadow-sm " +
+      (darkMode
+        ? "bg-white/10 border-white/15 hover:bg-white/15"
+        : "bg-white/75 border-ra-marron/20 hover:bg-white/85");
+
+    const btnPrimary =
+      "px-5 py-2 rounded-xl font-extrabold transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
+
+    const btnPrimaryStyle = {
+      background: `linear-gradient(135deg, ${PALETTE.copper}, ${PALETTE.terracotta})`,
+      color: "#1a1208",
+      border: darkMode ? "1px solid rgba(255,255,255,0.20)" : "1px solid rgba(109,88,41,0.18)",
+    };
+
+    const danger =
+      "rounded-2xl border px-5 py-4 font-semibold text-center " +
+      (darkMode
+        ? "border-red-200/20 bg-red-500/10 text-red-100"
+        : "border-red-200 bg-red-50 text-red-800");
+
+    const successToast = {
+      backgroundColor: "rgba(34,197,94,0.92)",
+      color: "white",
+    };
+
+    return {
+      shell,
+      titleMain,
+      subText,
+      card,
+      sectionCard,
+      row,
+      rowLabel,
+      rowValue,
+      input,
+      btnGhost,
+      btnPrimary,
+      btnPrimaryStyle,
+      danger,
+      successToast,
+    };
+  }, [darkMode]);
 
   const [rolActual, setRolActual] = useState(0);
 
@@ -285,18 +376,18 @@ export default function DetalleJugador() {
   /* ───────── Guard rail: sin rut no hay detalle ───────── */
   useEffect(() => {
     if (!rut) {
-      const backTo = parentPath || "/admin";
+      const backTo = parentPath || basePath;
       navigate(backTo, { replace: true, state: location.state || {} });
     }
-  }, [rut, parentPath, navigate, location.state]);
+  }, [rut, parentPath, basePath, navigate, location.state]);
 
-  /* ───────── Breadcrumb (dorado, sin hardcode) ───────── */
+  /* ───────── Breadcrumb (sin hardcode) ───────── */
   useEffect(() => {
     const currentPath = location.pathname + location.search;
 
     const base = Array.isArray(location.state?.breadcrumb)
       ? location.state.breadcrumb
-      : [{ label: "Listar Jugadores", to: parentPath || "/admin" }];
+      : [{ label: "Listar Jugadores", to: parentPath || `${basePath}/listar-jugadores` }];
 
     const last = base[base.length - 1];
     if (!last || String(last.label) !== "Detalle Jugador") {
@@ -309,9 +400,9 @@ export default function DetalleJugador() {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, location.search, parentPath]);
+  }, [location.pathname, location.search, parentPath, basePath]);
 
-  /* ───────── Auth ───────── */
+  /* ───────── Auth + scope ───────── */
   useEffect(() => {
     try {
       const token = getToken();
@@ -327,9 +418,14 @@ export default function DetalleJugador() {
         return;
       }
 
-      if (rol === 3) {
-        const a = getAcademiaIdFromStorage();
-        if (!a) throw new Error("missing-academia-target");
+      const a = getAcademiaIdFromStorage();
+      if (!a) {
+        if (rol === 3 && superTree) navigate("/super-dashboard", { replace: true });
+        else {
+          clearToken();
+          navigate("/login", { replace: true });
+        }
+        return;
       }
 
       setRolActual(rol);
@@ -337,14 +433,14 @@ export default function DetalleJugador() {
       clearToken();
       navigate("/login", { replace: true });
     }
-  }, [navigate]);
+  }, [navigate, superTree]);
 
   /* ───────── Carga datos ───────── */
   useEffect(() => {
     if (!rolActual || !rut) return;
 
     const abort = new AbortController();
-    const headers = buildHeaders(rolActual);
+    const headers = buildHeadersFallback(rolActual);
 
     (async () => {
       setIsLoading(true);
@@ -361,14 +457,14 @@ export default function DetalleJugador() {
         if (abort.signal.aborted) return;
 
         if (!j) {
-          const backTo = parentPath || "/admin";
+          const backTo = parentPath || `${basePath}/listar-jugadores`;
           navigate(backTo, { replace: true, state: location.state || {} });
           return;
         }
 
         setFotoDataUrl(buildFotoDataUrl(j));
 
-        // 2) Stats segmentadas por deporte (joined base + sport)
+        // 2) Stats joined
         let est = {};
         let estId = null;
 
@@ -381,10 +477,9 @@ export default function DetalleJugador() {
               `/estadisticas/by-jugador/${encodeURIComponent(String(jugadorId))}`,
               deporteId
                 ? `/estadisticas/by-jugador/${encodeURIComponent(String(jugadorId))}?deporte_id=${encodeURIComponent(
-                  String(deporteId)
-                )}`
+                    String(deporteId)
+                  )}`
                 : null,
-              // fallback legacy opcional (si existiera)
               `/estadisticas/jugador/${encodeURIComponent(String(jugadorId))}`,
             ].filter(Boolean);
 
@@ -394,7 +489,6 @@ export default function DetalleJugador() {
               try {
                 const r = await getWithFallback(url, { signal: abort.signal, headers });
                 const d = r?.data ?? r;
-
                 const item =
                   d?.item && typeof d.item === "object"
                     ? d.item
@@ -413,10 +507,8 @@ export default function DetalleJugador() {
 
             if (joined) {
               const flat = flattenJoinedStats(joined);
-
               estId = flat?.stats_id ?? flat?.id ?? null;
 
-              // compat: si backend manda partidos_jugador
               if ("partidos_jugador" in flat && !("partidos_jugados" in flat)) {
                 flat.partidos_jugados = safeNum(flat.partidos_jugador, 0);
               }
@@ -425,23 +517,25 @@ export default function DetalleJugador() {
             } else {
               est = {};
             }
-          } else {
-            est = {};
           }
         } catch {
           est = {};
         }
 
-        // 3) Catálogos (rutas mínimas + fallback)
-        const [posList, catList, estbList, prevList, estList, sucList, comList] = await Promise.all([
-          tryGetList(["/posiciones"], { signal: abort.signal, headers }),
-          tryGetList(["/categorias"], { signal: abort.signal, headers }),
-          tryGetList(["/establecimientos-educ"], { signal: abort.signal, headers }),
-          tryGetList(["/prevision-medica"], { signal: abort.signal, headers }),
-          tryGetList(["/estado", "/estados"], { signal: abort.signal, headers }),
-          tryGetList(["/sucursales-real"], { signal: abort.signal, headers }),
-          tryGetList(["/comunas", "/catalogos/comunas", "/catalogos/comuna"], { signal: abort.signal, headers }),
-        ]);
+        // 3) Catálogos
+        const [posList, catList, estbList, prevList, estList, sucList, comList] =
+          await Promise.all([
+            tryGetList(["/posiciones"], { signal: abort.signal, headers }),
+            tryGetList(["/categorias"], { signal: abort.signal, headers }),
+            tryGetList(["/establecimientos-educ"], { signal: abort.signal, headers }),
+            tryGetList(["/prevision-medica"], { signal: abort.signal, headers }),
+            tryGetList(["/estado", "/estados"], { signal: abort.signal, headers }),
+            tryGetList(["/sucursales-real"], { signal: abort.signal, headers }),
+            tryGetList(["/comunas", "/catalogos/comunas", "/catalogos/comuna"], {
+              signal: abort.signal,
+              headers,
+            }),
+          ]);
 
         if (abort.signal.aborted) return;
 
@@ -471,15 +565,24 @@ export default function DetalleJugador() {
 
         const jugadorEnriquecido = {
           ...j,
-          posicion: j.posicion ?? (posMap.has(Number(j.posicion_id)) ? { nombre: posMap.get(Number(j.posicion_id)) } : null),
-          categoria: j.categoria ?? (catMap.has(Number(j.categoria_id)) ? { nombre: catMap.get(Number(j.categoria_id)) } : null),
+          posicion:
+            j.posicion ??
+            (posMap.has(Number(j.posicion_id)) ? { nombre: posMap.get(Number(j.posicion_id)) } : null),
+          categoria:
+            j.categoria ??
+            (catMap.has(Number(j.categoria_id)) ? { nombre: catMap.get(Number(j.categoria_id)) } : null),
           establec_educ:
-            j.establec_educ ?? (estbMap.has(Number(j.establec_educ_id)) ? { nombre: estbMap.get(Number(j.establec_educ_id)) } : null),
+            j.establec_educ ??
+            (estbMap.has(Number(j.establec_educ_id)) ? { nombre: estbMap.get(Number(j.establec_educ_id)) } : null),
           prevision_medica:
-            j.prevision_medica ?? (prevMap.has(Number(j.prevision_medica_id)) ? { nombre: prevMap.get(Number(j.prevision_medica_id)) } : null),
-          estado: j.estado ?? (estMap.has(Number(j.estado_id)) ? { nombre: estMap.get(Number(j.estado_id)) } : null),
-          sucursal: j.sucursal ?? (sucMap.has(Number(j.sucursal_id)) ? { nombre: sucMap.get(Number(j.sucursal_id)) } : null),
-          comuna: j.comuna ?? (comMap.has(Number(j.comuna_id)) ? { nombre: comMap.get(Number(j.comuna_id)) } : null),
+            j.prevision_medica ??
+            (prevMap.has(Number(j.prevision_medica_id)) ? { nombre: prevMap.get(Number(j.prevision_medica_id)) } : null),
+          estado:
+            j.estado ?? (estMap.has(Number(j.estado_id)) ? { nombre: estMap.get(Number(j.estado_id)) } : null),
+          sucursal:
+            j.sucursal ?? (sucMap.has(Number(j.sucursal_id)) ? { nombre: sucMap.get(Number(j.sucursal_id)) } : null),
+          comuna:
+            j.comuna ?? (comMap.has(Number(j.comuna_id)) ? { nombre: comMap.get(Number(j.comuna_id)) } : null),
         };
 
         setJugador(jugadorEnriquecido);
@@ -515,13 +618,22 @@ export default function DetalleJugador() {
 
         const st = error?.status ?? error?.response?.status;
 
-        if (st === 401 || st === 403) {
+        if (st === 401) {
           clearToken();
           navigate("/login", { replace: true });
           return;
         }
 
-        const backTo = parentPath || "/admin";
+        if (st === 403) {
+          setErr("No tienes permisos para ver este jugador en la academia seleccionada.");
+          setTimeout(() => {
+            const backTo = parentPath || `${basePath}/listar-jugadores`;
+            navigate(backTo, { replace: true, state: location.state || {} });
+          }, 900);
+          return;
+        }
+
+        const backTo = parentPath || `${basePath}/listar-jugadores`;
         navigate(backTo, { replace: true, state: location.state || {} });
       } finally {
         if (!abort.signal.aborted) setIsLoading(false);
@@ -529,7 +641,7 @@ export default function DetalleJugador() {
     })();
 
     return () => abort.abort();
-  }, [rut, rolActual, navigate, parentPath, location.state]);
+  }, [rut, rolActual, navigate, parentPath, location.state, basePath]);
 
   /* ───────── Helpers UI ───────── */
   const labelNombre = useCallback(
@@ -614,7 +726,7 @@ export default function DetalleJugador() {
     setIsLoading(true);
 
     try {
-      const headers = buildHeaders(rolActual);
+      const headers = buildHeadersFallback(rolActual);
 
       const ALLOWED = new Set([
         "nombre_jugador",
@@ -685,18 +797,20 @@ export default function DetalleJugador() {
 
       setEditMode(false);
       setMsg("✅ Datos actualizados");
-      setTimeout(() => setMsg(""), 3000);
+      setTimeout(() => setMsg(""), 2500);
     } catch (error) {
       const st = error?.status ?? error?.response?.status;
-      if (st === 401 || st === 403) {
+      if (st === 401) {
         clearToken();
         navigate("/login", { replace: true });
+      } else if (st === 403) {
+        setErr("No tienes permisos para editar este jugador en la academia seleccionada.");
       } else {
         setErr(
           error?.response?.data?.detail ||
-          error?.response?.data?.message ||
-          error?.message ||
-          "❌ Error al actualizar"
+            error?.response?.data?.message ||
+            error?.message ||
+            "❌ Error al actualizar"
         );
       }
     } finally {
@@ -707,7 +821,7 @@ export default function DetalleJugador() {
   const onContratoClick = async () => {
     setErr("");
     try {
-      const headers = buildHeaders(rolActual);
+      const headers = buildHeadersFallback(rolActual);
 
       let b64 = jugador?.contrato_prestacion;
       let mime = jugador?.contrato_prestacion_mime || "application/pdf";
@@ -738,9 +852,13 @@ export default function DetalleJugador() {
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (e) {
       const st = e?.status ?? e?.response?.status;
-      if (st === 401 || st === 403) {
+      if (st === 401) {
         clearToken();
         navigate("/login", { replace: true });
+        return;
+      }
+      if (st === 403) {
+        setErr("No tienes permisos para ver el contrato en esta academia.");
         return;
       }
       setErr(e?.response?.data?.message || e?.message || "No se pudo abrir el contrato.");
@@ -749,124 +867,154 @@ export default function DetalleJugador() {
 
   if (isLoading || !jugador) return <IsLoading />;
 
-  return (
-    <div className={`${css.fondo} min-h-[calc(100vh-100px)] relative`}>
-      <div className="px-2 sm:px-4 pt-4 pb-16 font-weli">
-        {/* Cabecera */}
-        <div className="text-center mb-8">
-          <div className="w-40 h-40 mx-auto rounded-full overflow-hidden bg-gray-300 flex items-center justify-center text-6xl dark:bg-gray-700 border border-black/10 dark:border-white/10">
-            {fotoDataUrl ? (
-              <img
-                src={fotoDataUrl}
-                alt={`Foto de ${jugador.nombre_jugador}`}
-                className="w-full h-full object-cover"
-                loading="lazy"
-                onError={() => setFotoDataUrl(null)}
-              />
-            ) : (
-              <span aria-hidden>👤</span>
-            )}
-          </div>
+  const canEdit = rolActual === 1 || rolActual === 3;
 
-          <h1 className="text-3xl font-extrabold mt-4">{jugador.nombre_jugador}</h1>
-          <p className="text-sm text-gray-500">
-            {jugador.posicion?.nombre || "-"} | {jugador.edad ?? "-"} años
-          </p>
-          <p className="text-sm text-gray-500">{jugador.categoria?.nombre || "-"}</p>
+  // UI labels
+  const rows = [
+    ["Email", "email"],
+    ["Teléfono", "telefono"],
+    ["Peso (kg)", "peso"],
+    ["Estatura (cm)", "estatura"],
+    ["Fecha Nacimiento", "fecha_nacimiento"],
+    ["Talla Polera", "talla_polera"],
+    ["Talla Short", "talla_short"],
+    ["Nombre Apoderado", "nombre_apoderado"],
+    ["Teléfono Apoderado", "telefono_apoderado"],
+    ["Posición", "posicion_id"],
+    ["Categoría", "categoria_id"],
+    ["Establecimiento", "establec_educ_id"],
+    ["Previsión Médica", "prevision_medica_id"],
+    ["Estado", "estado_id"],
+    ["Sucursal", "sucursal_id"],
+    ["Comuna", "comuna_id"],
+    ["Dirección", "direccion"],
+    ["Contrato firmado", "contrato_firmado"],
+    ["Estadística ID", "estadistica_id"],
+  ];
+
+  return (
+    <div className={`${ui.shell} min-h-screen font-sans`}>
+      {/* Header SuperDashboard */}
+      <header className="px-6 pt-6 text-center">
+        <div
+          className="w-36 h-36 sm:w-40 sm:h-40 mx-auto rounded-full overflow-hidden flex items-center justify-center text-6xl border"
+          style={{
+            borderColor: darkMode ? "rgba(255,255,255,0.15)" : "rgba(109,88,41,0.18)",
+            background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.55)",
+          }}
+        >
+          {fotoDataUrl ? (
+            <img
+              src={fotoDataUrl}
+              alt={`Foto de ${jugador.nombre_jugador}`}
+              className="w-full h-full object-cover"
+              loading="lazy"
+              onError={() => setFotoDataUrl(null)}
+            />
+          ) : (
+            <span aria-hidden>👤</span>
+          )}
         </div>
 
-        {/* Tarjeta Datos */}
-        <div className={`relative p-4 rounded-lg shadow ${css.tarjeta} w-full`}>
-          {rolActual === 1 || rolActual === 3 && (
-            <button
-              onClick={() => {
-                setEditMode(true);
-                setErr("");
-              }}
-              className="absolute top-2 right-3 text-xl hover:text-[#e82d89]"
-              title="Editar"
-              aria-label="Editar"
-            >
-              <FiEdit />
-            </button>
-          )}
+        <h1 className={`text-4xl font-extrabold tracking-tightish mt-4 ${ui.titleMain}`}>
+          {jugador.nombre_jugador}
+        </h1>
 
+        <p className={`text-sm mt-2 ${ui.subText}`}>
+          {jugador.posicion?.nombre || "-"} · {jugador.edad ?? "-"} años · {jugador.categoria?.nombre || "-"}
+        </p>
+      </header>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            {[
-              ["Email", "email"],
-              ["Teléfono", "telefono"],
-              ["Peso (kg)", "peso"],
-              ["Estatura (cm)", "estatura"],
-              ["Fecha Nacimiento", "fecha_nacimiento"],
-              ["Talla Polera", "talla_polera"],
-              ["Talla Short", "talla_short"],
-              ["Nombre Apoderado", "nombre_apoderado"],
-              ["Teléfono Apoderado", "telefono_apoderado"],
-              ["Posición", "posicion_id"],
-              ["Categoría", "categoria_id"],
-              ["Establecimiento", "establec_educ_id"],
-              ["Previsión Médica", "prevision_medica_id"],
-              ["Estado", "estado_id"],
-              ["Sucursal", "sucursal_id"],
-              ["Comuna", "comuna_id"],
-              ["Dirección", "direccion"],
-              ["Contrato firmado", "contrato_firmado"],
-              ["Estadística ID", "estadistica_id"],
-            ].map(([label, key]) => (
-              <div key={key}>
-                <span className="font-semibold text-sm">{label}:</span>
-
-                {key === "contrato_firmado" ? (
-                  <span className="block text-sm mt-1">
-                    <button
-                      type="button"
-                      onClick={onContratoClick}
-                      className="inline-flex items-center gap-2 hover:opacity-80"
-                      title="Ver contrato (PDF)"
-                      aria-label="Ver contrato"
-                    >
-                      <FileText size={18} color={darkMode ? "#ffffff" : "#D32F2F"} />
-                      <span className="opacity-80">Ver contrato</span>
-                    </button>
-                  </span>
-                ) : (
-                  <span className="block text-sm">
-                    {key === "posicion_id"
-                      ? jugador.posicion?.nombre || labelNombre(posiciones, jugador.posicion_id)
-                      : key === "categoria_id"
-                        ? jugador.categoria?.nombre || labelNombre(categorias, jugador.categoria_id)
-                        : key === "establec_educ_id"
-                          ? jugador.establec_educ?.nombre || labelNombre(establecimientos, jugador.establec_educ_id)
-                          : key === "prevision_medica_id"
-                            ? jugador.prevision_medica?.nombre || labelNombre(previsiones, jugador.prevision_medica_id)
-                            : key === "estado_id"
-                              ? jugador.estado?.nombre || labelNombre(estados, jugador.estado_id)
-                              : key === "sucursal_id"
-                                ? jugador.sucursal?.nombre || labelNombre(sucursales, jugador.sucursal_id)
-                                : key === "comuna_id"
-                                  ? jugador.comuna?.nombre || labelNombre(comunas, jugador.comuna_id)
-                                  : key === "fecha_nacimiento"
-                                    ? formatearFechaLocal(jugador.fecha_nacimiento)
-                                    : key === "estadistica_id"
-                                      ? statsId ?? jugador.estadistica_id ?? "-"
-                                      : jugador[key] ?? "-"}
-                  </span>
-                )}
-              </div>
-            ))}
+      <main className="px-6 pb-20">
+        {err && (
+          <div className="max-w-6xl mx-auto mt-6">
+            <div className={ui.danger}>{err}</div>
           </div>
+        )}
 
-          {err && <p className="text-red-500 text-sm mt-3">{err}</p>}
+        {/* Datos (sin cuadros) */}
+        <div className="max-w-6xl mx-auto mt-6">
+          <section className={`${ui.card} p-4 md:p-6 relative`}>
+            {canEdit && (
+              <button
+                onClick={() => {
+                  setEditMode(true);
+                  setErr("");
+                }}
+                className="absolute top-4 right-4 inline-flex items-center gap-2 text-sm font-extrabold hover:opacity-90"
+                title="Editar"
+                aria-label="Editar"
+                style={{ color: darkMode ? PALETTE.cream : PALETTE.brown }}
+              >
+                <FiEdit className="text-lg" />
+                Editar
+              </button>
+            )}
+
+            <h2 className={`text-xl font-extrabold mb-4 ${darkMode ? "text-white" : "text-ra-marron"}`}>
+              Datos del jugador
+            </h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+              {rows.map(([label, key]) => {
+                const renderValue = () => {
+                  if (key === "contrato_firmado") {
+                    return (
+                      <button
+                        type="button"
+                        onClick={onContratoClick}
+                        className="inline-flex items-center gap-2 hover:opacity-90"
+                        title="Ver contrato (PDF)"
+                        aria-label="Ver contrato"
+                      >
+                        <FileText size={18} color={darkMode ? PALETTE.cream : PALETTE.brown} />
+                        <span className={darkMode ? "text-white/85" : "text-ra-marron/85"}>Ver contrato</span>
+                      </button>
+                    );
+                  }
+
+                  if (key === "posicion_id")
+                    return jugador.posicion?.nombre || labelNombre(posiciones, jugador.posicion_id);
+                  if (key === "categoria_id")
+                    return jugador.categoria?.nombre || labelNombre(categorias, jugador.categoria_id);
+                  if (key === "establec_educ_id")
+                    return jugador.establec_educ?.nombre || labelNombre(establecimientos, jugador.establec_educ_id);
+                  if (key === "prevision_medica_id")
+                    return jugador.prevision_medica?.nombre || labelNombre(previsiones, jugador.prevision_medica_id);
+                  if (key === "estado_id") return jugador.estado?.nombre || labelNombre(estados, jugador.estado_id);
+                  if (key === "sucursal_id")
+                    return jugador.sucursal?.nombre || labelNombre(sucursales, jugador.sucursal_id);
+                  if (key === "comuna_id") return jugador.comuna?.nombre || labelNombre(comunas, jugador.comuna_id);
+                  if (key === "fecha_nacimiento") return formatearFechaLocal(jugador.fecha_nacimiento);
+                  if (key === "estadistica_id") return statsId ?? jugador.estadistica_id ?? "-";
+
+                  return jugador[key] ?? "-";
+                };
+
+                return (
+                  <div key={key} className={ui.row}>
+                    <div className={ui.rowLabel}>{label}</div>
+                    <div className={ui.rowValue}>{renderValue()}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         </div>
 
         {/* Gráficas */}
-        <section className="mt-10 space-y-6">
-          <h2 className="text-xl font-semibold mb-4">Estadísticas del Jugador</h2>
+        <section className="max-w-6xl mx-auto mt-10 space-y-6">
+          <h2 className="text-2xl font-extrabold" style={{ color: darkMode ? PALETTE.cream : PALETTE.brown }}>
+            Estadísticas del Jugador
+          </h2>
+
           {Object.entries(secciones).map(([titulo, data]) => (
-            <div key={titulo} className={`p-4 rounded shadow ${css.tarjeta}`}>
-              <h3 className="text-lg font-semibold mb-4">{titulo}</h3>
-              <div className="relative h-[300px] w-full">
+            <div key={titulo} className={`${ui.sectionCard} p-4 md:p-6`}>
+              <h3 className="text-lg font-extrabold mb-4" style={{ color: darkMode ? PALETTE.cream : PALETTE.brown }}>
+                {titulo}
+              </h3>
+
+              <div className="relative h-[320px] w-full">
                 <Bar
                   data={{
                     labels: Object.keys(data),
@@ -874,7 +1022,9 @@ export default function DetalleJugador() {
                       {
                         label: titulo,
                         data: Object.values(data),
-                        backgroundColor: darkMode ? "#3b82f6" : "#e82d89",
+                        backgroundColor: darkMode ? "rgba(170,80,19,0.55)" : "rgba(226,119,59,0.35)",
+                        borderColor: darkMode ? "rgba(170,80,19,0.95)" : "rgba(109,88,41,0.55)",
+                        borderWidth: 1,
                       },
                     ],
                   }}
@@ -882,31 +1032,46 @@ export default function DetalleJugador() {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: { legend: { display: false } },
+                    scales: {
+                      x: {
+                        ticks: { color: darkMode ? "rgba(255,255,255,0.82)" : "rgba(109,88,41,0.82)" },
+                        grid: { color: darkMode ? "rgba(255,255,255,0.10)" : "rgba(109,88,41,0.12)" },
+                      },
+                      y: {
+                        beginAtZero: true,
+                        ticks: { color: darkMode ? "rgba(255,255,255,0.82)" : "rgba(109,88,41,0.82)" },
+                        grid: { color: darkMode ? "rgba(255,255,255,0.10)" : "rgba(109,88,41,0.12)" },
+                      },
+                    },
                   }}
                 />
               </div>
             </div>
           ))}
         </section>
-      </div>
+      </main>
 
       {/* Overlay Edición */}
       {editMode && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black bg-opacity-60 p-4 overflow-auto">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 overflow-auto">
           <form
             onSubmit={guardarCambios}
-            className={`w-full max-w-2xl ${css.tarjeta} border-2 border-[#e82d89] shadow-2xl rounded-xl p-6 space-y-6 overflow-y-auto max-h-[90vh]`}
+            className={`w-full max-w-2xl ${ui.card} rounded-2xl p-6 space-y-6 overflow-y-auto max-h-[90vh]`}
           >
-            <div className="flex justify-between items-center mb-6 border-b border-gray-300 pb-2">
-              <h3 className="text-xl font-bold text-[#e82d89] text-center w-full">
+            <div className="flex justify-between items-center mb-2 border-b pb-3 relative"
+              style={{ borderColor: darkMode ? "rgba(255,255,255,0.10)" : "rgba(109,88,41,0.15)" }}
+            >
+              <h3 className="text-xl font-extrabold text-center w-full" style={{ color: darkMode ? PALETTE.cream : PALETTE.brown }}>
                 Editar Información del Jugador
               </h3>
+
               <button
                 type="button"
                 onClick={() => setEditMode(false)}
-                className="absolute top-6 right-6 text-xl hover:text-red-500"
+                className="absolute top-1 right-1 text-xl hover:opacity-90"
                 title="Cerrar"
                 aria-label="Cerrar"
+                style={{ color: darkMode ? "rgba(255,255,255,0.85)" : "rgba(109,88,41,0.85)" }}
               >
                 <FiX />
               </button>
@@ -926,25 +1091,29 @@ export default function DetalleJugador() {
                 ["Teléfono Apoderado", "telefono_apoderado", "text"],
               ].map(([label, key, type]) => (
                 <div key={key}>
-                  <label className="block text-sm font-semibold mb-1">{label}</label>
+                  <label className={`block text-sm font-semibold mb-1 ${darkMode ? "text-white/85" : "text-ra-marron/85"}`}>
+                    {label}
+                  </label>
                   <input
                     type={type}
                     name={key}
                     value={formData[key] ?? ""}
                     onChange={handleChange}
-                    className={css.input}
+                    className={ui.input}
                   />
                 </div>
               ))}
 
               <div>
-                <label className="block text-sm font-semibold mb-1">Fecha Nacimiento</label>
+                <label className={`block text-sm font-semibold mb-1 ${darkMode ? "text-white/85" : "text-ra-marron/85"}`}>
+                  Fecha Nacimiento
+                </label>
                 <input
                   type="date"
                   name="fecha_nacimiento"
                   value={formData.fecha_nacimiento || ""}
                   onChange={handleChange}
-                  className={css.input}
+                  className={ui.input}
                 />
               </div>
 
@@ -958,13 +1127,10 @@ export default function DetalleJugador() {
                 ["Comuna", "comuna_id", comunas],
               ].map(([label, key, arr]) => (
                 <div key={key}>
-                  <label className="block text-sm font-semibold mb-1">{label}</label>
-                  <select
-                    name={key}
-                    value={formData[key] || ""}
-                    onChange={handleChange}
-                    className={css.input}
-                  >
+                  <label className={`block text-sm font-semibold mb-1 ${darkMode ? "text-white/85" : "text-ra-marron/85"}`}>
+                    {label}
+                  </label>
+                  <select name={key} value={formData[key] || ""} onChange={handleChange} className={ui.input}>
                     <option value="">Seleccione</option>
                     {arr.map((x) => (
                       <option key={x.id} value={x.id}>
@@ -975,56 +1141,66 @@ export default function DetalleJugador() {
                 </div>
               ))}
 
-              <div>
-                <label className="block text-sm font-semibold mb-1">Dirección</label>
+              <div className="sm:col-span-2">
+                <label className={`block text-sm font-semibold mb-1 ${darkMode ? "text-white/85" : "text-ra-marron/85"}`}>
+                  Dirección
+                </label>
                 <input
                   type="text"
                   name="direccion"
                   value={formData.direccion ?? ""}
                   onChange={handleChange}
-                  className={css.input}
+                  className={ui.input}
                   placeholder="Ej: Av. Siempre Viva 742"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-semibold mb-1">Estadística ID</label>
+                <label className={`block text-sm font-semibold mb-1 ${darkMode ? "text-white/85" : "text-ra-marron/85"}`}>
+                  Estadística ID
+                </label>
                 <input
                   type="text"
                   name="estadistica_id"
                   value={formData.estadistica_id ?? ""}
                   disabled
-                  className={`${css.input} opacity-70 cursor-not-allowed`}
+                  className={`${ui.input} opacity-70 cursor-not-allowed`}
                 />
-                <p className="text-xs text-gray-500 mt-1">Campo informativo (no editable)</p>
+                <p className={`text-xs mt-1 ${darkMode ? "text-white/60" : "text-ra-marron/60"}`}>
+                  Campo informativo (no editable)
+                </p>
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-sm font-semibold mb-1">Contrato firmado</label>
-                <div
-                  className={`${darkMode ? "bg-[#111827]" : "bg-gray-50"
-                    } border border-gray-300/30 rounded p-2 flex items-center gap-2`}
-                >
-                  <FileText size={18} color={darkMode ? "#ffffff" : "#D32F2F"} />
-                  <span className="text-sm opacity-80">Disponible en la tarjeta (Ver contrato)</span>
+                <label className={`block text-sm font-semibold mb-1 ${darkMode ? "text-white/85" : "text-ra-marron/85"}`}>
+                  Contrato firmado
+                </label>
+                <div className="flex items-center gap-2">
+                  <FileText size={18} color={darkMode ? PALETTE.cream : PALETTE.brown} />
+                  <span className={darkMode ? "text-white/75" : "text-ra-marron/75"}>
+                    Disponible en la tarjeta (Ver contrato)
+                  </span>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className={`text-xs mt-1 ${darkMode ? "text-white/60" : "text-ra-marron/60"}`}>
                   Se abre en una nueva pestaña como PDF (estilo histórico).
                 </p>
               </div>
             </div>
 
-            {err && <p className="text-red-500 text-sm">{err}</p>}
+            {err && <p className="text-red-200 text-sm font-bold">{err}</p>}
 
             <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setEditMode(false)}
-                className="py-1 px-4 border border-gray-500 rounded hover:bg-gray-200 dark:hover:bg-[#111827]"
-              >
+              <button type="button" onClick={() => setEditMode(false)} className={ui.btnGhost}>
                 Cancelar
               </button>
-              <button type="submit" className="py-1 px-4 bg-blue-600 text-white rounded hover:bg-blue-700">
+
+              <button
+                type="submit"
+                className={ui.btnPrimary}
+                style={{ ...(ui.btnPrimaryStyle || {}), opacity: canEdit ? 1 : 0.6 }}
+                disabled={!canEdit}
+                title={!canEdit ? "Solo roles 1 y 3" : "Guardar cambios"}
+              >
                 Guardar
               </button>
             </div>
@@ -1033,7 +1209,10 @@ export default function DetalleJugador() {
       )}
 
       {msg && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-green-600 text-white px-4 py-2 rounded shadow-lg z-40">
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl shadow-lg z-40 font-extrabold"
+          style={ui.successToast}
+        >
           {msg}
         </div>
       )}

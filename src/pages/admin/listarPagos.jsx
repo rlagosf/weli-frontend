@@ -1,17 +1,26 @@
 // src/pages/admin/listarPagos.jsx
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "../../context/ThemeContext";
-import api, {
-  getToken,
-  clearToken,
-  ACADEMIA_STORAGE_KEY,
-} from "../../services/api";
+import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
 import { jwtDecode } from "jwt-decode";
 import { formatRutWithDV } from "../../services/rut";
 import { Pencil, Trash2, X, CreditCard } from "lucide-react";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 import IsLoading from "../../components/isLoading";
+
+/* =======================
+   🎨 Conjunto X (MISMA GAMA)
+======================= */
+const PALETTE = {
+  copper: "#aa5013",
+  brown: "#6d5829",
+  gold: "#b79f69",
+  cream: "#e8dac4",
+  sand: "#ffdda1",
+  caramel: "#dda272",
+  terracotta: "#e2773b",
+};
 
 /* ─────────────────────────────
    CONSTANTES NEGOCIO
@@ -25,16 +34,15 @@ const START_DEUDA_MONTH = 12;
 /* Paginación */
 const PAGE_SIZE = 10;
 const MAX_PAGES = 200;
-
 const MANUAL_PAGE_SIZE = 10;
 
 /* ─────────────────────────────
-   HELPERS (MISMA LÓGICA detalleJugador.jsx)
+   HELPERS
 ───────────────────────────── */
 const monthLabelEs = (year, month) => {
   const d = new Date(year, month - 1, 1);
   const m = new Intl.DateTimeFormat("es-CL", { month: "long" }).format(d);
-  return `${m} ${year}`; // "enero 2026"
+  return `${m} ${year}`;
 };
 
 const ymKey = (y, m) => `${y}-${String(m).padStart(2, "0")}`;
@@ -49,9 +57,6 @@ const buildMesesExigibles = (
   const mNow = now.getMonth() + 1;
   const dNow = now.getDate();
 
-  // Mes “máximo” exigible:
-  // - siempre exigibles: meses anteriores al actual
-  // - mes actual: exigible solo si ya pasó el día de corte
   let endY = yNow;
   let endM = mNow - 1;
 
@@ -103,7 +108,6 @@ const buildIdNameMap = (arr, idKey = "id", nameKey = "nombre") => {
   return m;
 };
 
-// Igual que en detalleJugador: id + nombre/descripcion
 const normalizeCatalog = (arr) =>
   (Array.isArray(arr) ? arr : [])
     .map((x) => ({
@@ -130,7 +134,7 @@ const isExpired = (decoded) => {
 };
 
 const extractRol = (decoded) => {
-  const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
+  const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
   const parsed = Number(rawRol);
   return Number.isFinite(parsed) ? parsed : 0;
 };
@@ -145,9 +149,7 @@ const getAcademiaIdFromStorage = () => {
     if (Number.isFinite(direct) && direct > 0) return direct;
 
     const parsed = JSON.parse(raw);
-    const id = Number(
-      parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0
-    );
+    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
     return Number.isFinite(id) && id > 0 ? id : null;
   } catch {
     return null;
@@ -180,16 +182,13 @@ const tryGetList = async (paths, { signal, headers }) => {
     } catch (e) {
       const st = e?.status ?? e?.response?.status;
       if (st === 401 || st === 403) throw e;
-      // probar siguiente
     }
   }
   return [];
 };
 
 const getWithFallback = async (path, { signal, headers } = {}) => {
-  const urls = path.endsWith("/")
-    ? [path, path.slice(0, -1)]
-    : [path, `${path}/`];
+  const urls = path.endsWith("/") ? [path, path.slice(0, -1)] : [path, `${path}/`];
 
   let lastErr = null;
   for (const url of urls) {
@@ -205,9 +204,7 @@ const getWithFallback = async (path, { signal, headers } = {}) => {
 };
 
 const postWithFallback = async (path, body, { signal, headers } = {}) => {
-  const urls = path.endsWith("/")
-    ? [path, path.slice(0, -1)]
-    : [path, `${path}/`];
+  const urls = path.endsWith("/") ? [path, path.slice(0, -1)] : [path, `${path}/`];
 
   let lastErr = null;
   for (const url of urls) {
@@ -223,9 +220,7 @@ const postWithFallback = async (path, body, { signal, headers } = {}) => {
 };
 
 const putWithFallback = async (path, body, { signal, headers } = {}) => {
-  const urls = path.endsWith("/")
-    ? [path, path.slice(0, -1)]
-    : [path, `${path}/`];
+  const urls = path.endsWith("/") ? [path, path.slice(0, -1)] : [path, `${path}/`];
 
   let lastErr = null;
   for (const url of urls) {
@@ -241,9 +236,7 @@ const putWithFallback = async (path, body, { signal, headers } = {}) => {
 };
 
 const deleteWithFallback = async (path, { signal, headers } = {}) => {
-  const urls = path.endsWith("/")
-    ? [path, path.slice(0, -1)]
-    : [path, `${path}/`];
+  const urls = path.endsWith("/") ? [path, path.slice(0, -1)] : [path, `${path}/`];
 
   let lastErr = null;
   for (const url of urls) {
@@ -259,10 +252,7 @@ const deleteWithFallback = async (path, { signal, headers } = {}) => {
 };
 
 /* ✅ FINAL: normalizePagos */
-const normalizePagos = (
-  arr,
-  { tipoPagoMap, medioPagoMap, situacionPagoMap, jugadoresMap }
-) => {
+const normalizePagos = (arr, { tipoPagoMap, medioPagoMap, situacionPagoMap, jugadoresMap }) => {
   const list = Array.isArray(arr) ? arr : [];
 
   const safeInt = (v) => {
@@ -282,20 +272,10 @@ const normalizePagos = (
   };
 
   return list.map((p) => {
-    const tipoIdRaw =
-      p?.tipo_pago_id ?? p?.tipo_id ?? p?.tipoPagoId ?? p?.tipo_pago?.id ?? null;
-    const medioIdRaw =
-      p?.medio_pago_id ??
-      p?.medio_id ??
-      p?.medioPagoId ??
-      p?.medio_pago?.id ??
-      null;
+    const tipoIdRaw = p?.tipo_pago_id ?? p?.tipo_id ?? p?.tipoPagoId ?? p?.tipo_pago?.id ?? null;
+    const medioIdRaw = p?.medio_pago_id ?? p?.medio_id ?? p?.medioPagoId ?? p?.medio_pago?.id ?? null;
     const situIdRaw =
-      p?.situacion_pago_id ??
-      p?.estado_pago_id ??
-      p?.estado_id ??
-      p?.situacion_pago?.id ??
-      null;
+      p?.situacion_pago_id ?? p?.estado_pago_id ?? p?.estado_id ?? p?.situacion_pago?.id ?? null;
 
     const tipoId = safeInt(tipoIdRaw);
     const medioId = safeInt(medioIdRaw);
@@ -322,10 +302,7 @@ const normalizePagos = (
       "—";
 
     const catIdRaw =
-      jAnidado?.categoria?.id ??
-      jAnidado?.categoria_id ??
-      jFromMap?.categoria?.id ??
-      null;
+      jAnidado?.categoria?.id ?? jAnidado?.categoria_id ?? jFromMap?.categoria?.id ?? null;
     const catId = safeInt(catIdRaw);
 
     const catNombre =
@@ -341,17 +318,11 @@ const normalizePagos = (
     let tipoNombreBase =
       p?.tipo_pago?.nombre ??
       p?.tipo_pago_nombre ??
-      (tipoId != null
-        ? tipoPagoMap.get(String(tipoId)) ?? String(tipoId)
-        : "—");
+      (tipoId != null ? tipoPagoMap.get(String(tipoId)) ?? String(tipoId) : "—");
 
     if (tipoId === TIPO_PAGO_MENSUALIDAD && d) {
       const labelMes = monthLabelEs(d.getFullYear(), d.getMonth() + 1);
-      if (
-        !String(tipoNombreBase)
-          .toLowerCase()
-          .includes(String(labelMes).toLowerCase())
-      ) {
+      if (!String(tipoNombreBase).toLowerCase().includes(String(labelMes).toLowerCase())) {
         tipoNombreBase = `Mensualidad ${labelMes}`;
       }
     }
@@ -359,17 +330,13 @@ const normalizePagos = (
     const medioNombre =
       p?.medio_pago?.nombre ??
       p?.medio_pago_nombre ??
-      (medioId != null
-        ? medioPagoMap.get(String(medioId)) ?? String(medioId)
-        : "—");
+      (medioId != null ? medioPagoMap.get(String(medioId)) ?? String(medioId) : "—");
 
     const situNombre =
       p?.situacion_pago?.nombre ??
       p?.estado_pago_nombre ??
       p?.estado_nombre ??
-      (situId != null
-        ? situacionPagoMap.get(String(situId)) ?? String(situId)
-        : "—");
+      (situId != null ? situacionPagoMap.get(String(situId)) ?? String(situId) : "—");
 
     const idRaw =
       p?.id ??
@@ -377,7 +344,6 @@ const normalizePagos = (
       p?.pago_id ??
       p?.pagoId ??
       (typeof p?.id_pago !== "undefined" ? p.id_pago : null);
-
     const id = safeIdPos(idRaw);
 
     return {
@@ -406,29 +372,31 @@ export default function ListarPagos() {
   const location = useLocation();
   useMobileAutoScrollTop();
 
-  const [rolActual, setRolActual] = useState(0);
+  // ✅ Estrategia dorada: detecta árbol actual (sin hardcodear)
+  const dashboardBase = useMemo(() => {
+    const p = location.pathname || "";
+    return p.startsWith("/super-dashboard/admin/dashboard") ? "/super-dashboard/admin/dashboard" : "/admin";
+  }, [location.pathname]);
 
-  // 🔐 Auth / estado base
+  const breadcrumbBootRef = useRef(false);
+
+  const [rolActual, setRolActual] = useState(0);
+  const [academiaTarget, setAcademiaTarget] = useState(() => getAcademiaIdFromStorage());
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
   const [pagos, setPagos] = useState([]);
-  const [jugadoresActivos, setJugadoresActivos] = useState([]);
 
   const [tipoPagoMap, setTipoPagoMap] = useState(new Map());
   const [medioPagoMap, setMedioPagoMap] = useState(new Map());
   const [situacionPagoMap, setSituacionPagoMap] = useState(new Map());
   const [jugadoresMap, setJugadoresMap] = useState(new Map());
 
-  // Catálogos normalizados (consistencia)
-  const [categoriasCat, setCategoriasCat] = useState([]);
-  const [sucursalesCat, setSucursalesCat] = useState([]);
-
   // Filtros pagos
   const [filtroTexto, setFiltroTexto] = useState("");
   const [filtroEstado, setFiltroEstado] = useState(""); // PAGADO / VENCIDO
   const [filtroTipoPago, setFiltroTipoPago] = useState(""); // id tipo_pago
-  const [filtroCategoriaSel, setFiltroCategoriaSel] = useState("");
   const [filtroMedioPago, setFiltroMedioPago] = useState(""); // id medio_pago
 
   // Paginación pagos
@@ -450,13 +418,10 @@ export default function ListarPagos() {
 
   const [editForm, setEditForm] = useState({
     id: null,
-
-    virtual: false, // mensualidad vencida virtual -> POST
-    create: false, // pago manual nuevo -> POST
-
+    virtual: false,
+    create: false,
     deuda_year: null,
     deuda_month: null,
-
     jugador_rut: "",
     monto: "",
     fecha_pago: "",
@@ -466,28 +431,25 @@ export default function ListarPagos() {
     observaciones: "",
   });
 
-  /* 🔐 Validación de sesión y autorización
-     - rol 1: admin
-     - rol 3: superadmin (requiere academia seleccionada)
-  */
+  /* 🔐 Sesión + rol */
   useEffect(() => {
     try {
       const token = getToken();
       if (!token) throw new Error("no-token");
 
       const decoded = jwtDecode(token);
-
       if (isExpired(decoded)) throw new Error("expired");
 
       const rol = extractRol(decoded);
       if (![1, 3].includes(rol)) {
-        navigate("/admin", { replace: true });
+        navigate(dashboardBase, { replace: true });
         return;
       }
 
       if (rol === 3) {
         const a = getAcademiaIdFromStorage();
         if (!a) throw new Error("missing-academia-target");
+        setAcademiaTarget(a);
       }
 
       setRolActual(rol);
@@ -495,23 +457,60 @@ export default function ListarPagos() {
       clearToken();
       navigate("/login", { replace: true });
     }
-  }, [navigate]);
+  }, [navigate, dashboardBase]);
 
-  // 🧭 Breadcrumb por defecto
+  /* 🧭 Breadcrumb (ANTI-LOOP) */
   useEffect(() => {
-    if (!Array.isArray(location.state?.breadcrumb)) {
-      navigate(location.pathname + location.search, {
+    if (breadcrumbBootRef.current) return;
+    const currentPath = location.pathname + location.search;
+    const bc = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : [];
+    const last = bc[bc.length - 1];
+
+    const label = "Pagos centralizados";
+    if (!last || last.label !== label) {
+      breadcrumbBootRef.current = true;
+      navigate(currentPath, {
         replace: true,
         state: {
           ...(location.state || {}),
-          breadcrumb: [{ to: location.pathname, label: "Pagos centralizados" }],
+          breadcrumb: [{ label, to: location.pathname }],
         },
       });
+    } else {
+      breadcrumbBootRef.current = true;
     }
-  }, [location, navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, location.search]);
 
-  // 📡 Carga catálogos + jugadores + pagos
+  /* ✅ cambios de academia target (rol 3) */
   useEffect(() => {
+    const sync = () => setAcademiaTarget(getAcademiaIdFromStorage());
+
+    const onStorage = (e) => {
+      if (e?.key === ACADEMIA_STORAGE_KEY) sync();
+    };
+
+    let last = String(localStorage.getItem(ACADEMIA_STORAGE_KEY) ?? "");
+    const t = setInterval(() => {
+      const now = String(localStorage.getItem(ACADEMIA_STORAGE_KEY) ?? "");
+      if (now !== last) {
+        last = now;
+        sync();
+      }
+    }, 800);
+
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      clearInterval(t);
+    };
+  }, []);
+
+  /* 📡 Carga catálogos + jugadores + pagos */
+  useEffect(() => {
+    if (!rolActual) return;
+    if (rolActual === 3 && !academiaTarget) return;
+
     const abort = new AbortController();
     const headers = buildHeaders(rolActual);
 
@@ -520,19 +519,17 @@ export default function ListarPagos() {
       setError("");
 
       try {
-        const [tipos, medios, situaciones, jugadoresList, categoriasRaw, sucursalesRaw] =
-          await Promise.all([
-            tryGetList(["/tipo-pago", "/tipo_pago"], { signal: abort.signal, headers }),
-            tryGetList(["/medio-pago", "/medio_pago"], { signal: abort.signal, headers }),
-            tryGetList(
-              ["/situacion-pago", "/situacion_pago", "/estado-pago", "/estado_pago"],
-              { signal: abort.signal, headers }
-            ),
-            tryGetList(["/jugadores"], { signal: abort.signal, headers }),
-            tryGetList(["/categorias"], { signal: abort.signal, headers }),
-            // ✅ MISMA ruta que detalleJugador.jsx
-            tryGetList(["/sucursales-real", "/sucursales-real/"], { signal: abort.signal, headers }),
-          ]);
+        const [tipos, medios, situaciones, jugadoresList, categoriasRaw, sucursalesRaw] = await Promise.all([
+          tryGetList(["/tipo-pago", "/tipo_pago"], { signal: abort.signal, headers }),
+          tryGetList(["/medio-pago", "/medio_pago"], { signal: abort.signal, headers }),
+          tryGetList(["/situacion-pago", "/situacion_pago", "/estado-pago", "/estado_pago"], {
+            signal: abort.signal,
+            headers,
+          }),
+          tryGetList(["/jugadores"], { signal: abort.signal, headers }),
+          tryGetList(["/categorias"], { signal: abort.signal, headers }),
+          tryGetList(["/sucursales-real", "/sucursales-real/"], { signal: abort.signal, headers }),
+        ]);
 
         if (abort.signal.aborted) return;
 
@@ -545,8 +542,6 @@ export default function ListarPagos() {
 
         const _categorias = normalizeCatalog(categoriasRaw);
         const _sucursales = normalizeCatalog(sucursalesRaw);
-        setCategoriasCat(_categorias);
-        setSucursalesCat(_sucursales);
 
         const catMap = new Map(_categorias.map((c) => [Number(c.id), c.nombre]));
         const sucMap = new Map(_sucursales.map((s) => [Number(s.id), s.nombre]));
@@ -555,7 +550,6 @@ export default function ListarPagos() {
           const estadoId = Number(j?.estado_id ?? j?.estadoId ?? j?.estado ?? 0);
           return estadoId === ESTADO_JUGADOR_ACTIVO;
         });
-        setJugadoresActivos(activos);
 
         const jm = new Map();
         for (const j of activos) {
@@ -587,26 +581,19 @@ export default function ListarPagos() {
         }
         setJugadoresMap(jm);
 
-        // Pagos (estado cuenta)
         const respEstado = await getWithFallback("/pagos-jugador/estado-cuenta", {
           signal: abort.signal,
           headers,
         });
         if (abort.signal.aborted) return;
 
-        const rawPagos = Array.isArray(respEstado?.data?.pagos)
-          ? respEstado.data.pagos
-          : [];
+        const rawPagos = Array.isArray(respEstado?.data?.pagos) ? respEstado.data.pagos : [];
 
         // Filtrar pagos solo de activos
         const rutsActivos = new Set(Array.from(jm.keys()));
         const rawPagosActivos = rawPagos.filter((p) => {
           const rut =
-            p?.jugador_rut ??
-            p?.rut_jugador ??
-            p?.rut ??
-            p?.jugador?.rut_jugador ??
-            p?.jugador?.rut;
+            p?.jugador_rut ?? p?.rut_jugador ?? p?.rut ?? p?.jugador?.rut_jugador ?? p?.jugador?.rut;
           return rut != null && rutsActivos.has(String(rut));
         });
 
@@ -622,11 +609,19 @@ export default function ListarPagos() {
         if (abort.signal.aborted) return;
 
         const st = e?.status ?? e?.response?.status;
+        const msg = String(e?.message ?? "").toLowerCase();
+
         if (st === 401 || st === 403) {
           clearToken();
           navigate("/login", { replace: true });
           return;
         }
+
+        if (rolActual === 3 && (msg.includes("academia") || msg.includes("x-academia"))) {
+          setError("⚠️ Superadmin: selecciona una academia para ver pagos centralizados.");
+          return;
+        }
+
         setError("❌ No se pudieron cargar los pagos centralizados.");
       } finally {
         if (!abort.signal.aborted) setIsLoading(false);
@@ -634,33 +629,133 @@ export default function ListarPagos() {
     })();
 
     return () => abort.abort();
-  }, [navigate, rolActual]);
+  }, [navigate, rolActual, academiaTarget]);
 
-  /* ─────────────────────────────
-     UI helpers
-  ───────────────────────────── */
-  const fondoClase = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";
-  const tablaCabecera = darkMode ? "bg-[#1f2937] text-white" : "bg-gray-100 text-[#1d0b0b]";
-  const filaHover = darkMode ? "hover:bg-[#111827]" : "hover:bg-gray-50";
+  /* =======================
+     UI (compacta)
+     - page bg-transparent (plan gama)
+     - cards coherentes
+     - tablas + modales compactos
+======================= */
+  const ui = useMemo(() => {
+    // ✅ Plan gama: sin fondo “cuadro”
+    const page = "min-h-[calc(100vh-100px)] font-sans bg-transparent px-3 pt-3 pb-16";
 
-  const controlBase = darkMode
-    ? "border border-gray-500 bg-[#1f2937] text-white placeholder-gray-400"
-    : "border border-gray-300 bg-white text-black placeholder-gray-500";
-  const controlClase = `${controlBase} w-full h-10 px-3 rounded-md text-sm leading-none`;
+    const title = darkMode ? "text-white" : "text-ra-marron";
+    const subtitle = darkMode ? "text-white/70" : "text-ra-marron/70";
+
+    const msgBox =
+      "rounded-xl border px-4 py-3 font-semibold text-sm " +
+      (darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
+
+    const warnBox =
+      "rounded-xl border px-4 py-3 font-semibold text-sm " +
+      (darkMode ? "border-amber-200/20 bg-amber-500/10 text-amber-100" : "border-amber-200 bg-amber-50 text-amber-800");
+
+    const card =
+      "max-w-6xl mx-auto rounded-xl shadow-[0_14px_40px_rgba(0,0,0,0.18)] border " +
+      (darkMode ? "bg-white/8 border-white/12" : "bg-white/55 border-ra-marron/12");
+
+    const cardPad = "p-3"; // ✅ compacto
+
+    const line = darkMode ? "rgba(255,255,255,0.14)" : "rgba(109,88,41,0.18)";
+    const border = `1px solid ${line}`;
+
+    const tableWrap = "w-full overflow-x-auto";
+
+    // ✅ tabla compacta
+    const table = "w-full text-[11px] sm:text-xs min-w-[920px] border-separate border-spacing-0";
+
+    const thead = "text-[10px] sm:text-[11px] " + (darkMode ? "bg-black/20" : "bg-ra-cream/90");
+
+    const thBase =
+      "py-1.5 px-2 text-center whitespace-nowrap font-extrabold " +
+      (darkMode ? "text-[#ffdda1]" : "text-[#6d5829]");
+
+    const tdBase = "py-1.5 px-2 text-center " + (darkMode ? "text-white/90" : "text-ra-marron");
+
+    const tr = "transition " + (darkMode ? "hover:bg-white/7" : "hover:bg-white/70");
+
+    const cellBorderStyle = { borderRight: border, borderBottom: border };
+    const headBorderStyle = { borderRight: border, borderBottom: border, borderTop: border };
+
+    // ✅ controles compactos
+    const controlBase =
+      "w-full h-9 px-2.5 rounded-md text-[12px] leading-none outline-none transition " +
+      (darkMode
+        ? "border border-white/12 bg-black/20 text-white placeholder-white/45 focus:border-white/22"
+        : "border border-ra-marron/12 bg-white/70 text-ra-marron placeholder-ra-marron/45 focus:border-ra-marron/24");
+
+    const controlTextArea =
+      "w-full min-h-[70px] rounded-md p-2.5 text-[12px] outline-none transition " +
+      (darkMode
+        ? "border border-white/12 bg-black/20 text-white placeholder-white/45 focus:border-white/22"
+        : "border border-ra-marron/12 bg-white/70 text-ra-marron placeholder-ra-marron/45 focus:border-ra-marron/24");
+
+    // ✅ botones compactos
+    const btnPrimary =
+      "inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md font-extrabold text-[12px] transition " +
+      "disabled:opacity-50 disabled:cursor-not-allowed";
+    const btnPrimaryStyle = {
+      backgroundColor: PALETTE.sand,
+      color: PALETTE.brown,
+      boxShadow: darkMode ? "0 10px 26px rgba(0,0,0,0.22)" : "0 10px 26px rgba(109,88,41,0.14)",
+    };
+
+    const btnSecondary =
+      "px-2.5 py-1 rounded-md border transition font-semibold text-[12px] " +
+      (darkMode ? "border-white/18 hover:bg-white/8 text-white" : "border-ra-marron/18 hover:bg-white/70 text-ra-marron") +
+      " disabled:opacity-50 disabled:cursor-not-allowed";
+
+    const badge =
+      "text-[11px] inline-flex items-center gap-2 rounded-full px-2.5 py-1 border font-semibold " +
+      (darkMode ? "bg-white/8 border-white/10 text-white/80" : "bg-white/60 border-ra-marron/10 text-ra-marron/80");
+
+    const pill = (estadoRaw) => {
+      const e = String(estadoRaw ?? "").trim().toUpperCase();
+      if (e === "PAGADO") return "bg-emerald-500/15 text-emerald-100 border border-emerald-300/20";
+      if (e === "VENCIDO") return "bg-red-500/15 text-red-100 border border-red-300/20";
+      return "bg-white/10 text-white/90 border border-white/12";
+    };
+
+    const modalCard =
+      "w-[95%] max-w-xl rounded-xl shadow-[0_16px_60px_rgba(0,0,0,0.35)] border " +
+      (darkMode ? "bg-[#121212]/82 border-white/12" : "bg-white/88 border-ra-marron/12") +
+      " backdrop-blur-md";
+
+    return {
+      page,
+      title,
+      subtitle,
+      msgBox,
+      warnBox,
+      card,
+      cardPad,
+      line,
+      border,
+      tableWrap,
+      table,
+      thead,
+      thBase,
+      tdBase,
+      tr,
+      cellBorderStyle,
+      headBorderStyle,
+      controlBase,
+      controlTextArea,
+      btnPrimary,
+      btnPrimaryStyle,
+      btnSecondary,
+      badge,
+      pill,
+      modalCard,
+    };
+  }, [darkMode]);
 
   const toCLP = (n) =>
-    new Intl.NumberFormat("es-CL", {
-      style: "currency",
-      currency: "CLP",
-      maximumFractionDigits: 0,
-    }).format(Number(n || 0));
-
-  const estadoPillClass = (estadoRaw) => {
-    const estado = (estadoRaw ?? "").toString().trim().toUpperCase();
-    if (estado === "PAGADO") return "bg-green-100 text-green-800 border border-green-300";
-    if (estado === "VENCIDO") return "bg-red-100 text-red-800 border border-red-300";
-    return "bg-gray-100 text-gray-800 border border-gray-300";
-  };
+    new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(
+      Number(n || 0)
+    );
 
   const findIdByName = (map, wantedName) => {
     const target = String(wantedName || "").trim().toUpperCase();
@@ -670,13 +765,10 @@ export default function ListarPagos() {
     return null;
   };
 
-  const situacionVencidoId = useMemo(
-    () => findIdByName(situacionPagoMap, "VENCIDO"),
-    [situacionPagoMap]
-  );
+  const situacionVencidoId = useMemo(() => findIdByName(situacionPagoMap, "VENCIDO"), [situacionPagoMap]);
 
   /* ─────────────────────────────
-     Construcción de filas (incluye vencidos virtuales)
+     Filas pagos (incluye vencidos virtuales)
   ───────────────────────────── */
   const filas = useMemo(() => {
     const rows = [];
@@ -694,14 +786,9 @@ export default function ListarPagos() {
 
       const d = p?.fecha_pago ? new Date(p.fecha_pago) : null;
       if (!d || isNaN(d.getTime())) return null;
-      return {
-        year: d.getFullYear(),
-        month: d.getMonth() + 1,
-        key: ymKey(d.getFullYear(), d.getMonth() + 1),
-      };
+      return { year: d.getFullYear(), month: d.getMonth() + 1, key: ymKey(d.getFullYear(), d.getMonth() + 1) };
     };
 
-    // 1) Indexar mensualidades PAGADAS por rut y por periodo (YYYY-MM)
     const mensualidadesPagadas = new Map(); // rut -> Set("YYYY-MM")
 
     for (const p of pagos) {
@@ -722,7 +809,6 @@ export default function ListarPagos() {
       mensualidadesPagadas.set(rut, set);
     }
 
-    // 2) Filas reales (dedupe)
     const seen = new Set();
 
     for (const p of pagos) {
@@ -758,23 +844,11 @@ export default function ListarPagos() {
         return isNaN(d.getTime()) ? 0 : d.getTime();
       })();
 
-      rows.push({
-        key: safeId ?? dedupeKey,
-        id: safeId,
-        rut,
-        nombre,
-        categoria,
-        estado,
-        pago: p,
-        ts,
-        virtual: false,
-      });
+      rows.push({ key: safeId ?? dedupeKey, id: safeId, rut, nombre, categoria, estado, pago: p, ts, virtual: false });
     }
 
-    // 3) Meses exigibles acumulativos
     const mesesExigibles = buildMesesExigibles(new Date(), 5);
 
-    // 4) Filas virtuales SOLO para meses exigibles NO pagados
     for (const [rut, j] of jugadoresMap.entries()) {
       const setPagadas = mensualidadesPagadas.get(String(rut)) || new Set();
 
@@ -815,7 +889,6 @@ export default function ListarPagos() {
       }
     }
 
-    // 5) Orden: vencidos arriba
     const pesoEstado = (estadoRaw) => {
       const e = (estadoRaw ?? "").toString().toUpperCase();
       if (e === "VENCIDO") return 0;
@@ -854,12 +927,6 @@ export default function ListarPagos() {
     return Array.from(m, ([value, label]) => ({ value, label }));
   }, [filas]);
 
-  const opcionesCategoria = useMemo(() => {
-    const s = new Set();
-    for (const r of filas) if (r?.categoria) s.add(r.categoria);
-    return Array.from(s).map((label) => ({ value: label, label }));
-  }, [filas]);
-
   const opcionesMedioPago = useMemo(() => {
     const m = new Map();
     for (const r of filas) {
@@ -873,6 +940,7 @@ export default function ListarPagos() {
 
   /* ─────────────────────────────
      Filtros pagos + paginación
+     ✅ Sin filtro categoría (columna eliminada)
   ───────────────────────────── */
   const filasFiltradas = useMemo(() => {
     const f = (filtroTexto || "").toLowerCase().trim();
@@ -889,6 +957,7 @@ export default function ListarPagos() {
           rut.includes(f) ||
           formatRutWithDV(rut).toLowerCase().includes(f) ||
           nombre.toLowerCase().includes(f) ||
+          // ✅ se mantiene búsqueda por categoría (aunque no se muestre la columna)
           categoria.toLowerCase().includes(f);
       }
 
@@ -901,25 +970,22 @@ export default function ListarPagos() {
         okTipo = idTipo === filtroTipoPago;
       }
 
-      let okCat = true;
-      if (filtroCategoriaSel) okCat = row.categoria === filtroCategoriaSel;
-
       let okMedio = true;
       if (filtroMedioPago) {
         const idMedio = pago?.medio_pago?.id ? String(pago.medio_pago.id) : "";
         okMedio = idMedio === filtroMedioPago;
       }
 
-      return okTexto && okEstado && okTipo && okCat && okMedio;
+      return okTexto && okEstado && okTipo && okMedio;
     });
-  }, [filas, filtroTexto, filtroEstado, filtroTipoPago, filtroCategoriaSel, filtroMedioPago]);
+  }, [filas, filtroTexto, filtroEstado, filtroTipoPago, filtroMedioPago]);
 
   const totalPages = useMemo(() => {
     const tp = Math.ceil(filasFiltradas.length / PAGE_SIZE);
     return Math.max(1, Math.min(tp || 1, MAX_PAGES));
   }, [filasFiltradas]);
 
-  useEffect(() => setPage(1), [filtroTexto, filtroEstado, filtroTipoPago, filtroCategoriaSel, filtroMedioPago]);
+  useEffect(() => setPage(1), [filtroTexto, filtroEstado, filtroTipoPago, filtroMedioPago]);
 
   const pageData = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -928,7 +994,7 @@ export default function ListarPagos() {
   }, [filasFiltradas, page]);
 
   /* ─────────────────────────────
-     Sección: jugadores para pagos manuales
+     Jugadores para pagos manuales
   ───────────────────────────── */
   const jugadoresManualRows = useMemo(() => {
     const f = (manualFiltro || "").toLowerCase().trim();
@@ -1060,8 +1126,7 @@ export default function ListarPagos() {
 
     const rutsActivos = new Set(Array.from(jugadoresMap.keys()));
     const rawPagosActivos = rawPagos.filter((p) => {
-      const rut =
-        p?.jugador_rut ?? p?.rut_jugador ?? p?.rut ?? p?.jugador?.rut_jugador ?? p?.jugador?.rut;
+      const rut = p?.jugador_rut ?? p?.rut_jugador ?? p?.rut ?? p?.jugador?.rut_jugador ?? p?.jugador?.rut;
       return rut != null && rutsActivos.has(String(rut));
     });
 
@@ -1112,6 +1177,7 @@ export default function ListarPagos() {
       fecha_pago: editForm.fecha_pago,
       tipo_pago_id: isVirtual ? TIPO_PAGO_MENSUALIDAD : Number(editForm.tipo_pago_id),
       medio_pago_id: Number(editForm.medio_pago_id),
+      // 👇 tu comportamiento actual: virtual se guarda como PAGADO
       situacion_pago_id: isVirtual ? SITUACION_PAGO_PAGADO_ID : Number(editForm.situacion_pago_id),
       observaciones: editForm.observaciones ?? "",
     };
@@ -1128,7 +1194,6 @@ export default function ListarPagos() {
     const headers = buildHeaders(rolActual);
 
     try {
-      // POST: manual o fila virtual
       if (isVirtual || isCreate) {
         await postWithFallback("/pagos-jugador", payload, { headers });
         setEditOpen(false);
@@ -1136,7 +1201,6 @@ export default function ListarPagos() {
         return;
       }
 
-      // PUT: editar pago existente
       const idNum = Number(editForm.id);
       if (!Number.isFinite(idNum) || idNum <= 0) {
         setEditError("ID de pago inválido");
@@ -1145,7 +1209,6 @@ export default function ListarPagos() {
 
       await putWithFallback(`/pagos-jugador/${idNum}`, payload, { headers });
 
-      // actualización local rápida
       setPagos((prev) =>
         prev.map((p) => {
           const pid = Number(p?.id);
@@ -1216,450 +1279,530 @@ export default function ListarPagos() {
   ───────────────────────────── */
   if (isLoading) return <IsLoading />;
 
-  if (error) {
+  if (error && !pagos.length) {
     return (
-      <div className={`${fondoClase} min-h-[calc(100vh-100px)] px-4 pt-4 pb-16 flex items-center justify-center`}>
-        <p className="text-red-500 text-sm sm:text-base">{error}</p>
+      <div className={`${ui.page} flex justify-center items-center`}>
+        <div className={ui.msgBox}>{error}</div>
       </div>
     );
   }
 
   return (
-    <div className={`${fondoClase} min-h-[calc(100vh-100px)] px-4 pt-4 pb-16 font-weli`}>
-      <h2 className="text-2xl font-bold mb-2 text-center">Pagos Centralizados</h2>
-      <p className="text-center mb-6 text-xs sm:text-sm opacity-80">
-        Vista consolidada de pagos de jugadores <span className="font-semibold">ACTIVOS</span>. Además, se agregan filas
-        virtuales de <span className="font-semibold">Mensualidad VENCIDA</span> cuando el jugador no tiene mensualidad
-        registrada.
-      </p>
-
-      {/* Filtros pagos */}
-      <div className="mb-4 w-full">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end w-full">
-          <input
-            type="text"
-            placeholder="Buscar por RUT, nombre o categoría"
-            value={filtroTexto}
-            onChange={(e) => setFiltroTexto(e.target.value)}
-            className={controlClase}
-          />
-
-          <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className={controlClase}>
-            <option value="">Estado (todos)</option>
-            <option value="PAGADO">PAGADO</option>
-            <option value="VENCIDO">VENCIDO</option>
-          </select>
-
-          <select value={filtroTipoPago} onChange={(e) => setFiltroTipoPago(e.target.value)} className={controlClase}>
-            <option value="">Tipo de pago (todos)</option>
-            {opcionesTipoPago.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-
-          <select value={filtroCategoriaSel} onChange={(e) => setFiltroCategoriaSel(e.target.value)} className={controlClase}>
-            <option value="">Categoría (todas)</option>
-            {opcionesCategoria.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-
-          <select value={filtroMedioPago} onChange={(e) => setFiltroMedioPago(e.target.value)} className={controlClase}>
-            <option value="">Medio de pago (todos)</option>
-            {opcionesMedioPago.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+    <div className={ui.page}>
+      {/* Header */}
+      <header className="max-w-6xl mx-auto">
+        <div className="text-center">
+          <h1 className={`text-xl sm:text-2xl font-extrabold tracking-tightish ${ui.title}`}>
+            Pagos Centralizados
+          </h1>
+          <p className={`text-[11px] sm:text-xs mt-1 ${ui.subtitle}`}>
+            Vista consolidada de pagos de jugadores <span className="font-semibold">ACTIVOS</span>. Se agregan filas virtuales de{" "}
+            <span className="font-semibold">Mensualidad VENCIDA</span> cuando falta el registro.
+          </p>
         </div>
-      </div>
+      </header>
 
-      {/* Tabla pagos */}
-      <div className="w-full overflow-x-auto">
-        <table className="w-full text-xs sm:text-sm min-w-[1100px]">
-          <thead className={tablaCabecera}>
-            <tr>
-              <th className="py-2 px-4 border min-w-[120px]">RUT Jugador</th>
-              <th className="py-2 px-4 border min-w-[220px] break-all">Nombre del Jugador</th>
-              <th className="py-2 px-4 border min-w-[150px] break-all">Categoría</th>
-              <th className="py-2 px-4 border min-w-[140px] break-all text-center">Tipo de Pago</th>
-              <th className="py-2 px-4 border min-w-[160px] break-all text-center">Estado del pago</th>
-              <th className="py-2 px-4 border min-w-[130px]">Fecha pago</th>
-              <th className="py-2 px-4 border min-w-[130px]">Monto</th>
-              <th className="py-2 px-4 border min-w-[150px] break-all">Medio de pago</th>
-              <th className="py-2 px-4 border min-w-[120px] text-center">Acciones</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {pageData.map((row) => {
-              const pago = row.pago;
-              return (
-                <tr key={row.key} className={filaHover}>
-                  <td className="py-2 px-4 border text-center">{row.rut ? formatRutWithDV(row.rut) : "—"}</td>
-                  <td className="py-2 px-4 border text-center break-all">{row.nombre}</td>
-                  <td className="py-2 px-4 border text-center break-all">{row.categoria}</td>
-                  <td className="py-2 px-4 border text-center break-all">{pago?.tipo_pago?.nombre ?? "—"}</td>
-
-                  <td className="py-2 px-4 border text-center">
-                    <span
-                      className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-semibold ${estadoPillClass(
-                        row.estado
-                      )}`}
-                    >
-                      {row.estado}
-                    </span>
-                  </td>
-
-                  <td className="py-2 px-4 border text-center">
-                    {pago?.fecha_pago ? new Date(pago.fecha_pago).toLocaleDateString("es-CL") : "—"}
-                  </td>
-
-                  <td className="py-2 px-4 border text-center">{pago ? toCLP(pago.monto) : "—"}</td>
-
-                  <td className="py-2 px-4 border text-center break-all">{pago?.medio_pago?.nombre ?? "—"}</td>
-
-                  <td className="py-2 px-2 border text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => openEdit(row)}
-                        className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50"
-                        title={row.virtual ? "Registrar pago de mensualidad" : "Editar pago"}
-                        disabled={reloadBusy}
-                      >
-                        <Pencil size={18} />
-                      </button>
-
-                      <button
-                        onClick={() => removePago(row)}
-                        className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50"
-                        title={row.virtual ? "No se puede eliminar (fila virtual)" : "Eliminar pago"}
-                        disabled={reloadBusy || row.virtual || !pago?.id}
-                      >
-                        <Trash2 size={18} color="#D32F2F" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-
-            {pageData.length === 0 && (
-              <tr>
-                <td className="py-4 px-4 border text-center" colSpan={9}>
-                  No hay registros que coincidan con los filtros.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Paginación pagos */}
-      <div className="flex flex-col items-center justify-center gap-2 mt-4">
-        <div className="flex items-center justify-center gap-2">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={reloadBusy || page <= 1}
-            className={`px-3 py-1 rounded border ${
-              page <= 1 || reloadBusy ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-100 dark:hover:bg-[#111827]"
-            }`}
-          >
-            Anterior
-          </button>
-
-          <span className="px-2">
-            Página {page} de {totalPages}
-          </span>
-
-          <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={reloadBusy || page >= totalPages}
-            className={`px-3 py-1 rounded border ${
-              page >= totalPages || reloadBusy ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-100 dark:hover:bg-[#111827]"
-            }`}
-          >
-            Siguiente
-          </button>
-        </div>
-
-        <div className="text-xs opacity-80">
-          Mostrando <span className="font-semibold">{pageData.length}</span> de{" "}
-          <span className="font-semibold">{filasFiltradas.length}</span> pagos filtrados.
-        </div>
-      </div>
-
-      {/* ─────────────────────────────
-          INGRESAR PAGOS MANUALES
-        ───────────────────────────── */}
-      <div className="w-full mt-10">
-        <h3 className="text-xl font-bold text-center">INGRESAR PAGOS MANUALES</h3>
-        <p className="text-center mt-1 mb-4 text-xs sm:text-sm opacity-80">
-          Acá se pueden realizar pagos manuales. Se listan{" "}
-          <span className="font-semibold">solo jugadores activos</span> (estado_id = 1).
-        </p>
-
-        <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
-          <input
-            type="text"
-            placeholder="Buscar por RUT, nombre, categoría o sucursal"
-            value={manualFiltro}
-            onChange={(e) => setManualFiltro(e.target.value)}
-            className={controlClase}
-          />
-          <div className="text-xs opacity-80 md:text-right">
-            Total jugadores activos: <span className="font-semibold">{jugadoresManualRows.length}</span>
+      <main className="mt-4">
+        {!!error && (
+          <div className="max-w-6xl mx-auto mb-3">
+            <div className={ui.warnBox}>{error}</div>
           </div>
-        </div>
+        )}
 
-        <div className="w-full overflow-x-auto">
-          <table className="w-full text-xs sm:text-sm min-w-[1100px]">
-            <thead className={tablaCabecera}>
-              <tr>
-                <th className="py-2 px-4 border min-w-[120px]">RUT Jugador</th>
-                <th className="py-2 px-4 border min-w-[260px]">Nombre del jugador</th>
-                <th className="py-2 px-4 border min-w-[180px]">Categoría</th>
-                <th className="py-2 px-4 border min-w-[180px]">Sucursal</th>
-                <th className="py-2 px-4 border min-w-[140px] text-center">Acciones</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {manualPageData.map((j) => (
-                <tr key={`MANUAL-${j.rut}`} className={filaHover}>
-                  <td className="py-2 px-4 border text-center">{formatRutWithDV(j.rut)}</td>
-                  <td className="py-2 px-4 border text-center break-all">{j.nombre}</td>
-                  <td className="py-2 px-4 border text-center break-all">{j.categoria}</td>
-                  <td className="py-2 px-4 border text-center break-all">{j.sucursal}</td>
-                  <td className="py-2 px-4 border text-center">
-                    <button
-                      onClick={() => openManualPago(j.rut)}
-                      disabled={reloadBusy}
-                      className="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded bg-[#24C6FF] text-[#06121f] hover:brightness-95 disabled:opacity-50 transition-colors"
-                      title="Ingresar pago manual"
-                    >
-                      <CreditCard size={16} />
-                      Ingresar pago
-                    </button>
-                  </td>
-                </tr>
-              ))}
-
-              {manualPageData.length === 0 && (
-                <tr>
-                  <td className="py-4 px-4 border text-center" colSpan={5}>
-                    No hay jugadores que coincidan con el filtro.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* paginación manual */}
-        <div className="flex flex-col items-center justify-center gap-2 mt-4">
-          <div className="flex items-center justify-center gap-2">
-            <button
-              onClick={() => setManualPage((p) => Math.max(1, p - 1))}
-              disabled={reloadBusy || manualPage <= 1}
-              className={`px-3 py-1 rounded border ${
-                manualPage <= 1 || reloadBusy ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-100 dark:hover:bg-[#111827]"
-              }`}
-            >
-              Anterior
-            </button>
-
-            <span className="px-2">
-              Página {manualPage} de {manualTotalPages}
+        {/* Filtros pagos */}
+        <div className={`${ui.card} ${ui.cardPad}`}>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h3 className={`text-sm font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}>Filtros</h3>
+            <span className={ui.badge}>
+              Filtrados: {filasFiltradas.length} · Página: {page}/{totalPages}
             </span>
-
-            <button
-              onClick={() => setManualPage((p) => Math.min(manualTotalPages, p + 1))}
-              disabled={reloadBusy || manualPage >= manualTotalPages}
-              className={`px-3 py-1 rounded border ${
-                manualPage >= manualTotalPages || reloadBusy ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-100 dark:hover:bg-[#111827]"
-              }`}
-            >
-              Siguiente
-            </button>
           </div>
 
-          <div className="text-xs opacity-80">
-            Mostrando <span className="font-semibold">{manualPageData.length}</span> de{" "}
-            <span className="font-semibold">{jugadoresManualRows.length}</span> jugadores filtrados.
+          <div className="mt-3" style={{ height: 1, background: ui.line }} />
+
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 items-end w-full">
+            <input
+              type="text"
+              placeholder="Buscar por RUT, nombre (o categoría)"
+              value={filtroTexto}
+              onChange={(e) => setFiltroTexto(e.target.value)}
+              className={ui.controlBase}
+            />
+
+            <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className={ui.controlBase}>
+              <option value="">Estado (todos)</option>
+              <option value="PAGADO">PAGADO</option>
+              <option value="VENCIDO">VENCIDO</option>
+            </select>
+
+            <select value={filtroTipoPago} onChange={(e) => setFiltroTipoPago(e.target.value)} className={ui.controlBase}>
+              <option value="">Tipo de pago (todos)</option>
+              {opcionesTipoPago.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+
+            <select value={filtroMedioPago} onChange={(e) => setFiltroMedioPago(e.target.value)} className={ui.controlBase}>
+              <option value="">Medio de pago (todos)</option>
+              {opcionesMedioPago.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
-      </div>
+
+        {/* Tabla pagos */}
+        <div className={`${ui.card} ${ui.cardPad} mt-4`}>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h3 className={`text-sm font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}>Tabla de Pagos</h3>
+            <span className={ui.badge}>
+              Mostrando {pageData.length} de {filasFiltradas.length}
+            </span>
+          </div>
+
+          <div className="mt-3" style={{ height: 1, background: ui.line }} />
+
+          <div className={`mt-3 ${ui.tableWrap}`}>
+            <table className={ui.table}>
+              <thead className={ui.thead}>
+                <tr>
+                  <th className={`${ui.thBase} min-w-[110px]`} style={{ ...ui.headBorderStyle, borderLeft: ui.border }}>
+                    RUT
+                  </th>
+                  <th className={`${ui.thBase} min-w-[220px]`} style={ui.headBorderStyle}>
+                    Nombre
+                  </th>
+                  {/* ✅ CATEGORÍA ELIMINADA */}
+                  <th className={`${ui.thBase} min-w-[190px]`} style={ui.headBorderStyle}>
+                    Tipo
+                  </th>
+                  <th className={`${ui.thBase} min-w-[130px]`} style={ui.headBorderStyle}>
+                    Estado
+                  </th>
+                  <th className={`${ui.thBase} min-w-[110px]`} style={ui.headBorderStyle}>
+                    Fecha
+                  </th>
+                  <th className={`${ui.thBase} min-w-[110px]`} style={ui.headBorderStyle}>
+                    Monto
+                  </th>
+                  <th className={`${ui.thBase} min-w-[150px]`} style={ui.headBorderStyle}>
+                    Medio
+                  </th>
+                  <th className={`${ui.thBase} min-w-[96px]`} style={{ ...ui.headBorderStyle, borderRight: ui.border }}>
+                    Acción
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {pageData.map((row) => {
+                  const pago = row.pago;
+                  return (
+                    <tr key={row.key} className={ui.tr}>
+                      <td className={ui.tdBase} style={{ ...ui.cellBorderStyle, borderLeft: ui.border }}>
+                        {row.rut ? formatRutWithDV(row.rut) : "—"}
+                      </td>
+
+                      <td className={`${ui.tdBase} break-all`} style={ui.cellBorderStyle}>
+                        {row.nombre}
+                      </td>
+
+                      <td className={`${ui.tdBase} break-all`} style={ui.cellBorderStyle}>
+                        {pago?.tipo_pago?.nombre ?? "—"}
+                      </td>
+
+                      <td className={ui.tdBase} style={ui.cellBorderStyle}>
+                        <span
+                          className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${ui.pill(
+                            row.estado
+                          )}`}
+                        >
+                          {row.estado}
+                        </span>
+                      </td>
+
+                      <td className={ui.tdBase} style={ui.cellBorderStyle}>
+                        {pago?.fecha_pago ? new Date(pago.fecha_pago).toLocaleDateString("es-CL") : "—"}
+                      </td>
+
+                      <td className={ui.tdBase} style={ui.cellBorderStyle}>
+                        {pago ? toCLP(pago.monto) : "—"}
+                      </td>
+
+                      <td className={`${ui.tdBase} break-all`} style={ui.cellBorderStyle}>
+                        {pago?.medio_pago?.nombre ?? "—"}
+                      </td>
+
+                      <td className={ui.tdBase} style={{ ...ui.cellBorderStyle, borderRight: ui.border }}>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => openEdit(row)}
+                            className="p-0.5 rounded hover:bg-white/10 disabled:opacity-50"
+                            title={row.virtual ? "Registrar pago de mensualidad" : "Editar pago"}
+                            disabled={reloadBusy}
+                          >
+                            <Pencil size={16} />
+                          </button>
+
+                          <button
+                            onClick={() => removePago(row)}
+                            className="p-0.5 rounded hover:bg-white/10 disabled:opacity-50"
+                            title={row.virtual ? "No se puede eliminar (fila virtual)" : "Eliminar pago"}
+                            disabled={reloadBusy || row.virtual || !pago?.id}
+                          >
+                            <Trash2 size={16} color="#ff6b6b" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {pageData.length === 0 && (
+                  <tr>
+                    <td
+                      className={ui.tdBase}
+                      style={{ ...ui.cellBorderStyle, borderLeft: ui.border, borderRight: ui.border }}
+                      colSpan={8}
+                    >
+                      No hay registros que coincidan con los filtros.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Paginación pagos */}
+          <div className="mt-4 flex flex-col items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={reloadBusy || page <= 1}
+                className={ui.btnSecondary}
+              >
+                Anterior
+              </button>
+
+              <span className={ui.badge}>
+                Página <span style={{ color: PALETTE.sand }} className="font-extrabold">{page}</span> de{" "}
+                <span className="font-extrabold">{totalPages}</span>
+              </span>
+
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={reloadBusy || page >= totalPages}
+                className={ui.btnSecondary}
+              >
+                Siguiente
+              </button>
+            </div>
+
+            <div className={`text-[11px] ${ui.subtitle}`}>
+              Mostrando <span className="font-semibold">{pageData.length}</span> de{" "}
+              <span className="font-semibold">{filasFiltradas.length}</span> pagos filtrados.
+            </div>
+          </div>
+        </div>
+
+        {/* ─────────────────────────────
+            INGRESAR PAGOS MANUALES
+          ───────────────────────────── */}
+        <div className={`${ui.card} ${ui.cardPad} mt-6`}>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h3 className={`text-sm font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}>
+              Ingresar Pagos Manuales
+            </h3>
+            <span className={ui.badge}>Jugadores activos: {jugadoresManualRows.length}</span>
+          </div>
+
+          <div className="mt-1">
+            <p className={`text-[11px] ${ui.subtitle} text-center sm:text-left`}>
+              Se listan <span className="font-semibold">solo jugadores activos</span> (estado_id = 1).
+            </p>
+          </div>
+
+          <div className="mt-3" style={{ height: 1, background: ui.line }} />
+
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2.5 items-end">
+            <input
+              type="text"
+              placeholder="Buscar por RUT, nombre, categoría o sucursal"
+              value={manualFiltro}
+              onChange={(e) => setManualFiltro(e.target.value)}
+              className={ui.controlBase}
+            />
+            <div className={`text-[11px] ${ui.subtitle} md:text-right`}>
+              Página {manualPage}/{manualTotalPages}
+            </div>
+          </div>
+
+          <div className={`mt-3 ${ui.tableWrap}`}>
+            <table className={ui.table}>
+              <thead className={ui.thead}>
+                <tr>
+                  <th className={`${ui.thBase} min-w-[110px]`} style={{ ...ui.headBorderStyle, borderLeft: ui.border }}>
+                    RUT
+                  </th>
+                  <th className={`${ui.thBase} min-w-[260px]`} style={ui.headBorderStyle}>
+                    Nombre
+                  </th>
+                  <th className={`${ui.thBase} min-w-[150px]`} style={ui.headBorderStyle}>
+                    Categoría
+                  </th>
+                  <th className={`${ui.thBase} min-w-[150px]`} style={ui.headBorderStyle}>
+                    Sucursal
+                  </th>
+                  <th className={`${ui.thBase} min-w-[150px]`} style={{ ...ui.headBorderStyle, borderRight: ui.border }}>
+                    Acción
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {manualPageData.map((j) => (
+                  <tr key={`MANUAL-${j.rut}`} className={ui.tr}>
+                    <td className={ui.tdBase} style={{ ...ui.cellBorderStyle, borderLeft: ui.border }}>
+                      {formatRutWithDV(j.rut)}
+                    </td>
+                    <td className={`${ui.tdBase} break-all`} style={ui.cellBorderStyle}>
+                      {j.nombre}
+                    </td>
+                    <td className={`${ui.tdBase} break-all`} style={ui.cellBorderStyle}>
+                      {j.categoria}
+                    </td>
+                    <td className={`${ui.tdBase} break-all`} style={ui.cellBorderStyle}>
+                      {j.sucursal}
+                    </td>
+                    <td className={ui.tdBase} style={{ ...ui.cellBorderStyle, borderRight: ui.border }}>
+                      <button
+                        onClick={() => openManualPago(j.rut)}
+                        disabled={reloadBusy}
+                        className={ui.btnPrimary}
+                        style={ui.btnPrimaryStyle}
+                        title="Ingresar pago manual"
+                      >
+                        <CreditCard size={14} />
+                        Ingresar pago
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+
+                {manualPageData.length === 0 && (
+                  <tr>
+                    <td
+                      className={ui.tdBase}
+                      style={{ ...ui.cellBorderStyle, borderLeft: ui.border, borderRight: ui.border }}
+                      colSpan={5}
+                    >
+                      No hay jugadores que coincidan con el filtro.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* paginación manual */}
+          <div className="mt-4 flex flex-col items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-2">
+              <button
+                onClick={() => setManualPage((p) => Math.max(1, p - 1))}
+                disabled={reloadBusy || manualPage <= 1}
+                className={ui.btnSecondary}
+              >
+                Anterior
+              </button>
+
+              <span className={ui.badge}>
+                Página <span style={{ color: PALETTE.sand }} className="font-extrabold">{manualPage}</span> de{" "}
+                <span className="font-extrabold">{manualTotalPages}</span>
+              </span>
+
+              <button
+                onClick={() => setManualPage((p) => Math.min(manualTotalPages, p + 1))}
+                disabled={reloadBusy || manualPage >= manualTotalPages}
+                className={ui.btnSecondary}
+              >
+                Siguiente
+              </button>
+            </div>
+
+            <div className={`text-[11px] ${ui.subtitle}`}>
+              Mostrando <span className="font-semibold">{manualPageData.length}</span> de{" "}
+              <span className="font-semibold">{jugadoresManualRows.length}</span> jugadores filtrados.
+            </div>
+          </div>
+        </div>
+      </main>
 
       {/* Modal Edición / Registro */}
       {editOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className={`${darkMode ? "bg-[#1f2937] text-white" : "bg-white"} w-[95%] max-w-2xl rounded-lg p-5 shadow-lg`}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-semibold">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-3">
+          <div className={ui.modalCard}>
+            <div
+              className={`px-4 py-3 border-b flex items-center justify-between gap-3 ${
+                darkMode ? "border-white/10" : "border-ra-marron/10"
+              }`}
+            >
+              <h3 className={`text-[13px] font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}>
                 {editForm.virtual
-                  ? `Registrar mensualidad vencida (${monthLabelEs(editForm.deuda_year, editForm.deuda_month)}) - ${formatRutWithDV(editForm.jugador_rut)}`
+                  ? `Registrar mensualidad vencida (${monthLabelEs(editForm.deuda_year, editForm.deuda_month)}) - ${formatRutWithDV(
+                      editForm.jugador_rut
+                    )}`
                   : editForm.create
                     ? `Ingresar pago manual - ${formatRutWithDV(editForm.jugador_rut)}`
                     : `Editar pago #${editForm.id}`}
               </h3>
 
               <button
-                className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50"
+                className="p-1 rounded hover:bg-white/10 disabled:opacity-50"
                 onClick={closeEdit}
                 disabled={editBusy || reloadBusy}
+                title="Cerrar"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
-            {editError && <p className="mb-3 text-red-500 text-sm">{editError}</p>}
+            <div className="p-4">
+              {editError && <div className={`mb-2 ${ui.warnBox}`}>{editError}</div>}
 
-            <form onSubmit={submitEdit} className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs mb-1 opacity-80">RUT Jugador</label>
-                <input type="text" value={formatRutWithDV(editForm.jugador_rut)} className={controlClase} disabled />
-              </div>
+              <form onSubmit={submitEdit} className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                <div>
+                  <label className={`block text-[11px] mb-1 ${ui.subtitle}`}>RUT Jugador</label>
+                  <input type="text" value={formatRutWithDV(editForm.jugador_rut)} className={ui.controlBase} disabled />
+                </div>
 
-              <div>
-                <label className="block text-xs mb-1 opacity-80">Monto (CLP)</label>
-                <input
-                  type="number"
-                  value={editForm.monto}
-                  onChange={(e) => setEditForm((f) => ({ ...f, monto: e.target.value }))}
-                  className={controlClase}
-                  required
-                  disabled={editBusy || reloadBusy}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs mb-1 opacity-80">Fecha pago</label>
-                <input
-                  type="date"
-                  value={editForm.fecha_pago}
-                  onChange={(e) => setEditForm((f) => ({ ...f, fecha_pago: e.target.value }))}
-                  className={controlClase}
-                  required
-                  disabled={editBusy || reloadBusy}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs mb-1 opacity-80">Tipo de pago</label>
-                <select
-                  value={editForm.tipo_pago_id}
-                  onChange={(e) => setEditForm((f) => ({ ...f, tipo_pago_id: e.target.value }))}
-                  className={controlClase}
-                  required
-                  disabled={editForm.virtual || editBusy || reloadBusy}
-                >
-                  <option value="">Seleccione…</option>
-                  {Array.from(tipoPagoMap, ([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs mb-1 opacity-80">Medio de pago</label>
-                <select
-                  value={editForm.medio_pago_id}
-                  onChange={(e) => setEditForm((f) => ({ ...f, medio_pago_id: e.target.value }))}
-                  className={controlClase}
-                  required
-                  disabled={editBusy || reloadBusy}
-                >
-                  <option value="">Seleccione…</option>
-                  {Array.from(medioPagoMap, ([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs mb-1 opacity-80">Situación</label>
-
-                {editForm.virtual ? (
-                  <>
-                    <input type="text" value="VENCIDO" className={controlClase} disabled />
-                    <p className="text-[11px] opacity-70 mt-1">
-                      Esta fila es <span className="font-semibold">VENCIDA</span>. Al guardar se registrará como{" "}
-                      <span className="font-semibold">PAGADO</span>.
-                    </p>
-                  </>
-                ) : (
-                  <select
-                    value={editForm.situacion_pago_id}
-                    onChange={(e) => setEditForm((f) => ({ ...f, situacion_pago_id: e.target.value }))}
-                    className={controlClase}
+                <div>
+                  <label className={`block text-[11px] mb-1 ${ui.subtitle}`}>Monto (CLP)</label>
+                  <input
+                    type="number"
+                    value={editForm.monto}
+                    onChange={(e) => setEditForm((f) => ({ ...f, monto: e.target.value }))}
+                    className={ui.controlBase}
                     required
                     disabled={editBusy || reloadBusy}
+                  />
+                </div>
+
+                <div>
+                  <label className={`block text-[11px] mb-1 ${ui.subtitle}`}>Fecha pago</label>
+                  <input
+                    type="date"
+                    value={editForm.fecha_pago}
+                    onChange={(e) => setEditForm((f) => ({ ...f, fecha_pago: e.target.value }))}
+                    className={ui.controlBase}
+                    required
+                    disabled={editBusy || reloadBusy}
+                  />
+                </div>
+
+                <div>
+                  <label className={`block text-[11px] mb-1 ${ui.subtitle}`}>Tipo de pago</label>
+                  <select
+                    value={editForm.tipo_pago_id}
+                    onChange={(e) => setEditForm((f) => ({ ...f, tipo_pago_id: e.target.value }))}
+                    className={ui.controlBase}
+                    required
+                    disabled={editForm.virtual || editBusy || reloadBusy}
                   >
                     <option value="">Seleccione…</option>
-                    {Array.from(situacionPagoMap, ([value, label]) => (
+                    {Array.from(tipoPagoMap, ([value, label]) => (
                       <option key={value} value={value}>
                         {label}
                       </option>
                     ))}
                   </select>
-                )}
-              </div>
+                </div>
 
-              <div className="md:col-span-2">
-                <label className="block text-xs mb-1 opacity-80">Observaciones</label>
-                <textarea
-                  value={editForm.observaciones}
-                  onChange={(e) => setEditForm((f) => ({ ...f, observaciones: e.target.value }))}
-                  className={`${controlBase} w-full min-h-[80px] rounded-md p-3 text-sm`}
-                  placeholder="Opcional"
-                  disabled={editBusy || reloadBusy}
-                />
-              </div>
+                <div>
+                  <label className={`block text-[11px] mb-1 ${ui.subtitle}`}>Medio de pago</label>
+                  <select
+                    value={editForm.medio_pago_id}
+                    onChange={(e) => setEditForm((f) => ({ ...f, medio_pago_id: e.target.value }))}
+                    className={ui.controlBase}
+                    required
+                    disabled={editBusy || reloadBusy}
+                  >
+                    <option value="">Seleccione…</option>
+                    {Array.from(medioPagoMap, ([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div className="md:col-span-2 flex justify-end gap-2 mt-2">
-                <button
-                  type="button"
-                  onClick={closeEdit}
-                  disabled={editBusy || reloadBusy}
-                  className="px-3 py-1 rounded border hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={editBusy || reloadBusy}
-                  className="px-3 py-1 rounded bg-[#24C6FF] text-[#06121f] hover:brightness-95 disabled:opacity-50 transition-colors"
-                >
-                  {editBusy ? "Guardando…" : "Guardar cambios"}
-                </button>
-              </div>
-            </form>
+                <div>
+                  <label className={`block text-[11px] mb-1 ${ui.subtitle}`}>Situación</label>
+
+                  {editForm.virtual ? (
+                    <>
+                      <input type="text" value="VENCIDO" className={ui.controlBase} disabled />
+                      <p className={`text-[10px] mt-1 ${ui.subtitle}`}>
+                        Esta fila es <span className="font-semibold">VENCIDA</span>. Al guardar se registrará como{" "}
+                        <span className="font-semibold">PAGADO</span>.
+                      </p>
+                    </>
+                  ) : (
+                    <select
+                      value={editForm.situacion_pago_id}
+                      onChange={(e) => setEditForm((f) => ({ ...f, situacion_pago_id: e.target.value }))}
+                      className={ui.controlBase}
+                      required
+                      disabled={editBusy || reloadBusy}
+                    >
+                      <option value="">Seleccione…</option>
+                      {Array.from(situacionPagoMap, ([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className={`block text-[11px] mb-1 ${ui.subtitle}`}>Observaciones</label>
+                  <textarea
+                    value={editForm.observaciones}
+                    onChange={(e) => setEditForm((f) => ({ ...f, observaciones: e.target.value }))}
+                    className={ui.controlTextArea}
+                    placeholder="Opcional"
+                    disabled={editBusy || reloadBusy}
+                  />
+                </div>
+
+                <div className="md:col-span-2 flex justify-end gap-2 mt-1.5">
+                  <button type="button" onClick={closeEdit} disabled={editBusy || reloadBusy} className={ui.btnSecondary}>
+                    Cancelar
+                  </button>
+                  <button type="submit" disabled={editBusy || reloadBusy} className={ui.btnPrimary} style={ui.btnPrimaryStyle}>
+                    {editBusy ? "Guardando…" : "Guardar"}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
 
       {/* Modal de éxito */}
       {successOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60">
-          <div
-            className={`${
-              darkMode ? "bg-[#1f2937] text-white" : "bg-white text-[#1d0b0b]"
-            } w-[92%] max-w-sm rounded-xl p-6 shadow-2xl border border-[#24C6FF]`}
-          >
-            <div className="text-center">
-              <div className="text-4xl mb-2">✅</div>
-              <h4 className="text-lg font-extrabold mb-1">{successMsg}</h4>
-              <p className="text-xs opacity-80">Actualizando información…</p>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/65 px-3">
+          <div className={ui.modalCard}>
+            <div className="p-5 text-center">
+              <div className="text-3xl mb-1">✅</div>
+              <h4 className={`text-[13px] font-extrabold mb-1 ${darkMode ? "text-white" : "text-ra-marron"}`}>
+                {successMsg}
+              </h4>
+              <p className={`text-[11px] ${ui.subtitle}`}>Actualizando información…</p>
             </div>
           </div>
         </div>

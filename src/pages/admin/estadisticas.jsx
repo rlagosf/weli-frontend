@@ -19,6 +19,36 @@ import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
 Chart.register(ArcElement, Tooltip, Legend, BarElement, CategoryScale, LinearScale);
 
+/* =======================
+   🎨 Colores gráficos (pedido)
+======================= */
+const EVENT_COLORS = [
+  "#2563EB",
+  "#0EA5E9",
+  "#14B8A6",
+  "#22C55E",
+  "#A855F7",
+  "#F97316",
+  "#EF4444",
+  "#F59E0B",
+  "#06B6D4",
+  "#64748B",
+];
+
+/* =======================
+   Helpers visual (hex -> rgba)
+======================= */
+const hexToRgba = (hex, a = 0.75) => {
+  const h = String(hex || "").replace("#", "").trim();
+  if (![3, 6].includes(h.length)) return `rgba(255,255,255,${a})`;
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const n = parseInt(full, 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r},${g},${b},${a})`;
+};
+
 /* ───────── Valor centrado en la porción ───────── */
 const PieValueInsidePlugin = {
   id: "pieValueInside",
@@ -36,7 +66,7 @@ const PieValueInsidePlugin = {
     ctx.font = (pluginOptions && pluginOptions.font) || "12px sans-serif";
     ctx.fillStyle =
       (pluginOptions && pluginOptions.color) ||
-      (chart.options?.plugins?.legend?.labels?.color || "#111");
+      (chart.options?.plugins?.legend?.labels?.color || "#fff");
 
     meta.data.forEach((arc, i) => {
       const val = Number(values[i] || 0);
@@ -60,12 +90,17 @@ const HtmlLegendPlugin = {
     const root = document.getElementById(containerID);
     if (!root) return;
 
+    const textColor = options?.textColor || "rgba(255,255,255,0.86)";
+    const borderColor = options?.borderColor || "rgba(255,255,255,0.12)";
+    const itemBg = options?.itemBg || "rgba(0,0,0,0.12)";
+    const itemBgHover = options?.itemBgHover || "rgba(255,255,255,0.10)";
+
     root.innerHTML = "";
     root.setAttribute("data-weli-legend", "1");
 
     root.style.setProperty("display", "block", "important");
     root.style.setProperty("width", "100%", "important");
-    root.style.setProperty("max-width", "220px", "important");
+    root.style.setProperty("max-width", "240px", "important");
     root.style.setProperty("overflow-x", "hidden", "important");
     root.style.setProperty("overflow-y", "auto", "important");
     root.style.setProperty("white-space", "normal", "important");
@@ -95,15 +130,14 @@ const HtmlLegendPlugin = {
       item.style.setProperty("width", "100%", "important");
       item.style.setProperty("clear", "both", "important");
       item.style.setProperty("padding", "4px 6px", "important");
-      item.style.setProperty("border-radius", "6px", "important");
-      item.style.setProperty("border", "1px solid rgba(156,163,175,0.55)", "important");
+      item.style.setProperty("border-radius", "10px", "important");
+      item.style.setProperty("border", `1px solid ${borderColor}`, "important");
       item.style.setProperty("cursor", "pointer", "important");
       item.style.setProperty("user-select", "none", "important");
+      item.style.setProperty("background", itemBg, "important");
 
-      item.onmouseenter = () =>
-        item.style.setProperty("background", "rgba(156,163,175,0.12)", "important");
-      item.onmouseleave = () =>
-        item.style.setProperty("background", "transparent", "important");
+      item.onmouseenter = () => item.style.setProperty("background", itemBgHover, "important");
+      item.onmouseleave = () => item.style.setProperty("background", itemBg, "important");
 
       const row = document.createElement("div");
       row.style.setProperty("display", "flex", "important");
@@ -116,10 +150,10 @@ const HtmlLegendPlugin = {
       box.style.setProperty("display", "inline-block", "important");
       box.style.setProperty("width", "10px", "important");
       box.style.setProperty("height", "10px", "important");
-      box.style.setProperty("border-radius", "3px", "important");
+      box.style.setProperty("border-radius", "4px", "important");
       box.style.setProperty("flex-shrink", "0", "important");
 
-      const color = Array.isArray(bg) ? bg[i] || "#999" : bg || "#999";
+      const color = Array.isArray(bg) ? bg[i] || EVENT_COLORS[i % EVENT_COLORS.length] : bg || EVENT_COLORS[i % EVENT_COLORS.length];
       box.style.setProperty("background", color, "important");
 
       const visible = chart.getDataVisibility(i);
@@ -136,6 +170,7 @@ const HtmlLegendPlugin = {
       text.style.setProperty("text-overflow", "ellipsis", "important");
       text.style.setProperty("font-size", "11px", "important");
       text.style.setProperty("line-height", "1.1", "important");
+      text.style.setProperty("color", textColor, "important");
       text.style.setProperty("opacity", visible ? "1" : "0.55", "important");
 
       text.textContent = `${String(label)} (${val})`;
@@ -186,6 +221,22 @@ const isSuperTreePath = (pathname) =>
   String(pathname || "").startsWith("/super-dashboard/admin/dashboard");
 
 /* ───────────────── Deportes: config por deporte ───────────────── */
+function SPORT_META_FALLBACK_BASE(nombre) {
+  return {
+    nombre,
+    grupos: {
+      base: ["minutos_jugados", "partidos_jugados", "lesiones", "dias_baja", "sanciones_federativas"],
+    },
+    traducciones: {
+      minutos_jugados: "Minutos Jugados",
+      partidos_jugados: "Partidos Jugados",
+      lesiones: "Lesiones",
+      dias_baja: "Días de Baja",
+      sanciones_federativas: "Sanciones Federativas",
+    },
+  };
+}
+
 const SPORT_META = {
   1: {
     nombre: "Fútbol",
@@ -339,69 +390,22 @@ const SPORT_META = {
     },
   },
 
-  // Nota: dejé tu meta 4..6 tal cual, para no alargar más este bloque.
-  // Si quieres, te lo vuelvo a pegar completo, pero no cambia nada respecto a tu versión.
-  4: SPORT_META_FALLBACK_4(),
-  5: SPORT_META_FALLBACK_5(),
-  6: SPORT_META_FALLBACK_6(),
+  4: SPORT_META_FALLBACK_BASE("Pádel"),
+  5: SPORT_META_FALLBACK_BASE("Tenis de mesa"),
+  6: SPORT_META_FALLBACK_BASE("Básquetbol"),
 };
 
-// Helpers para no duplicar el bloque gigante de meta en esta respuesta.
-// Si en tu repo ya tienes 4/5/6 completos, borra estas 3 funcs y pega tu meta original.
-function SPORT_META_FALLBACK_4() {
-  return {
-    nombre: "Pádel",
-    grupos: { base: ["minutos_jugados", "partidos_jugados", "lesiones", "dias_baja", "sanciones_federativas"] },
-    traducciones: {
-      minutos_jugados: "Minutos Jugados",
-      partidos_jugados: "Partidos Jugados",
-      lesiones: "Lesiones",
-      dias_baja: "Días de Baja",
-      sanciones_federativas: "Sanciones Federativas",
-    },
-  };
-}
-function SPORT_META_FALLBACK_5() {
-  return {
-    nombre: "Tenis de mesa",
-    grupos: { base: ["minutos_jugados", "partidos_jugados", "lesiones", "dias_baja", "sanciones_federativas"] },
-    traducciones: {
-      minutos_jugados: "Minutos Jugados",
-      partidos_jugados: "Partidos Jugados",
-      lesiones: "Lesiones",
-      dias_baja: "Días de Baja",
-      sanciones_federativas: "Sanciones Federativas",
-    },
-  };
-}
-function SPORT_META_FALLBACK_6() {
-  return {
-    nombre: "Básquetbol",
-    grupos: { base: ["minutos_jugados", "partidos_jugados", "lesiones", "dias_baja", "sanciones_federativas"] },
-    traducciones: {
-      minutos_jugados: "Minutos Jugados",
-      partidos_jugados: "Partidos Jugados",
-      lesiones: "Lesiones",
-      dias_baja: "Días de Baja",
-      sanciones_federativas: "Sanciones Federativas",
-    },
-  };
-}
-
 /* ✅ Auth helpers + headers */
-const isExpired = (decoded) => {
+const isExpired2 = (decoded) => {
   const now = Math.floor(Date.now() / 1000);
   return !decoded?.exp || decoded.exp <= now;
 };
-
-const extractRol = (decoded) => {
-  const raw = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
+const extractRol2 = (decoded) => {
+  const raw = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
   const n = Number(raw);
   return Number.isFinite(n) ? n : 0;
 };
-
-/** Soporta "1" o JSON {"id":1} */
-const getAcademiaIdFromStorage = () => {
+const getAcademiaIdFromStorage2 = () => {
   try {
     const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
     if (!raw) return null;
@@ -416,13 +420,11 @@ const getAcademiaIdFromStorage = () => {
     return null;
   }
 };
-
 const buildHeaders = (rol) => {
   const token = getToken();
   const h = token ? { Authorization: `Bearer ${token}` } : {};
-  // si tu rol 3 depende de x-academia-id (como ya vienes usando)
   if (rol === 3) {
-    const a = getAcademiaIdFromStorage();
+    const a = getAcademiaIdFromStorage2();
     if (a) h["x-academia-id"] = String(a);
   }
   return h;
@@ -433,37 +435,26 @@ const getErrStatus = (e) => e?.status ?? e?.response?.status ?? 0;
 const normalizeListResponse = (resOrArr) => {
   if (Array.isArray(resOrArr)) return resOrArr;
   if (!resOrArr || resOrArr.status === 204) return [];
-
   const d = resOrArr?.data ?? resOrArr;
-
   if (Array.isArray(d)) return d;
   if (Array.isArray(d?.results)) return d.results;
   if (Array.isArray(d?.items)) return d.items;
   if (Array.isArray(d?.rows)) return d.rows;
   if (d?.ok && Array.isArray(d.items)) return d.items;
   if (d?.ok && Array.isArray(d.data)) return d.data;
-
   return [];
 };
 
 const normalizeCatalog = (arr) =>
   (Array.isArray(arr) ? arr : [])
     .map((x) => ({
-      id: Number(
-        x?.id ??
-          x?.categoria_id ??
-          x?.posicion_id ??
-          x?.estado_id ??
-          x?.sucursal_id ??
-          x?.prevision_medica_id
-      ),
+      id: Number(x?.id ?? x?.categoria_id ?? x?.posicion_id ?? x?.estado_id ?? x?.sucursal_id ?? x?.prevision_medica_id),
       nombre: String(x?.nombre ?? x?.descripcion ?? "").trim(),
     }))
     .filter((x) => Number.isFinite(x.id) && x.nombre);
 
 const tryGetList = async (paths, { signal, headers } = {}) => {
   const list = Array.isArray(paths) ? paths : [paths];
-
   const variants = [];
   for (const p0 of list) {
     const p = String(p0 || "");
@@ -484,6 +475,22 @@ const tryGetList = async (paths, { signal, headers } = {}) => {
   return [];
 };
 
+/* =======================
+   ✅ Resolver deporte_id
+======================= */
+const resolveSportId = ({ decoded, snap, locStateScope }) => {
+  const fromSnap = Number(snap?.deporte_id ?? 0);
+  if (Number.isFinite(fromSnap) && fromSnap > 0) return fromSnap;
+
+  const fromState = Number(locStateScope?.deporte_id ?? locStateScope?.sport_id ?? 0);
+  if (Number.isFinite(fromState) && fromState > 0) return fromState;
+
+  const fromToken = Number(decoded?.deporte_id ?? decoded?.sport_id ?? decoded?.id_deporte ?? 0);
+  if (Number.isFinite(fromToken) && fromToken > 0) return fromToken;
+
+  return null;
+};
+
 export default function EstadisticasGlobales() {
   const { darkMode } = useTheme();
   const navigate = useNavigate();
@@ -498,7 +505,6 @@ export default function EstadisticasGlobales() {
   const [sucursales, setSucursales] = useState([]);
   const [previsiones, setPrevisiones] = useState([]);
 
-  // ✅ aquí van los SUM reales del backend
   const [totals, setTotals] = useState(null);
   const [aggMeta, setAggMeta] = useState(null);
 
@@ -512,23 +518,63 @@ export default function EstadisticasGlobales() {
     academia_nombre: null,
   });
 
-  const fondoClase = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";
-  const tarjetaClase = darkMode
-    ? "bg-[#1f2937] text-white border border-gray-700"
-    : "bg-white text-[#1d0b0b] border border-gray-200";
-
   useMobileAutoScrollTop();
 
   const deporteId = scope.deporte_id ? Number(scope.deporte_id) : null;
   const sportMeta = deporteId && SPORT_META[deporteId] ? SPORT_META[deporteId] : SPORT_META[1];
 
+  /* =======================
+     UI (clon SuperDashboard)
+  ======================= */
+  const ui = useMemo(() => {
+    const shell = darkMode
+      ? "bg-[#111827] text-white"
+      : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
+
+    const headerSub = darkMode ? "text-white/70" : "text-ra-marron/70";
+
+    const msgBox =
+      "mt-6 rounded-2xl border px-5 py-4 font-semibold " +
+      (darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
+
+    const warnBox =
+      "rounded-2xl border px-5 py-4 font-semibold " +
+      (darkMode ? "border-amber-200/20 bg-amber-500/10 text-amber-100" : "border-amber-200 bg-amber-50 text-amber-800");
+
+    const card =
+      "rounded-2xl shadow-2xl border p-6 " +
+      (darkMode ? "bg-white/10 border-white/15" : "bg-white/60 border-ra-marron/15");
+
+    const badge =
+      "text-xs inline-flex items-center gap-2 rounded-full px-3 py-1 border " +
+      (darkMode ? "bg-white/10 border-white/10 text-white/80" : "bg-white/60 border-ra-marron/10 text-ra-marron/80");
+
+    const divider = darkMode ? "border-white/10" : "border-ra-marron/10";
+
+    // colores charts legibles por tema
+    const axisText = darkMode ? "rgba(255,255,255,0.82)" : "rgba(109,88,41,0.92)";
+    const grid = darkMode ? "rgba(255,255,255,0.10)" : "rgba(109,88,41,0.10)";
+    const legendText = darkMode ? "rgba(255,255,255,0.85)" : "rgba(109,88,41,0.85)";
+
+    const pieLabel = darkMode ? "rgba(255,255,255,0.88)" : "rgba(109,88,41,0.92)";
+
+    // HtmlLegend theme
+    const legendTheme = {
+      textColor: darkMode ? "rgba(255,255,255,0.86)" : "rgba(109,88,41,0.90)",
+      borderColor: darkMode ? "rgba(255,255,255,0.12)" : "rgba(109,88,41,0.15)",
+      itemBg: darkMode ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.65)",
+      itemBgHover: darkMode ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.90)",
+    };
+
+    return { shell, headerSub, msgBox, warnBox, card, badge, divider, axisText, grid, legendText, pieLabel, legendTheme };
+  }, [darkMode]);
+
+  /* ───────── Título ───────── */
   useEffect(() => {
     const prevTitle = document.title;
     const title = `Estadísticas Globales — ${sportMeta.nombre}`;
-
     document.dispatchEvent(new CustomEvent("updateBreadcrumb", { detail: { title } }));
     document.dispatchEvent(new CustomEvent("weli:setTitle", { detail: { title } }));
-
     return () => {
       document.title = prevTitle;
     };
@@ -541,9 +587,9 @@ export default function EstadisticasGlobales() {
       if (!token) throw new Error("no-token");
 
       const decoded = jwtDecode(token);
-      if (isExpired(decoded)) throw new Error("expired");
+      if (isExpired2(decoded)) throw new Error("expired");
 
-      const parsedRol = extractRol(decoded);
+      const parsedRol = extractRol2(decoded);
       if (![1, 2, 3].includes(parsedRol)) {
         navigate("/admin", { replace: true });
         return;
@@ -558,21 +604,24 @@ export default function EstadisticasGlobales() {
           navigate("/super-dashboard", { replace: true });
           return;
         }
+
+        const dep = resolveSportId({ decoded, snap, locStateScope: location.state?.scope });
         setScope({
           academia_id: snap.id,
-          deporte_id: snap.deporte_id,
+          deporte_id: dep,
           academia_nombre: snap.nombre ?? null,
         });
       } else {
         const acad = Number(decoded?.academia_id ?? decoded?.academy_id ?? 0) || null;
-        const dep = Number(decoded?.deporte_id ?? decoded?.sport_id ?? 0) || null;
+        const snap = readSelectedAcademia();
+        const dep = resolveSportId({ decoded, snap, locStateScope: location.state?.scope });
         setScope({ academia_id: acad, deporte_id: dep, academia_nombre: null });
       }
     } catch {
       clearToken();
       navigate("/login", { replace: true });
     }
-  }, [navigate, location.pathname]);
+  }, [navigate, location.pathname, location.state]);
 
   /* ───────── Data load ───────── */
   useEffect(() => {
@@ -580,13 +629,6 @@ export default function EstadisticasGlobales() {
 
     const isSuperTree = isSuperTreePath(location.pathname);
     if (isSuperTree && !scope.academia_id) return;
-
-    // ⚠️ aggregate requiere deporte_id
-    if (!scope.deporte_id) {
-      // si tu token/scope no trae deporte_id, evita pegarle al aggregate y no rompas
-      setTotals(null);
-      setAggMeta(null);
-    }
 
     const abort = new AbortController();
     const headers = buildHeaders(rol);
@@ -625,7 +667,6 @@ export default function EstadisticasGlobales() {
               ]
             : ["/jugadores?estado_id=1", "/jugadores?estado=1", "/jugadores"];
 
-        // ✅ aggregate (SUM) por deporte, opcional academia
         const aggPath =
           depId && acadId
             ? `/estadisticas/aggregate?deporte_id=${Number(depId)}&academia_id=${Number(acadId)}`
@@ -705,7 +746,6 @@ export default function EstadisticasGlobales() {
           const safe = Array.isArray(arr) ? arr : [];
           const a = scope.academia_id;
           const d = scope.deporte_id;
-
           if (!a && !d) return safe;
 
           return safe.filter((j) => {
@@ -720,26 +760,25 @@ export default function EstadisticasGlobales() {
         setJugadoresTodos(normalizeJugadores(applyScopeFilter(rawTodos)));
         setJugadoresActivos(normalizeJugadores(applyScopeFilter(rawActivos)));
 
-        // ✅ guardar aggregate totals (si vino)
         if (aggRes?.ok && aggRes?.totals && typeof aggRes.totals === "object") {
           setTotals(aggRes.totals);
           setAggMeta(aggRes?.meta ?? null);
 
-          // aviso útil si faltan detalles
           const miss = Number(aggRes?.meta?.rows_detail_missing ?? 0);
           if (miss > 0) {
-            setError(
-              `Ojo: hay ${miss} fila(s) acumuladas sin detalle en la tabla del deporte. ` +
-              `Puedes repararlas con /estadisticas/repair-missing?deporte_id=${Number(depId)}.`
-            );
+            
           } else {
             setError("");
           }
         } else {
           setTotals(null);
           setAggMeta(null);
-          // si no hay totals, no lo trates como fatal
           setError("");
+        }
+
+        if (!depId) {
+          setTotals(null);
+          setAggMeta(null);
         }
       } catch (e) {
         if (abort.signal.aborted) return;
@@ -763,24 +802,6 @@ export default function EstadisticasGlobales() {
   const grupos = sportMeta.grupos || {};
   const traducciones = sportMeta.traducciones || {};
 
-  const coloresFijos = useMemo(
-    () => [
-      "#4dc9f6",
-      "#f67019",
-      "#f53794",
-      "#537bc4",
-      "#acc236",
-      "#166a8f",
-      "#00a950",
-      "#58595b",
-      "#8549ba",
-      "#ffa600",
-      "#ff6384",
-      "#36a2eb",
-    ],
-    []
-  );
-
   const catMap = useMemo(() => new Map((categorias || []).map((c) => [Number(c.id), c.nombre])), [categorias]);
   const posMap = useMemo(() => new Map((posiciones || []).map((p) => [Number(p.id), p.nombre])), [posiciones]);
   const estMap = useMemo(() => new Map((estados || []).map((e) => [Number(e.id), e.nombre])), [estados]);
@@ -802,16 +823,12 @@ export default function EstadisticasGlobales() {
 
     const getCategoriaNombre = (j) =>
       j?.categoria?.nombre ?? (j?.categoria_id != null ? catMap.get(Number(j.categoria_id)) : undefined);
-
     const getPosicionNombre = (j) =>
       j?.posicion?.nombre ?? (j?.posicion_id != null ? posMap.get(Number(j.posicion_id)) : undefined);
-
     const getEstadoNombre = (j) =>
       j?.estado?.nombre ?? (j?.estado_id != null ? estMap.get(Number(j.estado_id)) : undefined);
-
     const getSucursalNombre = (j) =>
       j?.sucursal?.nombre ?? (j?.sucursal_id != null ? sucMap.get(Number(j.sucursal_id)) : undefined);
-
     const getPrevisionNombre = (j) =>
       j?.prevision_medica?.nombre ??
       (j?.prevision_medica_id != null ? prevMap.get(Number(j.prevision_medica_id)) : undefined);
@@ -833,7 +850,6 @@ export default function EstadisticasGlobales() {
     };
   }, [jugadoresActivos, jugadoresTodos, catMap, posMap, estMap, sucMap, prevMap]);
 
-  /* ✅ Sumas reales por grupo: ahora vienen del backend (aggregate) */
   const sumasPorGrupo = useMemo(() => {
     if (!totals || typeof totals !== "object") return {};
 
@@ -848,26 +864,48 @@ export default function EstadisticasGlobales() {
 
     const entries = Object.entries(grupos || {});
     if (!entries.length) return {};
-
     return Object.fromEntries(entries.map(([nombre, campos]) => [nombre, sumGroup(campos)]));
   }, [totals, grupos]);
+
+  /* =======================
+     Charts: colores EVENT_COLORS
+  ======================= */
+  const pieColors = useMemo(
+    () => EVENT_COLORS.map((c) => hexToRgba(c, 0.75)),
+    []
+  );
 
   const generatePieData = (conteo) => {
     const labels = Object.keys(conteo || {});
     const data = Object.values(conteo || {});
-    const colores = labels.map((_, idx) => coloresFijos[idx % coloresFijos.length]);
-    return { labels, datasets: [{ data, backgroundColor: colores }] };
+    const colors = labels.map((_, i) => pieColors[i % pieColors.length]);
+
+    return {
+      labels,
+      datasets: [
+        {
+          data,
+          backgroundColor: colors,
+          borderColor: ui?.divider ? (ui.divider.includes("white") ? "rgba(255,255,255,0.12)" : "rgba(109,88,41,0.14)") : "rgba(255,255,255,0.12)",
+          borderWidth: 1,
+        },
+      ],
+    };
   };
 
   const crearDatosBar = (datos) => {
     const keys = Object.keys(datos || {});
+    const values = Object.values(datos || {});
+
     return {
       labels: keys.map((k) => traducciones[k] ?? k),
       datasets: [
         {
           label: "Total",
-          data: Object.values(datos || {}),
-          backgroundColor: coloresFijos.slice(0, keys.length),
+          data: values,
+          backgroundColor: values.map((_, i) => hexToRgba(EVENT_COLORS[i % EVENT_COLORS.length], 0.55)),
+          borderColor: values.map((_, i) => hexToRgba(EVENT_COLORS[i % EVENT_COLORS.length], 0.9)),
+          borderWidth: 1,
         },
       ],
     };
@@ -877,8 +915,8 @@ export default function EstadisticasGlobales() {
 
   if (error && !jugadoresActivos.length && !jugadoresTodos.length) {
     return (
-      <div className={`${fondoClase} min-h-screen flex items-center justify-center`}>
-        <p className="text-red-500 text-xl">{error}</p>
+      <div className={`${ui.shell} min-h-screen font-sans flex items-center justify-center px-6`}>
+        <div className={ui.msgBox}>{error}</div>
       </div>
     );
   }
@@ -894,116 +932,138 @@ export default function EstadisticasGlobales() {
 
   const scopeLabelParts = [];
   if (scope.academia_id) scopeLabelParts.push(`Academia #${scope.academia_id}`);
+  if (scope.academia_nombre) scopeLabelParts.push(String(scope.academia_nombre));
   if (scope.deporte_id) scopeLabelParts.push(`Deporte: ${sportMeta.nombre}`);
   const scopeLabel = scopeLabelParts.join(" · ");
 
-  const hasAgg = totals && Object.keys(sumasPorGrupo || {}).length > 0;
+  const hasAgg = !!scope.deporte_id && totals && Object.keys(sumasPorGrupo || {}).length > 0;
 
   return (
-    <div className={`${fondoClase} min-h-screen px-2 sm:px-4 pt-4 pb-16 font-weli`}>
-      <h1 className="text-2xl font-bold mb-2 text-center">{`Estadísticas Globales — ${sportMeta.nombre}`}</h1>
+    <div className={`${ui.shell} min-h-screen font-sans`}>
+      <header className="px-6 pt-6">
+        <div className="text-center">
+          <h1 className="text-4xl font-extrabold tracking-tightish">
+            {`Estadísticas Globales — ${sportMeta.nombre}`}
+          </h1>
+          <p className={`text-sm mt-2 ${ui.headerSub}`}>
+            {scopeLabel || "Visualización filtrada por tu contexto (academia y deporte)."}
+          </p>
 
-      <p className="text-center mb-2 text-sm opacity-80">
-        {scopeLabel || "Visualización filtrada por tu contexto (academia y deporte)."}
-      </p>
-
-      {!!aggMeta?.rows_base && (
-        <p className="text-center mb-6 text-xs opacity-70">
-          Filas acumuladas: {aggMeta.rows_base}
-          {" · "}
-          Faltantes detalle: {Number(aggMeta?.rows_detail_missing ?? 0)}
-        </p>
-      )}
-
-      {!!error && (
-        <div className="max-w-5xl mx-auto mb-4">
-          <div className={`p-4 rounded-lg shadow ${tarjetaClase}`}>
-            <p className="text-yellow-400 text-center">{error}</p>
-          </div>
+          {!!aggMeta?.rows_base && (
+            <div className="mt-3 flex justify-center">
+            </div>
+          )}
         </div>
-      )}
+      </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-        {tarjetasPie.map(({ key, label, data }, idx) => {
-          const total = Object.values(data || {}).reduce((a, b) => a + (Number(b) || 0), 0);
-          const legendId = `legend-${key}`;
+      <main className="px-6 pb-20">
+        {!!error && (
+          <div className="mt-8 max-w-6xl mx-auto">
+            <div className={ui.warnBox}>{error}</div>
+          </div>
+        )}
 
-          return (
-            <div key={idx} className={`p-4 rounded-lg shadow ${tarjetaClase}`}>
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="font-semibold text-base sm:text-lg">{label}</h2>
-                <span className="text-xs sm:text-sm opacity-80">Total: {total}</span>
+        {!scope.deporte_id && (
+          <div className="mt-6 max-w-6xl mx-auto">
+            <div className={ui.warnBox}>
+              Falta <b>deporte_id</b> en el scope de la academia seleccionada. <br />
+              Selecciona una academia con deporte asignado (o agrega <code>deporte_id</code> al token/selector).
+            </div>
+          </div>
+        )}
+
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+          {tarjetasPie.map(({ key, label, data }, idx) => {
+            const total = Object.values(data || {}).reduce((a, b) => a + (Number(b) || 0), 0);
+            const legendId = `legend-${key}`;
+
+            return (
+              <div key={idx} className={ui.card}>
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="font-extrabold text-base sm:text-lg">{label}</h2>
+                  <span className={ui.headerSub}>Total: {total}</span>
+                </div>
+
+                <div className={`border-t ${ui.divider} pt-4`} />
+
+                <div className="flex flex-col sm:flex-row gap-3 items-stretch">
+                  <div
+                    id={legendId}
+                    className="w-full sm:w-[240px] shrink-0 max-h-[240px] overflow-y-auto overflow-x-hidden pr-1"
+                  />
+
+                  <div className="relative w-full min-w-0 h-[240px] sm:h-[280px]">
+                    <Pie
+                      data={generatePieData(data)}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        layout: { padding: 6 },
+                        plugins: {
+                          legend: { display: false },
+                          htmlLegend: { containerID: legendId, ...ui.legendTheme },
+                          pieValueInside: {
+                            font: "12px sans-serif",
+                            color: ui.pieLabel,
+                          },
+                          tooltip: { enabled: true },
+                        },
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
+            );
+          })}
+        </div>
 
-              <div className="flex flex-col sm:flex-row gap-3 items-stretch">
-                <div
-                  id={legendId}
-                  className="w-full sm:w-[200px] shrink-0 max-h-[220px] overflow-y-auto overflow-x-hidden pr-1"
-                />
+        {hasAgg ? (
+          <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {Object.entries(sumasPorGrupo).map(([grupoNombre, datos], idx) => (
+              <div key={idx} className={ui.card}>
+                <h2 className="font-extrabold mb-4 text-lg text-center">
+                  {String(grupoNombre).toUpperCase()}
+                </h2>
 
-                <div className="relative w-full min-w-0 h-[240px] sm:h-[280px]">
-                  <Pie
-                    data={generatePieData(data)}
+                <div className="relative h-[360px] sm:h-[400px]">
+                  <Bar
+                    data={crearDatosBar(datos)}
                     options={{
                       responsive: true,
                       maintainAspectRatio: false,
-                      layout: { padding: 6 },
                       plugins: {
-                        legend: { display: false },
-                        htmlLegend: { containerID: legendId },
-                        pieValueInside: {
-                          font: "12px sans-serif",
-                          color: darkMode ? "#fff" : "#111",
+                        legend: { labels: { color: ui.legendText } },
+                        tooltip: { enabled: true },
+                      },
+                      scales: {
+                        x: {
+                          ticks: { color: ui.axisText },
+                          grid: { color: ui.grid },
+                        },
+                        y: {
+                          beginAtZero: true,
+                          ticks: { color: ui.axisText },
+                          grid: { color: ui.grid },
                         },
                       },
                     }}
                   />
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {hasAgg ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {Object.entries(sumasPorGrupo).map(([grupoNombre, datos], idx) => (
-            <div key={idx} className={`p-6 rounded-lg shadow ${tarjetaClase}`}>
-              <h2 className="font-semibold mb-4 text-lg text-center">
-                {String(grupoNombre).toUpperCase()}
-              </h2>
-
-              <div className="relative h-[360px] sm:h-[400px]">
-                <Bar
-                  data={crearDatosBar(datos)}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                      legend: { labels: { color: darkMode ? "white" : "#1d0b0b" } },
-                    },
-                    scales: {
-                      x: { ticks: { color: darkMode ? "white" : "#1d0b0b" } },
-                      y: { ticks: { color: darkMode ? "white" : "#1d0b0b" } },
-                    },
-                  }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="max-w-5xl mx-auto">
-          <div className={`p-4 rounded-lg shadow ${tarjetaClase}`}>
-            <p className="text-center opacity-80">
-              Aún no hay métricas agregadas para <b>{sportMeta.nombre}</b>.
-              <br />
-              Si sabes que existen (como en <code>detalleJugador.jsx</code>), revisa que tu{" "}
-              <code>scope.deporte_id</code> esté llegando (aggregate lo exige).
-            </p>
+            ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="mt-8 max-w-6xl mx-auto">
+            <div className={ui.card}>
+              <p className={`text-center ${ui.headerSub}`}>
+                Aún no hay métricas agregadas para <b>{sportMeta.nombre}</b>.<br />
+                Si sabes que existen, revisa que <code>/estadisticas/aggregate</code> esté disponible
+                y que el <code>scope.deporte_id</code> esté seteado.
+              </p>
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   );
 }

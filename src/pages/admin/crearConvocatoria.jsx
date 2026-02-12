@@ -9,6 +9,20 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
+/* =======================
+   🎨 Conjunto X (WELI cobre)
+======================= */
+const PALETTE = {
+  fucsia: "#aa5013", // cobre (acento principal)
+  marron: "#6d5829", // base oscura cálida
+  gold: "#b79f69",
+  cream: "#e8dac4",
+  sand: "#ffdda1",
+  caramel: "#dda272",
+  terracotta: "#e2773b",
+};
+const ACCENT = PALETTE.fucsia;
+
 /* =======================================================
    Helpers
 ======================================================= */
@@ -42,66 +56,99 @@ const extractRol = (decoded) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+/**
+ * ✅ Lee academia seleccionada robusta:
+ * - "12"
+ * - JSON {"id":12} / {"academia_id":12}
+ */
 const getAcademiaIdFromStorage = () => {
+  const key = ACADEMIA_STORAGE_KEY || "weli_selected_academia";
   try {
-    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
-    if (!raw) return null;
+    const raw = localStorage.getItem(key);
+    if (!raw) return 0;
 
     const direct = Number(raw);
     if (Number.isFinite(direct) && direct > 0) return direct;
 
     const parsed = JSON.parse(raw);
-    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
-    return Number.isFinite(id) && id > 0 ? id : null;
+    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academy_id ?? parsed?.academiaId ?? 0);
+    return Number.isFinite(id) && id > 0 ? id : 0;
   } catch {
-    return null;
+    return 0;
   }
 };
 
+/**
+ * ✅ Guard de seguridad (roles + scope)
+ * - Admin/Staff (1/2): requiere academia scope
+ * - Superadmin (3): requiere target seleccionado
+ */
+const ensureScopeOrRedirect = (navigate) => {
+  const token = getToken?.() || "";
+  if (!token) {
+    clearToken?.();
+    navigate("/login", { replace: true });
+    return { ok: false, rol: 0 };
+  }
 
-const buildHeaders = (rol) => {
-  const token = getToken();
-  const h = token ? { Authorization: `Bearer ${token}` } : {};
+  try {
+    const decoded = jwtDecode(token);
+    if (isExpired(decoded)) throw new Error("expired");
 
-  if (rol === 3) {
+    const rol = extractRol(decoded);
+    if (![1, 2, 3].includes(rol)) throw new Error("no-role");
+
     const academiaId = getAcademiaIdFromStorage();
-    if (academiaId) h["x-academia-id"] = String(academiaId);
+
+    if (rol === 3) {
+      if (academiaId <= 0) {
+        navigate("/super-dashboard", { replace: true });
+        return { ok: false, rol };
+      }
+      return { ok: true, rol };
+    }
+
+    // rol 1/2: scope obligatorio
+    if (academiaId <= 0) {
+      clearToken?.();
+      navigate("/login", { replace: true });
+      return { ok: false, rol };
+    }
+
+    return { ok: true, rol };
+  } catch {
+    clearToken?.();
+    navigate("/login", { replace: true });
+    return { ok: false, rol: 0 };
   }
-  return h;
 };
 
-const getList = async (basePath, signal, headers) => {
-  const urls = basePath.endsWith("/")
-    ? [basePath, basePath.slice(0, -1)]
-    : [basePath, `${basePath}/`];
+const getList = async (basePath, signal) => {
+  const urls = basePath.endsWith("/") ? [basePath, basePath.slice(0, -1)] : [basePath, `${basePath}/`];
 
   for (const url of urls) {
     try {
-      const r = await api.get(url, { signal, headers });
+      const r = await api.get(url, { signal, meta: { isPublic: false } });
       return toArray(r);
     } catch (e) {
       if (e?.name === "CanceledError" || e?.code === "ERR_CANCELED") return [];
-      const st = e?.response?.status;
+      const st = e?.response?.status ?? e?.status;
       if (st === 401 || st === 403) throw e;
     }
   }
   return [];
 };
 
-const postWithFallback = async (path, body, headers) => {
-  // intenta con y sin slash
-  const urls = path.endsWith("/")
-    ? [path, path.slice(0, -1)]
-    : [path, `${path}/`];
+const postWithFallback = async (path, body) => {
+  const urls = path.endsWith("/") ? [path, path.slice(0, -1)] : [path, `${path}/`];
 
   let lastErr = null;
   for (const url of urls) {
     try {
-      return await api.post(url, body, { headers });
+      return await api.post(url, body, { meta: { isPublic: false } });
     } catch (e) {
       lastErr = e;
-      const st = e?.response?.status;
-      // si es auth/permiso, no sigas intentando
+      const st = e?.response?.status ?? e?.status;
       if (st === 401 || st === 403) throw e;
     }
   }
@@ -123,43 +170,26 @@ export default function CrearConvocatorias() {
   const [mostrarModal, setMostrarModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // ✅ guardamos la info base para el histórico
   const [convocatoriaInfo, setConvocatoriaInfo] = useState(null);
-  // { evento_id: number, convocatoria_id: number }
-
   const [rolActual, setRolActual] = useState(0);
 
   useMobileAutoScrollTop();
 
-  /* ==================== Auth ==================== */
+  /* ==================== Auth (normado) ==================== */
   useEffect(() => {
-    try {
-      const token = getToken();
-      if (!token) throw new Error("no-token");
-
-      const decoded = jwtDecode(token);
-      if (isExpired(decoded)) throw new Error("expired");
-
-      const rol = extractRol(decoded);
-
-      // ✅ ahora incluye superadmin (3)
-      if (![1, 2, 3].includes(rol)) throw new Error("no-role");
-
-      // ✅ si es superadmin, exige academia target seleccionada
-      if (rol === 3) {
-        const a = getAcademiaIdFromStorage();
-        if (!a) throw new Error("missing-academia-target");
-      }
-
-      setRolActual(rol);
-    } catch {
-      clearToken();
-      navigate("/login", { replace: true });
-    }
+    const g = ensureScopeOrRedirect(navigate);
+    if (!g.ok) return;
+    setRolActual(g.rol);
   }, [navigate]);
 
-  /* ==================== Load ==================== */
+  /* ==================== Load (tenantizado) ==================== */
   useEffect(() => {
+    const g = ensureScopeOrRedirect(navigate);
+    if (!g.ok) {
+      setIsLoading(false);
+      return;
+    }
+
     const abort = new AbortController();
 
     (async () => {
@@ -167,12 +197,10 @@ export default function CrearConvocatorias() {
       setError("");
 
       try {
-        const headers = buildHeaders(rolActual);
-
         const [js, es, cs] = await Promise.all([
-          getList("/jugadores", abort.signal, headers),
-          getList("/eventos", abort.signal, headers),
-          getList("/categorias", abort.signal, headers),
+          getList("/jugadores", abort.signal),
+          getList("/eventos", abort.signal),
+          getList("/categorias", abort.signal),
         ]);
 
         const init = {};
@@ -191,10 +219,15 @@ export default function CrearConvocatorias() {
         setCategorias(cs);
         setConvocatorias(init);
       } catch (e) {
-        const st = e?.response?.status;
-        if (st === 401 || st === 403) {
-          clearToken();
+        const st = e?.response?.status ?? e?.status;
+        if (st === 401) {
+          clearToken?.();
           navigate("/login", { replace: true });
+          return;
+        }
+        if (st === 403) {
+          // ✅ 403 NO siempre es logout; pero aquí es módulo admin => mostramos y quedamos
+          setError("No tienes permisos para acceder a Convocatorias.");
           return;
         }
         if (!abort.signal.aborted) setError("❌ Error al cargar datos");
@@ -207,25 +240,18 @@ export default function CrearConvocatorias() {
   }, [navigate, rolActual]);
 
   /* ==================== Mappers ==================== */
-  const catMap = useMemo(
-    () => new Map(categorias.map((c) => [Number(c.id), c.nombre])),
-    [categorias]
-  );
+  const catMap = useMemo(() => new Map(categorias.map((c) => [Number(c.id), c.nombre])), [categorias]);
 
   const jugadores = useMemo(() => {
     return jugadoresRaw.map((j, idx) => {
       const key = jugadorKey(j, idx);
       const categoriaNombre =
-        j?.categoria?.nombre ||
-        catMap.get(Number(j?.categoria_id)) ||
-        "Sin categoría";
+        j?.categoria?.nombre || catMap.get(Number(j?.categoria_id)) || "Sin categoría";
 
       const nombre =
         j?.nombre_jugador ??
         j?.nombre_completo ??
-        (j?.nombres && j?.apellidos
-          ? `${j.nombres} ${j.apellidos}`
-          : j?.nombre) ??
+        (j?.nombres && j?.apellidos ? `${j.nombres} ${j.apellidos}` : j?.nombre) ??
         "—";
 
       return {
@@ -249,22 +275,14 @@ export default function CrearConvocatorias() {
 
   const fechasDisponibles = useMemo(
     () =>
-      Array.from(
-        new Set(
-          eventosFuturos.map((e) =>
-            String(e?.fecha_inicio ?? e?.fecha).slice(0, 10)
-          )
-        )
-      ).sort(),
+      Array.from(new Set(eventosFuturos.map((e) => String(e?.fecha_inicio ?? e?.fecha).slice(0, 10)))).sort(),
     [eventosFuturos]
   );
 
   /* ==================== Handlers ==================== */
   const handleFechaChange = useCallback(
     (key, fecha) => {
-      const ev = eventosFuturos.find(
-        (e) => String(e?.fecha_inicio ?? e?.fecha).slice(0, 10) === fecha
-      );
+      const ev = eventosFuturos.find((e) => String(e?.fecha_inicio ?? e?.fecha).slice(0, 10) === fecha);
 
       setConvocatorias((prev) => ({
         ...prev,
@@ -287,9 +305,7 @@ export default function CrearConvocatorias() {
         [key]: {
           ...prev[key],
           evento_id: eventoId,
-          fecha_partido: ev
-            ? String(ev.fecha_inicio ?? ev.fecha).slice(0, 10)
-            : prev[key]?.fecha_partido,
+          fecha_partido: ev ? String(ev.fecha_inicio ?? ev.fecha).slice(0, 10) : prev[key]?.fecha_partido,
         },
       }));
     },
@@ -299,11 +315,7 @@ export default function CrearConvocatorias() {
   const handleAsistencia = useCallback((key, checked) => {
     setConvocatorias((prev) => ({
       ...prev,
-      [key]: {
-        ...prev[key],
-        asistio: checked,
-        titular: checked,
-      },
+      [key]: { ...prev[key], asistio: checked, titular: checked },
     }));
   }, []);
 
@@ -317,6 +329,8 @@ export default function CrearConvocatorias() {
   /* ==================== Guardar convocatorias ==================== */
   const guardarConvocatorias = useCallback(async () => {
     setError("");
+    const g = ensureScopeOrRedirect(navigate);
+    if (!g.ok) return;
 
     try {
       const datosEnviar = jugadores
@@ -339,16 +353,12 @@ export default function CrearConvocatorias() {
         setError("⚠️ Debe seleccionar al menos un evento.");
         return;
       }
-
       if (!datosEnviar.some((d) => d.asistio)) {
         setError("⚠️ Marque asistencia de al menos 1 jugador.");
         return;
       }
 
-      const headers = buildHeaders(rolActual);
-
-      // ✅ robusto con / y sin /
-      const resp = await postWithFallback("/convocatorias", datosEnviar, headers);
+      const resp = await postWithFallback("/convocatorias", datosEnviar);
 
       const eventoIdBackend = resp?.data?.evento_id ?? datosEnviar[0].evento_id;
       const convIdBackend = resp?.data?.convocatoria_id;
@@ -362,19 +372,26 @@ export default function CrearConvocatorias() {
 
       setMostrarModal(true);
     } catch (e) {
-      const st = e?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
+      const st = e?.response?.status ?? e?.status;
+      if (st === 401) {
+        clearToken?.();
         navigate("/login", { replace: true });
+        return;
+      }
+      if (st === 403) {
+        setError("No tienes permisos para guardar convocatorias.");
         return;
       }
       console.error(e);
       setError("❌ Error al guardar convocatorias");
     }
-  }, [jugadores, convocatorias, navigate, rolActual]);
+  }, [jugadores, convocatorias, navigate]);
 
   /* ==================== Generar PDF + Histórico ==================== */
   const generarListado = useCallback(async () => {
+    const g = ensureScopeOrRedirect(navigate);
+    if (!g.ok) return;
+
     try {
       if (!convocatoriaInfo) {
         alert("❌ No hay información de convocatoria base. Guarde primero.");
@@ -409,25 +426,17 @@ export default function CrearConvocatorias() {
 
       autoTable(doc, {
         head: [["Jugador", "Categoría", "Rol", "Observaciones"]],
-        body: convocados.map((c) => [
-          c.nombre,
-          c.categoria,
-          "Titular",
-          c.observaciones || "",
-        ]),
+        body: convocados.map((c) => [c.nombre, c.categoria, "Titular", c.observaciones || ""]),
       });
 
       const base64 = doc.output("datauristring").split(",")[1];
 
-      const headers = buildHeaders(rolActual);
-
-      // ✅ robusto con / y sin /
       await postWithFallback("/convocatorias-historico", {
         evento_id: convocatoriaInfo.evento_id,
         convocatoria_id: convocatoriaInfo.convocatoria_id,
         fecha_generacion: new Date().toISOString(),
         listado_base64: base64,
-      }, headers);
+      });
 
       // Reset total
       const init = {};
@@ -447,27 +456,51 @@ export default function CrearConvocatorias() {
 
       alert("Listado generado y guardado en el histórico.");
     } catch (e) {
-      const st = e?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
+      const st = e?.response?.status ?? e?.status;
+      if (st === 401) {
+        clearToken?.();
         navigate("/login", { replace: true });
+        return;
+      }
+      if (st === 403) {
+        alert("No tienes permisos para generar/guardar el histórico.");
         return;
       }
       console.error(e);
       alert("❌ Error al generar el PDF");
     }
-  }, [convocatoriaInfo, jugadores, convocatorias, navigate, rolActual]);
+  }, [convocatoriaInfo, jugadores, convocatorias, navigate]);
 
-  /* ==================== UI ==================== */
-  const fondoClase = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";
-  const tablaCabecera = darkMode ? "bg-[#1f2937] text-white" : "bg-gray-100 text-[#1d0b0b]";
-  const filaHover = darkMode ? "hover:bg-[#1f2937]" : "hover:bg-gray-100";
-  const tarjetaClase = darkMode
-    ? "bg-[#1f2937] shadow-lg rounded-lg p-4 border border-gray-700"
-    : "bg-white shadow-md rounded-lg p-4 border border-gray-200";
-  const inputClase = darkMode
-    ? "bg-[#374151] text-white border border-gray-600"
-    : "bg-gray-50 text-black border border-gray-300";
+  /* ==================== UI (ESTILO SuperDashboard) ==================== */
+  const shell = darkMode
+    ? "bg-[#111827] text-white"
+    : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
+
+  const fondoClase = `${shell} min-h-screen px-2 sm:px-4 pt-4 pb-16 font-sans overflow-x-hidden`;
+
+  const tarjetaClase =
+    "rounded-2xl p-4 border shadow-lg " +
+    (darkMode ? "bg-white/10 border-white/15" : "bg-white/60 border-ra-marron/15");
+
+  const tablaCabecera =
+    "text-white " + (darkMode ? "bg-white/10" : "bg-ra-marron/80");
+
+  const filaHover = darkMode ? "hover:bg-white/5" : "hover:bg-white/40";
+
+  const inputClase =
+    "w-full rounded-xl px-3 py-2 border outline-none transition " +
+    (darkMode
+      ? "bg-white/10 border-white/15 text-white placeholder-white/40 focus:border-white/30"
+      : "bg-white/60 border-ra-marron/15 text-ra-marron placeholder-ra-marron/40 focus:border-ra-terracotta");
+
+  const btnPrimary =
+    "text-white px-8 py-2 rounded-xl shadow font-extrabold hover:opacity-90 active:scale-[0.99] transition";
+
+  const modalCard =
+    "p-6 rounded-2xl shadow-2xl text-center border w-full max-w-md " +
+    (darkMode ? "bg-white/10 border-white/15 text-white" : "bg-white/60 border-ra-marron/15 text-ra-marron");
+
+  const msgError = darkMode ? "text-red-200" : "text-red-700";
 
   /* ==================== Agrupar por categorías ==================== */
   const grupos = useMemo(() => {
@@ -483,26 +516,30 @@ export default function CrearConvocatorias() {
   if (isLoading) return <IsLoading />;
 
   return (
-    <div className={`${fondoClase} px-2 sm:px-4 pt-4 pb-16 font-weli`}>
-      <h2 className="text-2xl font-bold mb-6 text-center">Registro de Convocatorias</h2>
+    <div className={fondoClase}>
+      <h2 className="text-2xl font-extrabold mb-6 text-center tracking-wide">
+        Registro de Convocatorias
+      </h2>
 
-      {error && <p className="text-red-500 mb-4">{error}</p>}
+      {error && <p className={`${msgError} mb-4 font-bold text-center`}>{error}</p>}
 
       <div className="space-y-6">
         {grupos.map(([categoria, lista]) => (
           <div key={categoria} className={tarjetaClase}>
-            <h3 className="text-xl font-semibold mb-3 text-center">Categoría {categoria}</h3>
+            <h3 className="text-xl font-extrabold mb-3 text-center">
+              Categoría {categoria}
+            </h3>
 
             <div className="w-full overflow-x-auto">
               <table className="w-full text-xs sm:text-sm table-fixed">
                 <thead className={`${tablaCabecera} text-[10px] sm:text-xs`}>
                   <tr>
-                    <th className="p-2 border text-center w-40">Nombre Jugador</th>
-                    <th className="p-2 border text-center w-36">Categoría</th>
-                    <th className="p-2 border text-center w-36">Fecha Partido</th>
-                    <th className="p-2 border text-center w-44">Torneo</th>
-                    <th className="p-2 border text-center w-20">Asistencia</th>
-                    <th className="p-2 border text-center w-64">Observaciones</th>
+                    <th className="p-2 border border-white/10 text-center w-40">Nombre Jugador</th>
+                    <th className="p-2 border border-white/10 text-center w-36">Categoría</th>
+                    <th className="p-2 border border-white/10 text-center w-36">Fecha Partido</th>
+                    <th className="p-2 border border-white/10 text-center w-44">Torneo</th>
+                    <th className="p-2 border border-white/10 text-center w-20">Asistencia</th>
+                    <th className="p-2 border border-white/10 text-center w-64">Observaciones</th>
                   </tr>
                 </thead>
 
@@ -518,12 +555,12 @@ export default function CrearConvocatorias() {
 
                     return (
                       <tr key={j._key} className={filaHover}>
-                        <td className="p-2 border text-center">{j.nombre_jugador}</td>
-                        <td className="p-2 border text-center">{j.categoriaNombre}</td>
+                        <td className="p-2 border border-white/10 text-center">{j.nombre_jugador}</td>
+                        <td className="p-2 border border-white/10 text-center">{j.categoriaNombre}</td>
 
-                        <td className="p-2 border text-center">
+                        <td className="p-2 border border-white/10 text-center">
                           <select
-                            className={`w-full p-1 rounded ${inputClase}`}
+                            className={inputClase}
                             value={row.fecha_partido}
                             onChange={(e) => handleFechaChange(j._key, e.target.value)}
                           >
@@ -536,9 +573,9 @@ export default function CrearConvocatorias() {
                           </select>
                         </td>
 
-                        <td className="p-2 border text-center">
+                        <td className="p-2 border border-white/10 text-center">
                           <select
-                            className={`w-full p-1 rounded ${inputClase}`}
+                            className={inputClase}
                             value={row.evento_id}
                             onChange={(e) => handleEventoChange(j._key, e.target.value)}
                           >
@@ -551,7 +588,7 @@ export default function CrearConvocatorias() {
                           </select>
                         </td>
 
-                        <td className="p-2 border text-center">
+                        <td className="p-2 border border-white/10 text-center">
                           <input
                             type="checkbox"
                             checked={!!row.asistio}
@@ -559,10 +596,10 @@ export default function CrearConvocatorias() {
                           />
                         </td>
 
-                        <td className="p-2 border text-center">
+                        <td className="p-2 border border-white/10 text-center">
                           <input
                             type="text"
-                            className={`w-full p-1 rounded ${inputClase}`}
+                            className={inputClase}
                             value={row.observaciones}
                             placeholder="Observaciones"
                             onChange={(e) => handleObservaciones(j._key, e.target.value)}
@@ -579,25 +616,29 @@ export default function CrearConvocatorias() {
       </div>
 
       <div className="text-center mt-6">
-        <button
-          onClick={guardarConvocatorias}
-          className="bg-[#e82d89] text-white px-8 py-2 rounded-xl shadow hover:bg-pink-700"
-        >
+        <button onClick={guardarConvocatorias} className={btnPrimary} style={{ backgroundColor: ACCENT }}>
           Guardar
         </button>
       </div>
 
       {mostrarModal && (
-        <div className="fixed inset-0 flex justify-center items-center bg-black bg-opacity-50 z-50">
-          <div
-            className={`${
-              darkMode ? "bg-[#1f2937] text-white" : "bg-white"
-            } p-6 rounded-lg shadow-lg text-center`}
-          >
-            <h2 className="text-xl font-bold mb-4">✅ Convocatoria creada</h2>
+        <div className="fixed inset-0 flex justify-center items-center bg-black/60 z-50 px-3">
+          <div className={modalCard}>
+            <h2 className="text-xl font-extrabold mb-4">✅ Convocatoria creada</h2>
 
-            <button className="bg-red-600 text-white px-6 py-2 rounded" onClick={generarListado}>
+            <button
+              className="text-white px-6 py-2 rounded-xl font-extrabold hover:opacity-90 active:scale-[0.99] transition"
+              style={{ backgroundColor: ACCENT }}
+              onClick={generarListado}
+            >
               Aceptar
+            </button>
+
+            <button
+              className="mt-3 block mx-auto hover:opacity-90 underline"
+              onClick={() => setMostrarModal(false)}
+            >
+              Cerrar
             </button>
           </div>
         </div>

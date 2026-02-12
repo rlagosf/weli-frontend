@@ -1,21 +1,128 @@
 // src/pages/admin/detalleEstadistica.jsx
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { LoaderCircle } from "lucide-react";
 import { useTheme } from "../../context/ThemeContext";
-import api, { getToken, clearToken } from "../../services/api";
+import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 import { formatRutWithDV } from "../../services/rut";
 
+/* =======================
+   🎨 Conjunto X
+======================= */
+const PALETTE = {
+  copper: "#aa5013",
+  brown: "#6d5829",
+  gold: "#b79f69",
+  cream: "#e8dac4",
+  sand: "#ffdda1",
+  caramel: "#dda272",
+  terracotta: "#e2773b",
+};
+const ACCENT = PALETTE.copper;
+
 const isSuperTreePath = (pathname) =>
   String(pathname || "").startsWith("/super-dashboard/admin/dashboard");
+
+const STORAGE_KEY = ACADEMIA_STORAGE_KEY || "weli_selected_academia";
+
+const readSelectedAcademiaId = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return 0;
+
+    const direct = Number(raw);
+    if (Number.isFinite(direct) && direct > 0) return direct;
+
+    const p = JSON.parse(raw);
+    const id = Number(p?.id ?? p?.academia_id ?? p?.academy_id ?? 0);
+    return Number.isFinite(id) && id > 0 ? id : 0;
+  } catch {
+    return 0;
+  }
+};
+
+const isExpired = (decoded) => {
+  const now = Math.floor(Date.now() / 1000);
+  return !decoded?.exp || decoded.exp <= now;
+};
+
+const extractRol = (decoded) => {
+  const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
+  const parsed = Number(rawRol);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const getErrStatus = (e) => e?.status ?? e?.response?.status ?? 0;
+
+/**
+ * ✅ Guard normado
+ * - roles permitidos: 1/2/3
+ * - super tree: SOLO rol 3 + academia seleccionada
+ * - admin tree: 1/2/3 pero exige academia seleccionada (tenant)
+ */
+const ensureScopeOrRedirect = ({ navigate, isSuperTree }) => {
+  const token = getToken?.() || "";
+  if (!token) {
+    clearToken?.();
+    navigate("/login", { replace: true });
+    return { ok: false, rol: 0 };
+  }
+
+  try {
+    const decoded = jwtDecode(token);
+    if (isExpired(decoded)) throw new Error("expired");
+
+    const rol = extractRol(decoded);
+    if (![1, 2, 3].includes(rol)) {
+      navigate("/admin", { replace: true });
+      return { ok: false, rol };
+    }
+
+    const academiaId = readSelectedAcademiaId();
+
+    if (isSuperTree) {
+      if (rol !== 3) {
+        navigate("/admin", { replace: true });
+        return { ok: false, rol };
+      }
+      if (academiaId <= 0) {
+        navigate("/super-dashboard", { replace: true });
+        return { ok: false, rol };
+      }
+      return { ok: true, rol };
+    }
+
+    // admin tree exige scope también
+    if (academiaId <= 0) {
+      clearToken?.();
+      navigate("/login", { replace: true });
+      return { ok: false, rol };
+    }
+
+    return { ok: true, rol };
+  } catch {
+    clearToken?.();
+    navigate("/login", { replace: true });
+    return { ok: false, rol: 0 };
+  }
+};
 
 export default function DetalleEstadistica() {
   const { darkMode } = useTheme();
   const { rut } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const mountedRef = useRef(true);
+
+  const superTree = useMemo(() => isSuperTreePath(location.pathname), [location.pathname]);
+  const basePath = superTree ? "/super-dashboard/admin/dashboard" : "/admin";
+  const backTo = useMemo(
+    () => location.state?.from || `${basePath}/registrar-estadisticas`,
+    [location.state, basePath]
+  );
 
   const [rol, setRol] = useState(null);
   const [canWrite, setCanWrite] = useState(false);
@@ -32,79 +139,18 @@ export default function DetalleEstadistica() {
 
   const [statsExistentes, setStatsExistentes] = useState(null);
 
-  const fondoClase = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";
-  const tarjetaClase = darkMode
-    ? "bg-[#1f2937] border border-gray-700"
-    : "bg-white border border-gray-200";
-  const cardClase = `${tarjetaClase} shadow-md rounded-xl p-4`;
-  const contenedorClase = `${tarjetaClase} shadow-lg rounded-2xl p-4 md:p-6`;
-  const inputClase = darkMode
-    ? "bg-[#1f2937] text-white border border-gray-600 placeholder-gray-400"
-    : "bg-white text-black border border-gray-300 placeholder-gray-500";
+  useMobileAutoScrollTop();
 
-  const campos = useMemo(
-    () => ({
-      Ofensivas: [
-        "goles",
-        "asistencias",
-        "tiros_libres",
-        "penales",
-        "tiros_arco",
-        "tiros_fuera",
-        "tiros_bloqueados",
-        "regates_exitosos",
-        "centros_acertados",
-        "pases_clave",
-      ],
-      Defensivas: [
-        "intercepciones",
-        "despejes",
-        "duelos_ganados",
-        "entradas_exitosas",
-        "bloqueos",
-        "recuperaciones",
-      ],
-      Técnicas: [
-        "pases_completados",
-        "pases_errados",
-        "posesion_perdida",
-        "offsides",
-        "faltas_cometidas",
-        "faltas_recibidas",
-      ],
-      Físicas: [
-        "distancia_recorrida_km",
-        "sprints",
-        "duelos_aereos_ganados",
-        "minutos_jugados",
-        "partidos_jugados",
-      ],
-      Médicas: ["lesiones", "dias_baja"],
-      Disciplina: ["tarjetas_amarillas", "tarjetas_rojas", "sanciones_federativas"],
-    }),
-    []
-  );
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
-  const opciones = Array.from({ length: 11 }, (_, i) => i);
-  const allFields = useMemo(() => Object.values(campos).flat(), [campos]);
-
-  const blankForm = useCallback(
-    (sid) => {
-      const baseForm = { stats_id: sid ?? null };
-      allFields.forEach((campo) => {
-        baseForm[campo] = campo === "distancia_recorrida_km" ? 0.0 : 0;
-      });
-      return baseForm;
-    },
-    [allFields]
-  );
-
-  /* ============== Breadcrumb ============== */
+  /* ============== Breadcrumb (mantener) ============== */
   useEffect(() => {
     const currentPath = location.pathname + location.search;
-
-    const superTree = isSuperTreePath(location.pathname);
-    const basePath = superTree ? "/super-dashboard/admin/dashboard" : "/admin";
     const defaultFrom = `${basePath}/registrar-estadisticas`;
 
     const crumbBase = Array.isArray(location.state?.breadcrumb)
@@ -126,10 +172,117 @@ export default function DetalleEstadistica() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.search]);
 
-  useMobileAutoScrollTop();
+  /* ===================== UI (SuperDashboard style) ===================== */
+  const ui = useMemo(() => {
+    // shell general (igual patrón ListarEstadisticas “superdashboard style”)
+    const shell =
+      "min-h-screen font-sans " +
+      (darkMode
+        ? "bg-[#111827] text-white"
+        : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron");
 
-  /* ===================== Helpers ===================== */
-  const getErrStatus = (e) => e?.status ?? e?.response?.status ?? 0;
+    const titleMain = darkMode ? "text-white" : "text-ra-marron";
+    const subText = darkMode ? "text-white/70" : "text-ra-marron/70";
+
+    // contenedor grande
+    const panel =
+      "max-w-6xl mx-auto mt-6 rounded-2xl border shadow-lg overflow-hidden " +
+      (darkMode ? "bg-white/10 border-white/15" : "bg-white/60 border-ra-marron/15");
+
+    // tarjeta interna
+    const card =
+      "rounded-2xl border p-4 " +
+      (darkMode ? "bg-white/8 border-white/15" : "bg-white/55 border-ra-marron/15");
+
+    // pills (valores actuales)
+    const pill =
+      "rounded-xl border px-3 py-2 " +
+      (darkMode ? "bg-black/20 border-white/15" : "bg-white/55 border-ra-marron/15");
+
+    // inputs: en light NO blanco sobre claro → texto marrón, fondo blanco suave
+    const input =
+      "w-full p-2 rounded-lg text-sm outline-none border transition " +
+      "focus:ring-2 focus:ring-[rgba(170,80,19,0.22)] focus:border-[rgba(170,80,19,0.35)] " +
+      (darkMode
+        ? "bg-black/25 text-white border-white/15 placeholder-white/60"
+        : "bg-white/70 text-ra-marron border-ra-marron/20 placeholder-ra-marron/50");
+
+    const sectionTitleStyle = { color: darkMode ? PALETTE.cream : PALETTE.brown };
+
+    const btnGhost =
+      "px-6 py-2 rounded-xl font-extrabold border transition-all shadow-sm " +
+      (darkMode
+        ? "bg-white/10 border-white/15 hover:bg-white/15"
+        : "bg-white/70 border-ra-marron/20 hover:bg-white/80");
+
+    const btnPrimary =
+      "px-6 py-2 rounded-xl font-extrabold transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
+
+    const btnPrimaryStyle = {
+      background: `linear-gradient(135deg, ${PALETTE.copper}, ${PALETTE.terracotta})`,
+      color: "#1a1208",
+      border: darkMode ? "1px solid rgba(255,255,255,0.20)" : "1px solid rgba(109,88,41,0.18)",
+    };
+
+    const danger =
+      "rounded-2xl border px-5 py-4 font-semibold text-center " +
+      (darkMode
+        ? "border-red-200/20 bg-red-500/10 text-red-100"
+        : "border-red-200 bg-red-50 text-red-800");
+
+    return {
+      shell,
+      titleMain,
+      subText,
+      panel,
+      card,
+      pill,
+      input,
+      sectionTitleStyle,
+      btnGhost,
+      btnPrimary,
+      btnPrimaryStyle,
+      danger,
+    };
+  }, [darkMode]);
+
+  /* ============================ Campos ============================ */
+  const campos = useMemo(
+    () => ({
+      Ofensivas: [
+        "goles",
+        "asistencias",
+        "tiros_libres",
+        "penales",
+        "tiros_arco",
+        "tiros_fuera",
+        "tiros_bloqueados",
+        "regates_exitosos",
+        "centros_acertados",
+        "pases_clave",
+      ],
+      Defensivas: ["intercepciones", "despejes", "duelos_ganados", "entradas_exitosas", "bloqueos", "recuperaciones"],
+      Técnicas: ["pases_completados", "pases_errados", "posesion_perdida", "offsides", "faltas_cometidas", "faltas_recibidas"],
+      Físicas: ["distancia_recorrida_km", "sprints", "duelos_aereos_ganados", "minutos_jugados", "partidos_jugados"],
+      Médicas: ["lesiones", "dias_baja"],
+      Disciplina: ["tarjetas_amarillas", "tarjetas_rojas", "sanciones_federativas"],
+    }),
+    []
+  );
+
+  const opciones = useMemo(() => Array.from({ length: 11 }, (_, i) => i), []);
+  const allFields = useMemo(() => Object.values(campos).flat(), [campos]);
+
+  const blankForm = useCallback(
+    (sid) => {
+      const baseForm = { stats_id: sid ?? null };
+      allFields.forEach((campo) => {
+        baseForm[campo] = campo === "distancia_recorrida_km" ? 0.0 : 0;
+      });
+      return baseForm;
+    },
+    [allFields]
+  );
 
   const unwrapJugador = (resData) => {
     const root = resData?.data ?? resData;
@@ -139,8 +292,7 @@ export default function DetalleEstadistica() {
     return root;
   };
 
-  const pretty = (s) =>
-    String(s || "").replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+  const pretty = (s) => String(s || "").replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 
   const rutConDV = useMemo(() => {
     if (!jugador) return formatRutWithDV(rut);
@@ -186,29 +338,14 @@ export default function DetalleEstadistica() {
 
   /* ============================ Auth ============================ */
   useEffect(() => {
-    try {
-      const token = getToken();
-      if (!token) throw new Error("no-token");
+    const g = ensureScopeOrRedirect({ navigate, isSuperTree: superTree });
+    if (!g.ok) return;
 
-      const decoded = jwtDecode(token);
-      const now = Math.floor(Date.now() / 1000);
-      if (decoded?.exp && decoded.exp < now) throw new Error("expired");
-
-      const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
-      const r = Number.isFinite(Number(rawRol)) ? Number(rawRol) : 0;
-
-      if (![1, 2, 3].includes(r)) {
-        navigate("/admin", { replace: true });
-        return;
-      }
-
-      setRol(r);
-      setCanWrite([1, 3].includes(r));
-    } catch {
-      clearToken();
-      navigate("/login", { replace: true });
+    if (mountedRef.current) {
+      setRol(g.rol);
+      setCanWrite([1, 3].includes(g.rol));
     }
-  }, [navigate]);
+  }, [navigate, superTree]);
 
   /* ====================== Cargar jugador + stats ====================== */
   useEffect(() => {
@@ -228,7 +365,7 @@ export default function DetalleEstadistica() {
 
         if (jid) {
           try {
-            const resJ = await api.get(`/jugadores/${encodeURIComponent(String(jid))}`);
+            const resJ = await api.get(`/jugadores/${encodeURIComponent(String(jid))}`, { meta: { isPublic: false } });
             jRaw = unwrapJugador(resJ.data);
           } catch {
             // fallback rut
@@ -236,7 +373,7 @@ export default function DetalleEstadistica() {
         }
 
         if (!jRaw) {
-          const jugadorRes = await api.get(`/jugadores/rut/${encodeURIComponent(rut)}`);
+          const jugadorRes = await api.get(`/jugadores/rut/${encodeURIComponent(rut)}`, { meta: { isPublic: false } });
           jRaw = unwrapJugador(jugadorRes.data);
         }
 
@@ -260,9 +397,10 @@ export default function DetalleEstadistica() {
         setJugador(jRaw);
         setJugadorId(jid);
 
-        const joinedRes = await api.get(
-          `/estadisticas/by-jugador/${encodeURIComponent(String(jid))}`
-        );
+        const joinedRes = await api.get(`/estadisticas/by-jugador/${encodeURIComponent(String(jid))}`, {
+          meta: { isPublic: false },
+        });
+
         if (!alive) return;
 
         const joined = joinedRes?.data?.item ?? joinedRes?.data?.data?.item ?? null;
@@ -286,21 +424,23 @@ export default function DetalleEstadistica() {
       } catch (err) {
         const st = getErrStatus(err);
 
-        if (st === 401 || st === 403) {
-          clearToken();
+        if (st === 401) {
+          clearToken?.();
           navigate("/login", { replace: true });
+          return;
+        }
+
+        if (st === 403) {
+          // ✅ 403 no logout automático
+          setError("No tienes permisos para ver/editar estadísticas en esta academia.");
+          setTimeout(() => navigate(backTo, { replace: true }), 900);
           return;
         }
 
         if (st === 404) setError("El jugador o sus stats no existen.");
         else setError("Error al cargar los datos.");
 
-        const superTree = isSuperTreePath(location.pathname);
-        const basePath = superTree ? "/super-dashboard/admin/dashboard" : "/admin";
-        setTimeout(
-          () => navigate(`${basePath}/registrar-estadisticas`, { replace: true }),
-          1200
-        );
+        setTimeout(() => navigate(backTo, { replace: true }), 900);
       } finally {
         if (alive) setLoading(false);
       }
@@ -309,7 +449,7 @@ export default function DetalleEstadistica() {
     return () => {
       alive = false;
     };
-  }, [rol, rut, navigate, location.state, blankForm, flattenJoined]);
+  }, [rol, rut, navigate, location.state, blankForm, flattenJoined, backTo]);
 
   /* ============================ Handlers ============================ */
   const handleChange = (campo, value) => {
@@ -326,12 +466,13 @@ export default function DetalleEstadistica() {
     }));
   };
 
-  const handleResetLocal = () => {
-    setFormData(blankForm(statsId));
-  };
+  const handleResetLocal = () => setFormData(blankForm(statsId));
 
   const handleSubmit = async () => {
     if (submitting) return;
+
+    const g = ensureScopeOrRedirect({ navigate, isSuperTree: superTree });
+    if (!g.ok) return;
 
     if (!canWrite) {
       setError("No tienes permisos para guardar (solo roles 1 y 3).");
@@ -346,8 +487,7 @@ export default function DetalleEstadistica() {
     setError("");
 
     try {
-      const currentStats =
-        statsExistentes && typeof statsExistentes === "object" ? statsExistentes : {};
+      const currentStats = statsExistentes && typeof statsExistentes === "object" ? statsExistentes : {};
       const incStats = formData && typeof formData === "object" ? formData : {};
 
       const sumado = {};
@@ -358,56 +498,49 @@ export default function DetalleEstadistica() {
         sumado[campo] =
           campo === "distancia_recorrida_km"
             ? Number((antiguo + nuevo).toFixed(2))
-            : (Number.isFinite(antiguo) ? antiguo : 0) +
-              (Number.isFinite(nuevo) ? nuevo : 0);
+            : (Number.isFinite(antiguo) ? antiguo : 0) + (Number.isFinite(nuevo) ? nuevo : 0);
       });
 
       const payload = pickEditablePayload(sumado);
 
       if (statsId) {
-        await api.put(`/estadisticas/${encodeURIComponent(String(statsId))}`, payload);
+        await api.put(`/estadisticas/${encodeURIComponent(String(statsId))}`, payload, { meta: { isPublic: false } });
       } else {
         const academia_id =
-          Number(jugador?.academia_id ?? 0) ||
-          Number(location.state?.scope?.academia_id ?? 0) ||
-          null;
+          Number(jugador?.academia_id ?? 0) || Number(location.state?.scope?.academia_id ?? 0) || null;
 
         const deporte_id =
-          Number(jugador?.deporte_id ?? 0) ||
-          Number(location.state?.scope?.deporte_id ?? 0) ||
-          null;
+          Number(jugador?.deporte_id ?? 0) || Number(location.state?.scope?.deporte_id ?? 0) || null;
 
         if (!academia_id || !deporte_id) {
           throw new Error("Falta academia_id/deporte_id para crear stats.");
         }
 
-        await api.post("/estadisticas", {
-          academia_id,
-          deporte_id,
-          jugador_id: jugadorId,
-          ...payload,
-        });
+        await api.post(
+          "/estadisticas",
+          { academia_id, deporte_id, jugador_id: jugadorId, ...payload },
+          { meta: { isPublic: false } }
+        );
       }
 
       alert("✅ Estadísticas acumuladas y guardadas correctamente");
-
-      const from = location.state?.from;
-      const superTree = isSuperTreePath(location.pathname);
-      const basePath = superTree ? "/super-dashboard/admin/dashboard" : "/admin";
-      navigate(from || `${basePath}/registrar-estadisticas`, { replace: true });
+      navigate(backTo, { replace: true });
     } catch (err) {
       const st = getErrStatus(err);
 
-      if (st === 401 || st === 403) {
-        clearToken();
+      if (st === 401) {
+        clearToken?.();
         navigate("/login", { replace: true });
-      } else {
-        const detail =
-          err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          err?.message;
-        setError(detail || "❌ Error al guardar estadísticas");
+        return;
       }
+
+      if (st === 403) {
+        setError("No tienes permisos para guardar estadísticas en esta academia.");
+        return;
+      }
+
+      const detail = err?.response?.data?.error || err?.response?.data?.message || err?.message;
+      setError(detail || "❌ Error al guardar estadísticas");
     } finally {
       setSubmitting(false);
     }
@@ -416,122 +549,161 @@ export default function DetalleEstadistica() {
   /* ============================ Render ============================ */
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-screen">
-        <LoaderCircle className="animate-spin w-12 h-12" />
+      <div className={`${ui.shell} flex justify-center items-center`}>
+        <LoaderCircle className="animate-spin w-12 h-12" style={{ color: ACCENT }} />
       </div>
     );
   }
 
+  const nombreJugador = jugador?.nombre_jugador ?? jugador?.nombre ?? "Jugador";
+
   return (
-    <div className={`${fondoClase} px-4 pt-4 pb-16 font-weli`}>
-      {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
+    <div className={ui.shell}>
+      <header className="px-6 pt-6 text-center">
+        <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>
+          Detalle Estadística
+        </h1>
+        <p className={`text-2xl mt-2 ${ui.subText}`}>
+          {nombreJugador} · RUT: <span className="font-semibold">{rutConDV}</span>
+          {jugadorId ? ` · Jugador ID: ${jugadorId}` : ""}
+          {statsId ? ` · Stats ID: ${statsId}` : " · Stats: (sin id aún)"}
+          {!canWrite ? " · (Solo lectura)" : ""}
+        </p>
+      </header>
 
-      <h2 className="text-2xl font-bold mb-2 text-center">
-        Modificar Estadísticas de{" "}
-        {jugador?.nombre_jugador ?? jugador?.nombre ?? "Jugador"} (RUT: {rutConDV})
-      </h2>
+      <main className="px-6 pb-20">
+        {error && (
+          <div className="max-w-6xl mx-auto mt-6">
+            <div className={ui.danger}>{error}</div>
+          </div>
+        )}
 
-      <p className="text-center text-sm opacity-80 mb-6">
-        {jugadorId ? `Jugador ID: ${jugadorId}` : ""}
-        {statsId ? ` · Stats ID: ${statsId}` : " · Stats: (sin id aún)"}
-        {!canWrite ? " · (Solo lectura)" : ""}
-      </p>
+        <div className={ui.panel}>
+          <div className="p-4 md:p-6">
+            {/* Valores actuales */}
+            {statsExistentes &&
+              typeof statsExistentes === "object" &&
+              Object.keys(statsExistentes).length > 0 && (
+                <div className={`${ui.card} mb-5`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="text-lg font-extrabold" style={ui.sectionTitleStyle}>
+                      Valores actuales (acumulados)
+                    </h2>
 
-      <div className={`${contenedorClase} max-w-6xl mx-auto`}>
-        {statsExistentes &&
-          typeof statsExistentes === "object" &&
-          Object.keys(statsExistentes).length > 0 && (
-            <div className={`${cardClase} mb-4`}>
-              <h4 className="font-bold mb-2 text-base">Valores actuales (acumulados)</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 text-xs">
-                {allFields.map((k) => (
-                  <div
-                    key={k}
-                    className="flex items-center justify-between gap-2 border border-gray-500/20 rounded px-2 py-1"
-                  >
-                    <span className="opacity-80">{pretty(k)}</span>
-                    <span className="font-semibold">
-                      {k === "distancia_recorrida_km"
-                        ? Number(statsExistentes?.[k] ?? 0).toFixed(2)
-                        : Number(statsExistentes?.[k] ?? 0)}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => navigate(backTo, { replace: true })}
+                      className={ui.btnGhost}
+                      title="Volver"
+                    >
+                      Volver
+                    </button>
                   </div>
-                ))}
-              </div>
-              <p className="mt-2 text-[11px] opacity-70">
-                Lo que ingreses abajo se suma a estos valores (modo acumulativo).
-              </p>
+
+                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 text-xs">
+                    {allFields.map((k) => (
+                      <div key={k} className={`flex items-center justify-between gap-2 ${ui.pill}`}>
+                        <span className={darkMode ? "text-white/80" : "text-ra-marron/80"}>
+                          {pretty(k)}
+                        </span>
+                        <span className={darkMode ? "text-white font-extrabold" : "text-ra-marron font-extrabold"}>
+                          {k === "distancia_recorrida_km"
+                            ? Number(statsExistentes?.[k] ?? 0).toFixed(2)
+                            : Number(statsExistentes?.[k] ?? 0)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className={`mt-3 text-[12px] ${darkMode ? "text-white/70" : "text-ra-marron/70"}`}>
+                    Lo que ingreses abajo se <b>suma</b> a estos valores (modo acumulativo).
+                  </p>
+                </div>
+              )}
+
+            {/* Form por categorías */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              {Object.entries(campos).map(([categoria, listaCampos]) => (
+                <section key={categoria} className={ui.card}>
+                  <h3 className="text-base font-extrabold mb-3" style={ui.sectionTitleStyle}>
+                    {categoria}
+                  </h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {listaCampos.map((campo) => (
+                      <div key={campo} className="space-y-1">
+                        <label className={`block text-xs sm:text-sm font-semibold ${darkMode ? "text-white/85" : "text-ra-marron/85"}`}>
+                          {pretty(campo)}
+                        </label>
+
+                        {campo === "distancia_recorrida_km" ? (
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={formData[campo] ?? 0}
+                            onChange={(e) => handleChange(campo, e.target.value)}
+                            className={ui.input}
+                            disabled={!canWrite}
+                          />
+                        ) : (
+                          <select
+                            value={formData[campo] ?? 0}
+                            onChange={(e) => handleChange(campo, e.target.value)}
+                            className={ui.input}
+                            disabled={!canWrite}
+                          >
+                            {opciones.map((num) => (
+                              <option key={num} value={num}>
+                                {num}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ))}
             </div>
-          )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {Object.entries(campos).map(([categoria, listaCampos]) => (
-            <section key={categoria} className={cardClase}>
-              <h4 className="font-bold mb-3 text-base">{categoria}</h4>
+            {/* Acciones */}
+            <div className="flex flex-wrap justify-center gap-3 mt-7">
+              <button
+                type="button"
+                onClick={handleResetLocal}
+                className={ui.btnGhost}
+                disabled={!canWrite}
+                title={!canWrite ? "Solo lectura" : "Limpiar"}
+              >
+                Limpiar a 0
+              </button>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {listaCampos.map((campo) => (
-                  <div key={campo} className="space-y-1">
-                    <label className="block text-xs sm:text-sm font-medium">
-                      {pretty(campo)}
-                    </label>
+              <button
+                onClick={handleSubmit}
+                disabled={submitting || !canWrite}
+                className={ui.btnPrimary}
+                style={{
+                  ...(ui.btnPrimaryStyle || {}),
+                  opacity: submitting || !canWrite ? 0.6 : 1,
+                }}
+                title={!canWrite ? "Solo lectura (roles 1 y 3 pueden guardar)" : "Guardar"}
+              >
+                {submitting ? "Guardando..." : "Acumular y Guardar"}
+              </button>
 
-                    {campo === "distancia_recorrida_km" ? (
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={formData[campo] ?? 0}
-                        onChange={(e) => handleChange(campo, e.target.value)}
-                        className={`w-full p-2 rounded text-sm ${inputClase}`}
-                        disabled={!canWrite}
-                      />
-                    ) : (
-                      <select
-                        value={formData[campo] ?? 0}
-                        onChange={(e) => handleChange(campo, e.target.value)}
-                        className={`w-full p-2 rounded text-sm ${inputClase}`}
-                        disabled={!canWrite}
-                      >
-                        {opciones.map((num) => (
-                          <option key={num} value={num}>
-                            {num}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))}
+              <button
+                type="button"
+                onClick={() => navigate(backTo, { replace: true })}
+                className={ui.btnGhost}
+                title="Volver"
+              >
+                Volver
+              </button>
+            </div>
+          </div>
         </div>
-
-        <div className="flex justify-center gap-3 mt-6">
-          <button
-            type="button"
-            onClick={handleResetLocal}
-            className="text-white font-bold py-2 px-6 rounded bg-gray-500 hover:bg-gray-600"
-            disabled={!canWrite}
-            title={!canWrite ? "Solo lectura" : "Limpiar"}
-          >
-            Limpiar a 0
-          </button>
-
-          <button
-            onClick={handleSubmit}
-            disabled={submitting || !canWrite}
-            className={`text-white font-bold py-2 px-6 rounded ${
-              submitting || !canWrite
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-green-600 hover:bg-green-700"
-            }`}
-            title={!canWrite ? "Solo lectura (roles 1 y 3 pueden guardar)" : "Guardar"}
-          >
-            {submitting ? "Guardando..." : "Acumular y Guardar"}
-          </button>
-        </div>
-      </div>
+      </main>
     </div>
   );
 }

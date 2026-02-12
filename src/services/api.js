@@ -5,6 +5,11 @@ export const TOKEN_KEY = "weli_token";
 export const ACADEMIA_STORAGE_KEY = "weli_selected_academia";
 export const ACADEMIA_HEADER = "x-academia-id";
 
+/* -------------------- Debug toggle -------------------- */
+const API_DEBUG =
+  String(import.meta?.env?.VITE_API_DEBUG ?? "0") === "1" ||
+  String(localStorage.getItem("weli_api_debug") ?? "0") === "1";
+
 /* -------------------- Base URL (determinista) -------------------- */
 const pickBaseUrl = () => {
   const envUrl = import.meta.env.VITE_API_BASE_URL;
@@ -18,7 +23,7 @@ const pickBaseUrl = () => {
   if (!/^https?:\/\//i.test(url)) url = `http://${url}`;
   if (url.endsWith("/")) url = url.slice(0, -1);
 
-  // Normaliza a /api (tu backend expone rutas bajo /api en la práctica)
+  // Normaliza a /api
   if (!/\/api$/i.test(url)) url = `${url}/api`;
 
   if (import.meta.env.PROD && /(localhost|127\.0\.0\.1)/i.test(url)) {
@@ -42,7 +47,7 @@ export const getToken = () => {
 export const clearToken = () => {
   try {
     localStorage.removeItem(TOKEN_KEY);
-  } catch { }
+  } catch {}
   delete apiPrivate.defaults.headers.common.Authorization;
 };
 
@@ -50,7 +55,7 @@ export const setToken = (token) => {
   if (token && typeof token === "string") {
     try {
       localStorage.setItem(TOKEN_KEY, token);
-    } catch { }
+    } catch {}
     apiPrivate.defaults.headers.common.Authorization = `Bearer ${token}`;
   }
 };
@@ -61,11 +66,9 @@ function readSelectedAcademiaId() {
     const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
     if (!raw) return 0;
 
-    // Caso 1: guardado como número/string: "1"
     const direct = Number(raw);
     if (Number.isFinite(direct) && direct > 0) return direct;
 
-    // Caso 2: guardado como JSON: {"id":1} o {"academia_id":1}
     const parsed = JSON.parse(raw);
     const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
     return Number.isFinite(id) && id > 0 ? id : 0;
@@ -74,10 +77,9 @@ function readSelectedAcademiaId() {
   }
 }
 
-
 /**
- * Decodifica payload JWT (base64url) robusto (soporta UTF-8).
- * NOTA: esto NO valida firma; es solo para extraer claims livianos (rol_id).
+ * Decodifica payload JWT (base64url) robusto (UTF-8).
+ * NO valida firma: solo para extraer claims livianos (rol_id).
  */
 function decodeJwtPayload(token) {
   try {
@@ -88,7 +90,6 @@ function decodeJwtPayload(token) {
     const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
     const padded = b64 + "===".slice((b64.length + 3) % 4);
 
-    // atob -> bytes -> utf8
     const bin = atob(padded);
     const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
     const json = new TextDecoder("utf-8").decode(bytes);
@@ -101,21 +102,30 @@ function decodeJwtPayload(token) {
 
 function extractRolFromToken(token) {
   const p = decodeJwtPayload(token);
-  const raw = p?.rol_id ?? p?.role_id ?? p?.role ?? 0;
+  const u = p?.user ?? p?.payload ?? p ?? {};
+  const raw = u?.rol_id ?? u?.role_id ?? u?.role ?? 0;
   const n = Number(raw);
   return Number.isFinite(n) ? n : 0;
 }
 
+/* -------------------- Path matcher (robusto) -------------------- */
+function safePathFromAxiosUrl(url = "") {
+  try {
+    const u = String(url || "");
+    if (!u) return "/";
+    if (u.startsWith("http")) return new URL(u).pathname || "/";
+    return u.startsWith("/") ? u : `/${u}`;
+  } catch {
+    return "/";
+  }
+}
+
 /**
  * Decide si se debe enviar x-academia-id según URL.
- * Regla: SOLO endpoints "tenantizados" del panel. Nunca auth ni portal apoderado.
+ * Regla: SOLO endpoints tenantizados del panel. Nunca auth ni portal apoderado.
  */
 function shouldSendAcademiaHeader(url = "") {
-  const u = String(url || "");
-
-  // Normaliza: puede venir como "/ruta" o full URL si axios lo resolvió raro
-  const path = u.startsWith("http") ? new URL(u).pathname : u;
-  const p = path.startsWith("/") ? path : `/${path}`;
+  const p = safePathFromAxiosUrl(url);
 
   // ❌ jamás a apoderado
   if (p.startsWith("/portal-apoderado")) return false;
@@ -124,10 +134,10 @@ function shouldSendAcademiaHeader(url = "") {
   // ❌ jamás a auth panel
   if (p.startsWith("/auth")) return false;
 
-  // ❌ recursos globales de superadmin (no tenant)
+  // ❌ recursos globales superadmin (no tenant)
   if (p.startsWith("/academias")) return false;
 
-  // ✅ tenantizados (ajustado a tus routers reales)
+  // ✅ tenantizados
   const allowPrefixes = [
     "/jugadores",
     "/pagos-jugador",
@@ -136,22 +146,42 @@ function shouldSendAcademiaHeader(url = "") {
     "/convocatorias",
     "/agenda",
     "/eventos",
-    "/noticias",
 
-    // catálogos (en WELI pueden ser tenantizados según tu regla)
+    // ✅ catálogos tenantizados
+    "/categorias",
+    "/categoria",
+    "/estado",
+    "/estados",
+    "/comunas",
+    "/establecimientos-educ",
+    "/prevision-medica",
+
     "/posiciones",
     "/sucursales_real",
     "/sucursales-real",
-    "/prevision_medica",
-    "/prevision-medica",
-    "/tipo_pago",
-    "/tipo-pago",
     "/situacion_pago",
     "/situacion-pago",
-    "/usuarios", // usuarios: en tu modelo también es por academia (rol 1/3)
+    "/tipo_pago",
+    "/tipo-pago",
+
+    // ✅ el que te está fallando
+    "/medio-pago",
+    "/medios-pago",
+
+    "/usuarios",
   ];
 
   return allowPrefixes.some((pref) => p.startsWith(pref));
+}
+
+/* -------------------- URL helpers -------------------- */
+function joinUrl(baseURL, url) {
+  const b = String(baseURL || "").replace(/\/+$/, "");
+  const u = String(url || "");
+  if (!u) return b || "";
+  if (/^https?:\/\//i.test(u)) return u;
+  if (u.startsWith("/")) return `${b}${u}`;
+  return `${b}/${u}`;
 }
 
 /* -------------------- Axios instances -------------------- */
@@ -201,22 +231,43 @@ apiPrivate.interceptors.request.use((config) => {
     delete plain.authorization;
   }
 
-  // x-academia-id
-  // Regla práctica:
-  // - Rol 3 (superadmin): SIEMPRE usa academia seleccionada para rutas tenantizadas.
-  // - Rol 1/2: puedes mandar si existe seleccionada (no rompe). Si no hay, no mandes.
-  // - Nunca mandes a auth ni portal apoderado (shouldSendAcademiaHeader ya lo evita).
+  // Tenant header (solo rol 3 + rutas tenantizadas)
   if (token && shouldSendAcademiaHeader(config?.url)) {
     const rol = extractRolFromToken(token);
-    const academiaId = readSelectedAcademiaId();
 
-    if (academiaId > 0 && (rol === 3 || rol === 1 || rol === 2)) {
-      plain[ACADEMIA_HEADER] = String(academiaId);
+    if (rol === 3) {
+      const academiaId = readSelectedAcademiaId();
+      if (academiaId > 0) {
+        plain[ACADEMIA_HEADER] = String(academiaId);
+      } else {
+        delete plain[ACADEMIA_HEADER];
+      }
     } else {
       delete plain[ACADEMIA_HEADER];
     }
+
+    // Debug opt-in (request)
+    if (API_DEBUG) {
+      const full = joinUrl(config?.baseURL, config?.url);
+      console.log("[API REQ]", (config?.method || "GET").toUpperCase(), full, {
+        hasAuth: !!plain.Authorization,
+        tokenLen: token?.length || 0,
+        rol,
+        xAcademia: plain[ACADEMIA_HEADER] ?? null,
+      });
+    }
   } else {
     delete plain[ACADEMIA_HEADER];
+
+    if (API_DEBUG) {
+      const full = joinUrl(config?.baseURL, config?.url);
+      console.log("[API REQ]", (config?.method || "GET").toUpperCase(), full, {
+        hasAuth: !!plain.Authorization,
+        tokenLen: token?.length || 0,
+        rol: token ? extractRolFromToken(token) : 0,
+        xAcademia: null,
+      });
+    }
   }
 
   config.headers = plain;
@@ -227,6 +278,12 @@ apiPrivate.interceptors.request.use((config) => {
 apiPrivate.interceptors.response.use(
   (res) => res,
   (error) => {
+    // AbortController / axios cancel: no ensuciar logs
+    const isCanceled =
+      error?.code === "ERR_CANCELED" ||
+      error?.name === "CanceledError" ||
+      axios.isCancel?.(error);
+
     const status = error?.response?.status ?? 0;
     const data = error?.response?.data ?? null;
 
@@ -246,26 +303,62 @@ apiPrivate.interceptors.response.use(
       if (shouldClear) clearToken();
     }
 
+    const method = error?.config?.method ?? null;
+    const url = error?.config?.url ?? null;
+    const baseURL = error?.config?.baseURL ?? null;
+    const fullUrl = joinUrl(baseURL, url);
+    const path = safePathFromAxiosUrl(url);
+
     const norm = {
       status,
-      url: error?.config?.url ?? null,
-      method: error?.config?.method ?? null,
-      baseURL: error?.config?.baseURL ?? null,
+      method,
+      url,
+      baseURL,
+      fullUrl,
+      path,
       message:
         (data && (data.message || data.detail || data.error)) ||
         error?.message ||
         "Error de red o del servidor",
       data,
+      code: error?.code ?? null,
+      isCanceled: !!isCanceled,
+      // útil para tu prettyError del componente
+      requestHint: {
+        hasAuth: !!error?.config?.headers?.Authorization,
+        xAcademia: error?.config?.headers?.[ACADEMIA_HEADER] ?? null,
+      },
       ...(import.meta.env.DEV
         ? {
-          response: error?.response || null,
-          request: error?.request || null,
-          code: error?.code,
-          config: error?.config,
-          _raw: error,
-        }
+            response: error?.response || null,
+            request: error?.request || null,
+            config: error?.config,
+            _raw: error,
+          }
         : {}),
     };
+
+    // ✅ Log “real” que tú pediste (cuando falla) + sin spam por cancel
+    if (!isCanceled) {
+      const m = (method || "GET").toUpperCase();
+      const st = status || 0;
+
+      console.log(`[API FAIL] ${m} ${fullUrl} -> ${st}`, {
+        status: norm.status,
+        path: norm.path,
+        url: norm.url,
+        baseURL: norm.baseURL,
+        code: norm.code,
+        data: norm.data,
+        hasAuth: norm.requestHint.hasAuth,
+        xAcademia: norm.requestHint.xAcademia,
+        // Señales típicas
+        isNetworkError:
+          st === 0 ||
+          String(norm.message || "").toLowerCase().includes("network error") ||
+          String(norm.message || "").toLowerCase().includes("failed to fetch"),
+      });
+    }
 
     return Promise.reject(norm);
   }
