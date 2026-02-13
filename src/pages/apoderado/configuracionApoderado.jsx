@@ -16,7 +16,7 @@ import IsLoading from "../../components/isLoading";
 import { useTheme } from "../../context/ThemeContext";
 import api, { getToken, clearToken } from "../../services/api";
 
-const ACCENT = "#e82d89";
+const ACCENT = "#2563EB"; // ✅ azul confianza
 
 /* ───────────────────────────────
    UI helpers
@@ -178,16 +178,16 @@ export default function ConfiguracionApoderado() {
 
   // estilos base (✅ sin “font-realacademy”)
   const pageClass = darkMode
-    ? "text-white bg-[#0b0b0e]"
-    : "text-[#1a1a1a] bg-[#e9eaec]";
+    ? "text-white bg-[#0B1220]"
+    : "text-[#0f172a] bg-[#eef2f7]";
   const surfaceClass = darkMode
-    ? "border-white/10 bg-[#121214]"
-    : "border-black/10 bg-[#f2f2f3]";
+    ? "border-white/10 bg-[#0F1A2B]"
+    : "border-black/10 bg-[#ffffffcc]";
   const cardClass = darkMode
-    ? "border-white/10 bg-[#0f0f12]"
+    ? "border-white/10 bg-[#0C1626]"
     : "border-black/10 bg-white";
-  const mutedText = darkMode ? "text-white/65" : "text-black/60";
-  const softText = darkMode ? "text-white/80" : "text-black/70";
+  const mutedText = darkMode ? "text-white/65" : "text-slate-600";
+  const softText = darkMode ? "text-white/80" : "text-slate-700";
 
   /* ───────────────────────────────
      Auth helpers
@@ -613,16 +613,16 @@ export default function ConfiguracionApoderado() {
           className="absolute -top-40 left-1/2 -translate-x-1/2 w-[980px] h-[980px] rounded-full blur-3xl opacity-60"
           style={{
             background: darkMode
-              ? "radial-gradient(circle, rgba(232,45,137,0.12), transparent 60%)"
-              : "radial-gradient(circle, rgba(232,45,137,0.18), transparent 60%)",
+              ? "radial-gradient(circle, rgba(37,99,235,0.14), transparent 60%)"
+              : "radial-gradient(circle, rgba(37,99,235,0.18), transparent 60%)",
           }}
         />
         <div
           className="absolute -bottom-56 right-[-180px] w-[900px] h-[900px] rounded-full blur-3xl opacity-50"
           style={{
             background: darkMode
-              ? "radial-gradient(circle, rgba(232,45,137,0.10), transparent 60%)"
-              : "radial-gradient(circle, rgba(0,0,0,0.06), transparent 60%)",
+              ? "radial-gradient(circle, rgba(14,165,233,0.10), transparent 60%)"
+              : "radial-gradient(circle, rgba(2,132,199,0.10), transparent 60%)",
           }}
         />
         <div
@@ -631,7 +631,7 @@ export default function ConfiguracionApoderado() {
             opacity: darkMode ? 0.06 : 0.12,
             backgroundImage: darkMode
               ? "repeating-linear-gradient(135deg, rgba(255,255,255,0.10) 0px, rgba(255,255,255,0.10) 1px, transparent 1px, transparent 18px)"
-              : "repeating-linear-gradient(135deg, rgba(0,0,0,0.08) 0px, rgba(0,0,0,0.08) 1px, transparent 1px, transparent 18px)",
+              : "repeating-linear-gradient(135deg, rgba(15,23,42,0.08) 0px, rgba(15,23,42,0.08) 1px, transparent 1px, transparent 18px)",
           }}
         />
       </div>
@@ -640,7 +640,7 @@ export default function ConfiguracionApoderado() {
         {/* Topbar */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-widest uppercase text-[#e82d89]">
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-widest uppercase" style={{ color: ACCENT }}>
               Configuración
             </h1>
             <p className={["mt-1 text-sm font-semibold", mutedText].join(" ")}>
@@ -655,8 +655,8 @@ export default function ConfiguracionApoderado() {
               className={[
                 "rounded-xl px-3 py-2 border transition inline-flex items-center gap-2 font-extrabold uppercase tracking-widest",
                 darkMode
-                  ? "bg-[#121214] border-white/10 text-white hover:bg-[#1a1a1d]"
-                  : "bg-white border-black/10 text-[#1a1a1a] hover:bg-white/70",
+                  ? "bg-[#0F1A2B] border-white/10 text-white hover:bg-[#12203A]"
+                  : "bg-white border-black/10 text-[#0f172a] hover:bg-white/70",
               ].join(" ")}
               title={darkMode ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
               aria-label={darkMode ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
@@ -674,8 +674,8 @@ export default function ConfiguracionApoderado() {
               className={[
                 "rounded-xl px-4 py-2 font-extrabold uppercase tracking-widest border transition inline-flex items-center gap-2",
                 darkMode
-                  ? "bg-[#121214] border-white/10 text-white hover:bg-[#1a1a1d]"
-                  : "bg-white border-black/10 text-[#1a1a1a] hover:bg-white/70",
+                  ? "bg-[#0F1A2B] border-white/10 text-white hover:bg-[#12203A]"
+                  : "bg-white border-black/10 text-[#0f172a] hover:bg-white/70",
               ].join(" ")}
               title="Volver al portal"
             >
@@ -685,7 +685,10 @@ export default function ConfiguracionApoderado() {
             <button
               type="button"
               onClick={handleLogout}
-              className="rounded-xl px-4 py-2 font-extrabold uppercase tracking-widest bg-[#e82d89] text-white hover:bg-[#c61f74] transition inline-flex items-center gap-2"
+              className="rounded-xl px-4 py-2 font-extrabold uppercase tracking-widest text-white transition inline-flex items-center gap-2"
+              style={{ background: ACCENT }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#1D4ED8")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = ACCENT)}
               title="Cerrar sesión"
             >
               <FiLogOut size={18} />
@@ -747,7 +750,7 @@ export default function ConfiguracionApoderado() {
               <p
                 className={[
                   "text-xs font-black tracking-[0.35em] uppercase",
-                  darkMode ? "text-white/50" : "text-black/50",
+                  darkMode ? "text-white/50" : "text-slate-500",
                 ].join(" ")}
               >
                 Seguridad
@@ -755,7 +758,7 @@ export default function ConfiguracionApoderado() {
               <h2
                 className={[
                   "mt-2 text-xl font-extrabold flex items-center gap-2",
-                  darkMode ? "text-white" : "text-black",
+                  darkMode ? "text-white" : "text-slate-900",
                 ].join(" ")}
               >
                 <FiLock style={{ color: ACCENT }} />
@@ -777,7 +780,7 @@ export default function ConfiguracionApoderado() {
               <label
                 className={[
                   "text-xs font-black tracking-[0.30em] uppercase",
-                  darkMode ? "text-white/45" : "text-black/45",
+                  darkMode ? "text-white/45" : "text-slate-500",
                 ].join(" ")}
               >
                 Clave actual
@@ -789,9 +792,10 @@ export default function ConfiguracionApoderado() {
                 className={[
                   "w-full rounded-xl border px-4 py-3 text-sm font-semibold outline-none transition",
                   darkMode
-                    ? "border-white/10 bg-white/5 text-white placeholder:text-white/35 focus:border-[#e82d89]/60"
-                    : "border-black/10 bg-white text-black placeholder:text-black/35 focus:border-[#e82d89]/60",
+                    ? "border-white/10 bg-white/5 text-white placeholder:text-white/35"
+                    : "border-black/10 bg-white text-slate-900 placeholder:text-slate-400",
                 ].join(" ")}
+                style={{ outlineColor: "transparent" }}
                 placeholder="••••••••"
                 autoComplete="current-password"
                 disabled={savingPass}
@@ -802,7 +806,7 @@ export default function ConfiguracionApoderado() {
               <label
                 className={[
                   "text-xs font-black tracking-[0.30em] uppercase",
-                  darkMode ? "text-white/45" : "text-black/45",
+                  darkMode ? "text-white/45" : "text-slate-500",
                 ].join(" ")}
               >
                 Nueva clave
@@ -814,8 +818,8 @@ export default function ConfiguracionApoderado() {
                 className={[
                   "w-full rounded-xl border px-4 py-3 text-sm font-semibold outline-none transition",
                   darkMode
-                    ? "border-white/10 bg-white/5 text-white placeholder:text-white/35 focus:border-[#e82d89]/60"
-                    : "border-black/10 bg-white text-black placeholder:text-black/35 focus:border-[#e82d89]/60",
+                    ? "border-white/10 bg-white/5 text-white placeholder:text-white/35"
+                    : "border-black/10 bg-white text-slate-900 placeholder:text-slate-400",
                 ].join(" ")}
                 placeholder="mínimo 8 caracteres"
                 autoComplete="new-password"
@@ -828,7 +832,7 @@ export default function ConfiguracionApoderado() {
               <label
                 className={[
                   "text-xs font-black tracking-[0.30em] uppercase",
-                  darkMode ? "text-white/45" : "text-black/45",
+                  darkMode ? "text-white/45" : "text-slate-500",
                 ].join(" ")}
               >
                 Repetir nueva clave
@@ -840,8 +844,8 @@ export default function ConfiguracionApoderado() {
                 className={[
                   "w-full rounded-xl border px-4 py-3 text-sm font-semibold outline-none transition",
                   darkMode
-                    ? "border-white/10 bg-white/5 text-white placeholder:text-white/35 focus:border-[#e82d89]/60"
-                    : "border-black/10 bg-white text-black placeholder:text-black/35 focus:border-[#e82d89]/60",
+                    ? "border-white/10 bg-white/5 text-white placeholder:text-white/35"
+                    : "border-black/10 bg-white text-slate-900 placeholder:text-slate-400",
                 ].join(" ")}
                 placeholder="repítela tal cual"
                 autoComplete="new-password"
@@ -855,11 +859,12 @@ export default function ConfiguracionApoderado() {
                 type="submit"
                 disabled={savingPass}
                 className={[
-                  "rounded-xl px-4 py-2 font-extrabold uppercase tracking-widest transition inline-flex items-center gap-2",
-                  savingPass
-                    ? "bg-black/20 text-white/60 cursor-not-allowed"
-                    : "bg-[#e82d89] text-white hover:bg-[#c61f74]",
+                  "rounded-xl px-4 py-2 font-extrabold uppercase tracking-widest transition inline-flex items-center gap-2 text-white",
+                  savingPass ? "opacity-60 cursor-not-allowed" : "",
                 ].join(" ")}
+                style={{ background: savingPass ? "rgba(15,23,42,0.25)" : ACCENT }}
+                onMouseEnter={(e) => !savingPass && (e.currentTarget.style.background = "#1D4ED8")}
+                onMouseLeave={(e) => !savingPass && (e.currentTarget.style.background = ACCENT)}
               >
                 {savingPass ? "Guardando..." : "Actualizar clave"}
                 <FiSave size={18} />
@@ -886,7 +891,7 @@ export default function ConfiguracionApoderado() {
               <p
                 className={[
                   "text-xs font-black tracking-[0.35em] uppercase",
-                  darkMode ? "text-white/50" : "text-black/50",
+                  darkMode ? "text-white/50" : "text-slate-500",
                 ].join(" ")}
               >
                 Foto
@@ -894,7 +899,7 @@ export default function ConfiguracionApoderado() {
               <h2
                 className={[
                   "mt-2 text-xl font-extrabold flex items-center gap-2",
-                  darkMode ? "text-white" : "text-black",
+                  darkMode ? "text-white" : "text-slate-900",
                 ].join(" ")}
               >
                 <FiCamera style={{ color: ACCENT }} />
@@ -915,7 +920,7 @@ export default function ConfiguracionApoderado() {
             <label
               className={[
                 "text-xs font-black tracking-[0.30em] uppercase",
-                darkMode ? "text-white/45" : "text-black/45",
+                darkMode ? "text-white/45" : "text-slate-500",
               ].join(" ")}
             >
               Jugador
@@ -926,8 +931,8 @@ export default function ConfiguracionApoderado() {
               className={[
                 "mt-1 w-full rounded-xl border px-4 py-3 text-sm font-semibold outline-none transition",
                 darkMode
-                  ? "border-white/10 bg-white/5 text-white focus:border-[#e82d89]/60"
-                  : "border-black/10 bg-white text-black focus:border-[#e82d89]/60",
+                  ? "border-white/10 bg-white/5 text-white"
+                  : "border-black/10 bg-white text-slate-900",
               ].join(" ")}
               disabled={pwdRequired || !jugadorOptions.length || savingFoto}
               title={pwdRequired ? "Primero cambia tu contraseña" : undefined}
@@ -946,7 +951,7 @@ export default function ConfiguracionApoderado() {
               <div
                 className={[
                   "w-40 h-40 rounded-2xl overflow-hidden border flex items-center justify-center",
-                  darkMode ? "border-white/10 bg-white/5" : "border-black/10 bg-black/5",
+                  darkMode ? "border-white/10 bg-white/5" : "border-black/10 bg-slate-100",
                 ].join(" ")}
               >
                 {fotoPreviewUrl ? (
@@ -959,7 +964,7 @@ export default function ConfiguracionApoderado() {
                   <div
                     className={[
                       "text-xs font-black tracking-[0.30em] uppercase",
-                      darkMode ? "text-white/45" : "text-black/45",
+                      darkMode ? "text-white/45" : "text-slate-500",
                     ].join(" ")}
                   >
                     Sin foto
@@ -971,8 +976,8 @@ export default function ConfiguracionApoderado() {
                 className={[
                   "cursor-pointer rounded-xl px-4 py-2 font-extrabold uppercase tracking-widest transition inline-flex items-center gap-2",
                   darkMode
-                    ? "bg-[#121214] border border-white/10 text-white hover:bg-[#1a1a1d]"
-                    : "bg-white border border-black/10 text-[#1a1a1a] hover:bg-white/70",
+                    ? "bg-[#0F1A2B] border border-white/10 text-white hover:bg-[#12203A]"
+                    : "bg-white border border-black/10 text-[#0f172a] hover:bg-white/70",
                   fotoDisabled ? "opacity-60 cursor-not-allowed" : "",
                 ].join(" ")}
                 title={
@@ -1053,14 +1058,14 @@ export default function ConfiguracionApoderado() {
                   <div
                     className={[
                       "relative w-full max-w-2xl rounded-3xl border overflow-hidden",
-                      darkMode ? "bg-[#0f0f12] border-white/10" : "bg-white border-black/10",
+                      darkMode ? "bg-[#0C1626] border-white/10" : "bg-white border-black/10",
                     ].join(" ")}
                   >
                     <div className="p-4 flex items-center justify-between">
                       <div
                         className={[
                           "font-extrabold uppercase tracking-widest",
-                          darkMode ? "text-white" : "text-black",
+                          darkMode ? "text-white" : "text-slate-900",
                         ].join(" ")}
                       >
                         Ajustar foto
@@ -1073,7 +1078,7 @@ export default function ConfiguracionApoderado() {
                           "rounded-xl px-3 py-2 font-extrabold uppercase tracking-widest border transition",
                           darkMode
                             ? "border-white/10 text-white hover:bg-white/5"
-                            : "border-black/10 text-black hover:bg-black/5",
+                            : "border-black/10 text-slate-900 hover:bg-slate-50",
                           savingFoto ? "opacity-60 cursor-not-allowed" : "",
                         ].join(" ")}
                       >
@@ -1100,7 +1105,7 @@ export default function ConfiguracionApoderado() {
                         <span
                           className={[
                             "text-xs font-black tracking-[0.30em] uppercase",
-                            darkMode ? "text-white/45" : "text-black/45",
+                            darkMode ? "text-white/45" : "text-slate-500",
                           ].join(" ")}
                         >
                           Zoom
@@ -1123,11 +1128,12 @@ export default function ConfiguracionApoderado() {
                           onClick={handleSaveFoto}
                           disabled={savingFoto}
                           className={[
-                            "rounded-xl px-4 py-2 font-extrabold uppercase tracking-widest transition inline-flex items-center gap-2",
-                            savingFoto
-                              ? "bg-black/20 text-white/60 cursor-not-allowed"
-                              : "bg-[#e82d89] text-white hover:bg-[#c61f74]",
+                            "rounded-xl px-4 py-2 font-extrabold uppercase tracking-widest transition inline-flex items-center gap-2 text-white",
+                            savingFoto ? "opacity-60 cursor-not-allowed" : "",
                           ].join(" ")}
+                          style={{ background: savingFoto ? "rgba(15,23,42,0.25)" : ACCENT }}
+                          onMouseEnter={(e) => !savingFoto && (e.currentTarget.style.background = "#1D4ED8")}
+                          onMouseLeave={(e) => !savingFoto && (e.currentTarget.style.background = ACCENT)}
                         >
                           {savingFoto ? "Guardando..." : "Guardar foto"}
                           <FiSave size={18} />

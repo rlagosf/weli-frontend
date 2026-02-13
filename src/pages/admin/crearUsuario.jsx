@@ -155,6 +155,33 @@ const postWithFallback = async (path, body) => {
   throw lastErr ?? new Error("POST failed");
 };
 
+const pickBackendMessage = (err) => {
+  const data = err?.response?.data ?? err?.data ?? null;
+
+  const detail =
+    data?.detail ??
+    data?.message ??
+    data?.error ??
+    data?.msg ??
+    (typeof data === "string" ? data : null);
+
+  if (typeof detail === "string" && detail.trim()) return detail.trim();
+
+  // Zod-like / validation arrays
+  if (Array.isArray(data?.errors)) {
+    const joined = data.errors
+      .map((e) => e?.message ?? e?.msg ?? e?.detail ?? e?.path?.join?.(".") ?? "")
+      .filter(Boolean)
+      .join(" | ");
+    if (joined) return joined;
+  }
+
+  // Fastify-ish
+  if (typeof data?.validation === "string" && data.validation.trim()) return data.validation.trim();
+
+  return "";
+};
+
 export default function CrearUsuario() {
   const { darkMode } = useTheme();
   const navigate = useNavigate();
@@ -221,7 +248,9 @@ export default function CrearUsuario() {
 
         setRoles(lista);
 
-        setFormData((prev) => (!prev.rol_id && lista.length === 1 ? { ...prev, rol_id: String(lista[0].id) } : prev));
+        setFormData((prev) =>
+          !prev.rol_id && lista.length === 1 ? { ...prev, rol_id: String(lista[0].id) } : prev
+        );
       } catch (err) {
         if (abort.signal.aborted) return;
 
@@ -251,15 +280,15 @@ export default function CrearUsuario() {
     const { name, value } = e.target;
 
     if (name === "rut_usuario") {
-      const digits = String(value || "").replace(/\D/g, "");
-      if (digits.length <= 8) setFormData((prev) => ({ ...prev, rut_usuario: digits }));
+      const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
+      setFormData((prev) => ({ ...prev, rut_usuario: digits }));
       return;
     }
 
     setFormData((prev) => ({ ...prev, [name]: value }));
   }, []);
 
-  const isValidRut = (v) => /^\d{7,8}$/.test(String(v || ""));
+  const isValidRut = (v) => /^[0-9]{7,8}$/.test(String(v || ""));
   const isStrongPassword = (v) => typeof v === "string" && v.length >= 6;
 
   const enviarUsuario = useCallback(
@@ -278,16 +307,28 @@ export default function CrearUsuario() {
 
       if (!isValidRut(rut)) return setError("El RUT debe ser de 7 u 8 dígitos (sin DV).");
       if (!roles.find((r) => r.id === rolId)) return setError("Rol seleccionado inválido.");
-      if (!isStrongPassword(formData.password)) return setError("La contraseña debe tener al menos 6 caracteres.");
+      if (!isStrongPassword(formData.password))
+        return setError("La contraseña debe tener al menos 6 caracteres.");
+
+      // ✅ academia target SIEMPRE se evalúa en el submit (no congelado)
+      const academiaId = getAcademiaIdFromStorage();
+
+      // ✅ el backend lo exige para superadmin: lo mandamos sí o sí
+      if (g.rol === 3 && academiaId <= 0) {
+        return setError("academia_id es obligatorio para superadmin (selecciona una academia).");
+      }
+
+      const payload = {
+        ...formData,
+        rut_usuario: Number(rut),
+        rol_id: rolId,
+        estado_id: Number(formData.estado_id) || 1,
+        ...(g.rol === 3 ? { academia_id: academiaId } : {}),
+      };
 
       setSubmitting(true);
       try {
-        await postWithFallback("/usuarios", {
-          ...formData,
-          rut_usuario: Number(rut),
-          rol_id: rolId,
-          estado_id: Number(formData.estado_id) || 1,
-        });
+        await postWithFallback("/usuarios", payload);
 
         setMensaje("✅ Usuario registrado correctamente");
         setFormData({
@@ -309,9 +350,8 @@ export default function CrearUsuario() {
 
         if (st === 403) return setError("No tienes permisos para registrar usuarios.");
 
-        const data = err?.data ?? err?.response?.data ?? null;
-        const detail = data?.detail ?? data?.message;
-        setError(typeof detail === "string" ? detail : "❌ Error al registrar usuario");
+        const backendMsg = pickBackendMessage(err);
+        setError(backendMsg || "❌ Error al registrar usuario");
       } finally {
         setSubmitting(false);
       }
@@ -387,7 +427,8 @@ export default function CrearUsuario() {
                 name="rut_usuario"
                 type="text"
                 inputMode="numeric"
-                pattern="^\\d{7,8}$"
+                pattern="[0-9]{7,8}"
+                title="Ingresa 7 u 8 dígitos, sin puntos ni dígito verificador"
                 maxLength={8}
                 value={formData.rut_usuario}
                 onChange={handleChange}
@@ -419,7 +460,13 @@ export default function CrearUsuario() {
                 minLength={6}
               />
 
-              <select name="rol_id" value={formData.rol_id} onChange={handleChange} className={ui.select} required>
+              <select
+                name="rol_id"
+                value={formData.rol_id}
+                onChange={handleChange}
+                className={ui.select}
+                required
+              >
                 <option value="">Selecciona un Rol</option>
                 {roles.map((rol) => (
                   <option key={rol.id} value={String(rol.id)}>

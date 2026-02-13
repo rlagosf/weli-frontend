@@ -1,21 +1,24 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: "class",
-
   content: ["./index.html", "./src/**/*.{js,jsx,ts,tsx}"],
 
   theme: {
     extend: {
-      // 🎨 Marca (mantengo namespace ra para no romper el proyecto)
       colors: {
         ra: {
-          fucsia: "#aa5013", // cobre (acento principal)
-          marron: "#6d5829", // base oscura cálida
-          gold: "#b79f69",
-          fucsia: "#aa5013",
-          sand: "#ffdda1",
-          caramel: "#dda272",
+          // Base cálida WELI
+          marron: "#6d5829",
           terracotta: "#e2773b",
+          sand: "#ffdda1",
+
+          // Tonos claros usados en admin layouts
+          cream: "#e8dac4",
+          caramel: "#dda272",
+          gold: "#b79f69",
+
+          // Acento (si quieres “cobre”, úsalo acá)
+          fucsia: "#aa5013",
         },
       },
 

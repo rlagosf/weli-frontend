@@ -1,5 +1,5 @@
 // src/pages/admin/estadisticasGlobales.jsx
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Pie, Bar } from "react-chartjs-2";
 import {
@@ -20,7 +20,7 @@ import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 Chart.register(ArcElement, Tooltip, Legend, BarElement, CategoryScale, LinearScale);
 
 /* =======================
-   🎨 Colores gráficos (pedido)
+   🎨 Colores gráficos
 ======================= */
 const EVENT_COLORS = [
   "#2563EB",
@@ -115,7 +115,6 @@ const HtmlLegendPlugin = {
 
     const col = document.createElement("div");
     col.setAttribute("data-weli-legend-col", "1");
-
     col.style.setProperty("display", "grid", "important");
     col.style.setProperty("grid-template-columns", "repeat(2, minmax(0, 1fr))", "important");
     col.style.setProperty("gap", "6px", "important");
@@ -153,7 +152,10 @@ const HtmlLegendPlugin = {
       box.style.setProperty("border-radius", "4px", "important");
       box.style.setProperty("flex-shrink", "0", "important");
 
-      const color = Array.isArray(bg) ? bg[i] || EVENT_COLORS[i % EVENT_COLORS.length] : bg || EVENT_COLORS[i % EVENT_COLORS.length];
+      const color = Array.isArray(bg)
+        ? bg[i] || EVENT_COLORS[i % EVENT_COLORS.length]
+        : bg || EVENT_COLORS[i % EVENT_COLORS.length];
+
       box.style.setProperty("background", color, "important");
 
       const visible = chart.getDataVisibility(i);
@@ -195,18 +197,21 @@ Chart.register(PieValueInsidePlugin, HtmlLegendPlugin);
 
 /* ───────────────── Scope helpers ───────────────── */
 const STORAGE_KEY = "weli_selected_academia";
-const ACADEMIA_STORAGE_KEY = "weli_selected_academia"; // compat
 
 const readSelectedAcademia = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const p = JSON.parse(raw);
 
-    const id = Number(p?.id ?? 0);
+    // soporte: "2" o JSON
+    const direct = Number(raw);
+    if (Number.isFinite(direct) && direct > 0) return { id: direct, deporte_id: null, nombre: null };
+
+    const p = JSON.parse(raw);
+    const id = Number(p?.id ?? p?.academia_id ?? p?.academiaId ?? 0);
     if (!Number.isFinite(id) || id <= 0) return null;
 
-    const deporte_id = Number(p?.deporte_id ?? 0);
+    const deporte_id = Number(p?.deporte_id ?? p?.sport_id ?? 0);
     return {
       id,
       deporte_id: Number.isFinite(deporte_id) && deporte_id > 0 ? deporte_id : null,
@@ -241,41 +246,10 @@ const SPORT_META = {
   1: {
     nombre: "Fútbol",
     grupos: {
-      ofensivas: [
-        "goles",
-        "asistencias",
-        "tiros_libres",
-        "penales",
-        "tiros_arco",
-        "tiros_fuera",
-        "tiros_bloqueados",
-        "regates_exitosos",
-        "centros_acertados",
-        "pases_clave",
-      ],
-      defensivas: [
-        "intercepciones",
-        "despejes",
-        "duelos_ganados",
-        "entradas_exitosas",
-        "bloqueos",
-        "recuperaciones",
-      ],
-      tecnicas: [
-        "pases_completados",
-        "pases_errados",
-        "posesion_perdida",
-        "offsides",
-        "faltas_cometidas",
-        "faltas_recibidas",
-      ],
-      fisicas: [
-        "distancia_recorrida_km",
-        "sprints",
-        "duelos_aereos_ganados",
-        "minutos_jugados",
-        "partidos_jugados",
-      ],
+      ofensivas: ["goles", "asistencias", "tiros_libres", "penales", "tiros_arco", "tiros_fuera", "tiros_bloqueados", "regates_exitosos", "centros_acertados", "pases_clave"],
+      defensivas: ["intercepciones", "despejes", "duelos_ganados", "entradas_exitosas", "bloqueos", "recuperaciones"],
+      tecnicas: ["pases_completados", "pases_errados", "posesion_perdida", "offsides", "faltas_cometidas", "faltas_recibidas"],
+      fisicas: ["distancia_recorrida_km", "sprints", "duelos_aereos_ganados", "minutos_jugados", "partidos_jugados"],
       medicas: ["lesiones", "dias_baja"],
       disciplina: ["tarjetas_amarillas", "tarjetas_rojas", "sanciones_federativas"],
     },
@@ -314,7 +288,6 @@ const SPORT_META = {
       sanciones_federativas: "Sanciones Federativas",
     },
   },
-
   2: {
     nombre: "Vóleibol",
     grupos: {
@@ -353,17 +326,10 @@ const SPORT_META = {
       sanciones_federativas: "Sanciones Federativas",
     },
   },
-
   3: {
     nombre: "Tenis",
     grupos: {
-      servicio: [
-        "primer_servicio_pct",
-        "puntos_primer_servicio",
-        "puntos_segundo_servicio",
-        "aces",
-        "dobles_faltas",
-      ],
+      servicio: ["primer_servicio_pct", "puntos_primer_servicio", "puntos_segundo_servicio", "aces", "dobles_faltas"],
       quiebre: ["break_points_oportunidades", "break_points_convertidos"],
       juego: ["winners", "errores_no_forzados", "peloteos_cortos_ganados"],
       totales: ["puntos_ganados_total", "juegos_ganados_total"],
@@ -389,45 +355,20 @@ const SPORT_META = {
       sanciones_federativas: "Sanciones Federativas",
     },
   },
-
   4: SPORT_META_FALLBACK_BASE("Pádel"),
   5: SPORT_META_FALLBACK_BASE("Tenis de mesa"),
   6: SPORT_META_FALLBACK_BASE("Básquetbol"),
 };
 
-/* ✅ Auth helpers + headers */
-const isExpired2 = (decoded) => {
+/* ✅ Auth helpers */
+const isExpired = (decoded) => {
   const now = Math.floor(Date.now() / 1000);
   return !decoded?.exp || decoded.exp <= now;
 };
-const extractRol2 = (decoded) => {
+const extractRol = (decoded) => {
   const raw = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
   const n = Number(raw);
   return Number.isFinite(n) ? n : 0;
-};
-const getAcademiaIdFromStorage2 = () => {
-  try {
-    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
-    if (!raw) return null;
-
-    const direct = Number(raw);
-    if (Number.isFinite(direct) && direct > 0) return direct;
-
-    const parsed = JSON.parse(raw);
-    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
-    return Number.isFinite(id) && id > 0 ? id : null;
-  } catch {
-    return null;
-  }
-};
-const buildHeaders = (rol) => {
-  const token = getToken();
-  const h = token ? { Authorization: `Bearer ${token}` } : {};
-  if (rol === 3) {
-    const a = getAcademiaIdFromStorage2();
-    if (a) h["x-academia-id"] = String(a);
-  }
-  return h;
 };
 
 const getErrStatus = (e) => e?.status ?? e?.response?.status ?? 0;
@@ -448,12 +389,19 @@ const normalizeListResponse = (resOrArr) => {
 const normalizeCatalog = (arr) =>
   (Array.isArray(arr) ? arr : [])
     .map((x) => ({
-      id: Number(x?.id ?? x?.categoria_id ?? x?.posicion_id ?? x?.estado_id ?? x?.sucursal_id ?? x?.prevision_medica_id),
+      id: Number(
+        x?.id ??
+          x?.categoria_id ??
+          x?.posicion_id ??
+          x?.estado_id ??
+          x?.sucursal_id ??
+          x?.prevision_medica_id
+      ),
       nombre: String(x?.nombre ?? x?.descripcion ?? "").trim(),
     }))
     .filter((x) => Number.isFinite(x.id) && x.nombre);
 
-const tryGetList = async (paths, { signal, headers } = {}) => {
+const tryGetList = async (paths, { signal } = {}) => {
   const list = Array.isArray(paths) ? paths : [paths];
   const variants = [];
   for (const p0 of list) {
@@ -465,7 +413,7 @@ const tryGetList = async (paths, { signal, headers } = {}) => {
 
   for (const url of uniq) {
     try {
-      const r = await api.get(url, { signal, headers });
+      const r = await api.get(url, { signal });
       return normalizeListResponse(r);
     } catch (e) {
       const st = getErrStatus(e);
@@ -476,19 +424,55 @@ const tryGetList = async (paths, { signal, headers } = {}) => {
 };
 
 /* =======================
-   ✅ Resolver deporte_id
+   ✅ Resolver academia_id / deporte_id (NO inventa)
 ======================= */
-const resolveSportId = ({ decoded, snap, locStateScope }) => {
-  const fromSnap = Number(snap?.deporte_id ?? 0);
-  if (Number.isFinite(fromSnap) && fromSnap > 0) return fromSnap;
+const resolveScope = ({ decoded, snap, locStateScope }) => {
+  const s = locStateScope || {};
+  const scope = decoded?.scope || decoded?.tenant || decoded?.context || {};
 
-  const fromState = Number(locStateScope?.deporte_id ?? locStateScope?.sport_id ?? 0);
-  if (Number.isFinite(fromState) && fromState > 0) return fromState;
+  const academia_id =
+    Number(snap?.id ?? 0) ||
+    Number(s?.academia_id ?? s?.academy_id ?? 0) ||
+    Number(scope?.academia_id ?? scope?.academy_id ?? decoded?.academia_id ?? decoded?.academy_id ?? 0) ||
+    null;
 
-  const fromToken = Number(decoded?.deporte_id ?? decoded?.sport_id ?? decoded?.id_deporte ?? 0);
-  if (Number.isFinite(fromToken) && fromToken > 0) return fromToken;
+  const deporte_id =
+    Number(snap?.deporte_id ?? 0) ||
+    Number(s?.deporte_id ?? s?.sport_id ?? 0) ||
+    Number(scope?.deporte_id ?? scope?.sport_id ?? decoded?.deporte_id ?? decoded?.sport_id ?? decoded?.id_deporte ?? 0) ||
+    null;
 
-  return null;
+  return {
+    academia_id: Number.isFinite(academia_id) && academia_id > 0 ? academia_id : null,
+    deporte_id: Number.isFinite(deporte_id) && deporte_id > 0 ? deporte_id : null,
+  };
+};
+
+const buildAggPath = ({ academia_id, deporte_id }) => {
+  const qs = new URLSearchParams();
+  if (academia_id) qs.set("academia_id", String(Number(academia_id)));
+  if (deporte_id) qs.set("deporte_id", String(Number(deporte_id)));
+  const q = qs.toString();
+  return q ? `/estadisticas/aggregate?${q}` : "/estadisticas/aggregate";
+};
+
+/* ✅ Derivar deporte desde jugadores (ya pasan auth + x-academia-id) */
+const deriveDeporteFromPlayers = (arr) => {
+  const safe = Array.isArray(arr) ? arr : [];
+  const freq = new Map();
+  for (const j of safe) {
+    const d = Number(j?.deporte_id ?? j?.sport_id ?? j?.deporte?.id ?? 0);
+    if (Number.isFinite(d) && d > 0) freq.set(d, (freq.get(d) || 0) + 1);
+  }
+  let best = null;
+  let bestCount = 0;
+  for (const [k, v] of freq.entries()) {
+    if (v > bestCount) {
+      best = k;
+      bestCount = v;
+    }
+  }
+  return best;
 };
 
 export default function EstadisticasGlobales() {
@@ -518,14 +502,13 @@ export default function EstadisticasGlobales() {
     academia_nombre: null,
   });
 
+  const derivedOnceRef = useRef(false);
+
   useMobileAutoScrollTop();
 
   const deporteId = scope.deporte_id ? Number(scope.deporte_id) : null;
   const sportMeta = deporteId && SPORT_META[deporteId] ? SPORT_META[deporteId] : SPORT_META[1];
 
-  /* =======================
-     UI (clon SuperDashboard)
-  ======================= */
   const ui = useMemo(() => {
     const shell = darkMode
       ? "bg-[#111827] text-white"
@@ -535,30 +518,27 @@ export default function EstadisticasGlobales() {
 
     const msgBox =
       "mt-6 rounded-2xl border px-5 py-4 font-semibold " +
-      (darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
+      (darkMode
+        ? "border-red-200/20 bg-red-500/10 text-red-100"
+        : "border-red-200 bg-red-50 text-red-700");
 
     const warnBox =
       "rounded-2xl border px-5 py-4 font-semibold " +
-      (darkMode ? "border-amber-200/20 bg-amber-500/10 text-amber-100" : "border-amber-200 bg-amber-50 text-amber-800");
+      (darkMode
+        ? "border-amber-200/20 bg-amber-500/10 text-amber-100"
+        : "border-amber-200 bg-amber-50 text-amber-800");
 
     const card =
       "rounded-2xl shadow-2xl border p-6 " +
       (darkMode ? "bg-white/10 border-white/15" : "bg-white/60 border-ra-marron/15");
 
-    const badge =
-      "text-xs inline-flex items-center gap-2 rounded-full px-3 py-1 border " +
-      (darkMode ? "bg-white/10 border-white/10 text-white/80" : "bg-white/60 border-ra-marron/10 text-ra-marron/80");
-
     const divider = darkMode ? "border-white/10" : "border-ra-marron/10";
 
-    // colores charts legibles por tema
     const axisText = darkMode ? "rgba(255,255,255,0.82)" : "rgba(109,88,41,0.92)";
     const grid = darkMode ? "rgba(255,255,255,0.10)" : "rgba(109,88,41,0.10)";
     const legendText = darkMode ? "rgba(255,255,255,0.85)" : "rgba(109,88,41,0.85)";
-
     const pieLabel = darkMode ? "rgba(255,255,255,0.88)" : "rgba(109,88,41,0.92)";
 
-    // HtmlLegend theme
     const legendTheme = {
       textColor: darkMode ? "rgba(255,255,255,0.86)" : "rgba(109,88,41,0.90)",
       borderColor: darkMode ? "rgba(255,255,255,0.12)" : "rgba(109,88,41,0.15)",
@@ -566,10 +546,9 @@ export default function EstadisticasGlobales() {
       itemBgHover: darkMode ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.90)",
     };
 
-    return { shell, headerSub, msgBox, warnBox, card, badge, divider, axisText, grid, legendText, pieLabel, legendTheme };
+    return { shell, headerSub, msgBox, warnBox, card, divider, axisText, grid, legendText, pieLabel, legendTheme };
   }, [darkMode]);
 
-  /* ───────── Título ───────── */
   useEffect(() => {
     const prevTitle = document.title;
     const title = `Estadísticas Globales — ${sportMeta.nombre}`;
@@ -580,16 +559,16 @@ export default function EstadisticasGlobales() {
     };
   }, [sportMeta.nombre]);
 
-  /* ───────── Auth + Scope ───────── */
   useEffect(() => {
+    derivedOnceRef.current = false;
     try {
       const token = getToken();
       if (!token) throw new Error("no-token");
 
       const decoded = jwtDecode(token);
-      if (isExpired2(decoded)) throw new Error("expired");
+      if (isExpired(decoded)) throw new Error("expired");
 
-      const parsedRol = extractRol2(decoded);
+      const parsedRol = extractRol(decoded);
       if (![1, 2, 3].includes(parsedRol)) {
         navigate("/admin", { replace: true });
         return;
@@ -597,33 +576,34 @@ export default function EstadisticasGlobales() {
       setRol(parsedRol);
 
       const isSuperTree = isSuperTreePath(location.pathname);
+      const snap = readSelectedAcademia();
 
       if (isSuperTree) {
-        const snap = readSelectedAcademia();
         if (!snap?.id) {
           navigate("/super-dashboard", { replace: true });
           return;
         }
-
-        const dep = resolveSportId({ decoded, snap, locStateScope: location.state?.scope });
+        const resolved = resolveScope({ decoded, snap, locStateScope: location.state?.scope });
         setScope({
-          academia_id: snap.id,
-          deporte_id: dep,
-          academia_nombre: snap.nombre ?? null,
+          academia_id: resolved.academia_id ?? snap.id,
+          deporte_id: resolved.deporte_id,
+          academia_nombre: snap?.nombre ?? null,
         });
       } else {
-        const acad = Number(decoded?.academia_id ?? decoded?.academy_id ?? 0) || null;
-        const snap = readSelectedAcademia();
-        const dep = resolveSportId({ decoded, snap, locStateScope: location.state?.scope });
-        setScope({ academia_id: acad, deporte_id: dep, academia_nombre: null });
+        const resolved = resolveScope({ decoded, snap, locStateScope: location.state?.scope });
+        setScope({
+          academia_id: resolved.academia_id,
+          deporte_id: resolved.deporte_id,
+          academia_nombre: null,
+        });
       }
     } catch {
       clearToken();
       navigate("/login", { replace: true });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate, location.pathname, location.state]);
 
-  /* ───────── Data load ───────── */
   useEffect(() => {
     if (rol == null) return;
 
@@ -631,7 +611,6 @@ export default function EstadisticasGlobales() {
     if (isSuperTree && !scope.academia_id) return;
 
     const abort = new AbortController();
-    const headers = buildHeaders(rol);
 
     (async () => {
       setIsLoading(true);
@@ -639,7 +618,7 @@ export default function EstadisticasGlobales() {
 
       try {
         const acadId = scope.academia_id;
-        const depId = scope.deporte_id;
+        let depId = scope.deporte_id;
 
         const jugadoresTodosPaths =
           rol === 2
@@ -667,28 +646,33 @@ export default function EstadisticasGlobales() {
               ]
             : ["/jugadores?estado_id=1", "/jugadores?estado=1", "/jugadores"];
 
-        const aggPath =
-          depId && acadId
-            ? `/estadisticas/aggregate?deporte_id=${Number(depId)}&academia_id=${Number(acadId)}`
-            : depId
-              ? `/estadisticas/aggregate?deporte_id=${Number(depId)}`
-              : null;
+        // 1) Traemos jugadores primero (porque ya sabemos que esos endpoints pasan auth + x-academia-id)
+        const [rawTodos, rawActivos] = await Promise.all([
+          tryGetList(jugadoresTodosPaths, { signal: abort.signal }),
+          tryGetList(jugadoresActivosPaths, { signal: abort.signal }),
+        ]);
 
-        const [rawTodos, rawActivos, cats, poss, ests, sucs, prevs, aggRes] =
-          await Promise.all([
-            tryGetList(jugadoresTodosPaths, { signal: abort.signal, headers }),
-            tryGetList(jugadoresActivosPaths, { signal: abort.signal, headers }),
-            tryGetList(["/categorias"], { signal: abort.signal, headers }),
-            tryGetList(["/posiciones"], { signal: abort.signal, headers }),
-            tryGetList(["/estado", "/estados"], { signal: abort.signal, headers }),
-            tryGetList(["/sucursales-real", "/sucursales"], { signal: abort.signal, headers }),
-            tryGetList(["/prevision-medica"], { signal: abort.signal, headers }),
-            (async () => {
-              if (!aggPath) return null;
-              const r = await api.get(aggPath, { signal: abort.signal, headers });
-              return r?.data ?? null;
-            })(),
-          ]);
+        if (abort.signal.aborted) return;
+
+        // 2) Si falta deporte_id, lo derivamos desde jugadores (moda)
+        if (!depId) {
+          const d1 = deriveDeporteFromPlayers(rawActivos);
+          const d2 = d1 || deriveDeporteFromPlayers(rawTodos);
+          if (d2 && !derivedOnceRef.current) {
+            derivedOnceRef.current = true;
+            depId = d2;
+            setScope((prev) => ({ ...prev, deporte_id: d2 }));
+          }
+        }
+
+        // 3) Cargamos catálogos en paralelo (no dependen de deporte)
+        const [cats, poss, ests, sucs, prevs] = await Promise.all([
+          tryGetList(["/categorias"], { signal: abort.signal }),
+          tryGetList(["/posiciones"], { signal: abort.signal }),
+          tryGetList(["/estado", "/estados"], { signal: abort.signal }),
+          tryGetList(["/sucursales-real", "/sucursales"], { signal: abort.signal }),
+          tryGetList(["/prevision-medica"], { signal: abort.signal }),
+        ]);
 
         if (abort.signal.aborted) return;
 
@@ -716,24 +700,16 @@ export default function EstadisticasGlobales() {
             ...j,
             posicion:
               j?.posicion ??
-              (posMapLocal.has(Number(j?.posicion_id))
-                ? { nombre: posMapLocal.get(Number(j.posicion_id)) }
-                : null),
+              (posMapLocal.has(Number(j?.posicion_id)) ? { nombre: posMapLocal.get(Number(j.posicion_id)) } : null),
             categoria:
               j?.categoria ??
-              (catMapLocal.has(Number(j?.categoria_id))
-                ? { nombre: catMapLocal.get(Number(j.categoria_id)) }
-                : null),
+              (catMapLocal.has(Number(j?.categoria_id)) ? { nombre: catMapLocal.get(Number(j.categoria_id)) } : null),
             estado:
               j?.estado ??
-              (estMapLocal.has(Number(j?.estado_id))
-                ? { nombre: estMapLocal.get(Number(j.estado_id)) }
-                : null),
+              (estMapLocal.has(Number(j?.estado_id)) ? { nombre: estMapLocal.get(Number(j.estado_id)) } : null),
             sucursal:
               j?.sucursal ??
-              (sucMapLocal.has(Number(j?.sucursal_id))
-                ? { nombre: sucMapLocal.get(Number(j.sucursal_id)) }
-                : null),
+              (sucMapLocal.has(Number(j?.sucursal_id)) ? { nombre: sucMapLocal.get(Number(j.sucursal_id)) } : null),
             prevision_medica:
               j?.prevision_medica ??
               (prevMapLocal.has(Number(j?.prevision_medica_id))
@@ -745,7 +721,7 @@ export default function EstadisticasGlobales() {
         const applyScopeFilter = (arr) => {
           const safe = Array.isArray(arr) ? arr : [];
           const a = scope.academia_id;
-          const d = scope.deporte_id;
+          const d = depId || scope.deporte_id;
           if (!a && !d) return safe;
 
           return safe.filter((j) => {
@@ -760,25 +736,39 @@ export default function EstadisticasGlobales() {
         setJugadoresTodos(normalizeJugadores(applyScopeFilter(rawTodos)));
         setJugadoresActivos(normalizeJugadores(applyScopeFilter(rawActivos)));
 
-        if (aggRes?.ok && aggRes?.totals && typeof aggRes.totals === "object") {
-          setTotals(aggRes.totals);
-          setAggMeta(aggRes?.meta ?? null);
-
-          const miss = Number(aggRes?.meta?.rows_detail_missing ?? 0);
-          if (miss > 0) {
-            
-          } else {
-            setError("");
-          }
-        } else {
-          setTotals(null);
-          setAggMeta(null);
-          setError("");
-        }
-
+        // 4) Aggregate (solo si tenemos deporte_id O si tu backend acepta solo academia_id)
+        // Como tu backend te daba 400 si faltaba deporte_id, acá somos conservadores:
         if (!depId) {
           setTotals(null);
           setAggMeta(null);
+          setError((prev) => prev || "Falta deporte_id en el scope (no viene en token/selector ni en jugadores).");
+          return;
+        }
+
+        const aggPath = buildAggPath({ academia_id: acadId, deporte_id: depId });
+
+        try {
+          const r = await api.get(aggPath, { signal: abort.signal });
+          const aggRes = r?.data ?? null;
+
+          if (aggRes?.ok && aggRes?.totals && typeof aggRes.totals === "object") {
+            setTotals(aggRes.totals);
+            setAggMeta(aggRes?.meta ?? null);
+          } else {
+            setTotals(null);
+            setAggMeta(aggRes?.meta ?? null);
+          }
+        } catch (e) {
+          const st = getErrStatus(e);
+          if (st === 401 || st === 403) throw e;
+          setTotals(null);
+          setAggMeta(null);
+          const msg =
+            e?.response?.data?.message ||
+            e?.response?.data?.detail ||
+            e?.message ||
+            (st ? `Aggregate falló (${st})` : "Aggregate falló");
+          setError((prev) => prev || msg);
         }
       } catch (e) {
         if (abort.signal.aborted) return;
@@ -867,13 +857,7 @@ export default function EstadisticasGlobales() {
     return Object.fromEntries(entries.map(([nombre, campos]) => [nombre, sumGroup(campos)]));
   }, [totals, grupos]);
 
-  /* =======================
-     Charts: colores EVENT_COLORS
-  ======================= */
-  const pieColors = useMemo(
-    () => EVENT_COLORS.map((c) => hexToRgba(c, 0.75)),
-    []
-  );
+  const pieColors = useMemo(() => EVENT_COLORS.map((c) => hexToRgba(c, 0.75)), []);
 
   const generatePieData = (conteo) => {
     const labels = Object.keys(conteo || {});
@@ -886,7 +870,11 @@ export default function EstadisticasGlobales() {
         {
           data,
           backgroundColor: colors,
-          borderColor: ui?.divider ? (ui.divider.includes("white") ? "rgba(255,255,255,0.12)" : "rgba(109,88,41,0.14)") : "rgba(255,255,255,0.12)",
+          borderColor: ui?.divider
+            ? ui.divider.includes("white")
+              ? "rgba(255,255,255,0.12)"
+              : "rgba(109,88,41,0.14)"
+            : "rgba(255,255,255,0.12)",
           borderWidth: 1,
         },
       ],
@@ -936,7 +924,7 @@ export default function EstadisticasGlobales() {
   if (scope.deporte_id) scopeLabelParts.push(`Deporte: ${sportMeta.nombre}`);
   const scopeLabel = scopeLabelParts.join(" · ");
 
-  const hasAgg = !!scope.deporte_id && totals && Object.keys(sumasPorGrupo || {}).length > 0;
+  const hasAgg = totals && Object.keys(sumasPorGrupo || {}).length > 0;
 
   return (
     <div className={`${ui.shell} min-h-screen font-sans`}>
@@ -948,11 +936,6 @@ export default function EstadisticasGlobales() {
           <p className={`text-sm mt-2 ${ui.headerSub}`}>
             {scopeLabel || "Visualización filtrada por tu contexto (academia y deporte)."}
           </p>
-
-          {!!aggMeta?.rows_base && (
-            <div className="mt-3 flex justify-center">
-            </div>
-          )}
         </div>
       </header>
 
@@ -966,8 +949,9 @@ export default function EstadisticasGlobales() {
         {!scope.deporte_id && (
           <div className="mt-6 max-w-6xl mx-auto">
             <div className={ui.warnBox}>
-              Falta <b>deporte_id</b> en el scope de la academia seleccionada. <br />
-              Selecciona una academia con deporte asignado (o agrega <code>deporte_id</code> al token/selector).
+              Falta <b>deporte_id</b> en el scope. <br />
+              Nota: intentamos derivarlo desde jugadores (que sí pasan tu auth). Si tampoco viene ahí,
+              entonces sí o sí lo tienes que incluir en <code>token.scope</code> o en el selector.
             </div>
           </div>
         )}
@@ -1002,10 +986,7 @@ export default function EstadisticasGlobales() {
                         plugins: {
                           legend: { display: false },
                           htmlLegend: { containerID: legendId, ...ui.legendTheme },
-                          pieValueInside: {
-                            font: "12px sans-serif",
-                            color: ui.pieLabel,
-                          },
+                          pieValueInside: { font: "12px sans-serif", color: ui.pieLabel },
                           tooltip: { enabled: true },
                         },
                       }}
@@ -1036,15 +1017,8 @@ export default function EstadisticasGlobales() {
                         tooltip: { enabled: true },
                       },
                       scales: {
-                        x: {
-                          ticks: { color: ui.axisText },
-                          grid: { color: ui.grid },
-                        },
-                        y: {
-                          beginAtZero: true,
-                          ticks: { color: ui.axisText },
-                          grid: { color: ui.grid },
-                        },
+                        x: { ticks: { color: ui.axisText }, grid: { color: ui.grid } },
+                        y: { beginAtZero: true, ticks: { color: ui.axisText }, grid: { color: ui.grid } },
                       },
                     }}
                   />
@@ -1057,8 +1031,8 @@ export default function EstadisticasGlobales() {
             <div className={ui.card}>
               <p className={`text-center ${ui.headerSub}`}>
                 Aún no hay métricas agregadas para <b>{sportMeta.nombre}</b>.<br />
-                Si sabes que existen, revisa que <code>/estadisticas/aggregate</code> esté disponible
-                y que el <code>scope.deporte_id</code> esté seteado.
+                Si sabes que existen, revisa que <code>/estadisticas/aggregate</code> acepte{" "}
+                <code>deporte_id</code> y que este componente pueda derivarlo (token/selector/jugadores).
               </p>
             </div>
           </div>

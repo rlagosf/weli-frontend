@@ -66,11 +66,15 @@ function readSelectedAcademiaId() {
     const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
     if (!raw) return 0;
 
+    // compat: "1"
     const direct = Number(raw);
     if (Number.isFinite(direct) && direct > 0) return direct;
 
+    // compat: {"id":1,...}
     const parsed = JSON.parse(raw);
-    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
+    const id = Number(
+      parsed?.id ?? parsed?.academia_id ?? parsed?.academy_id ?? parsed?.academiaId ?? 0
+    );
     return Number.isFinite(id) && id > 0 ? id : 0;
   } catch {
     return 0;
@@ -79,7 +83,7 @@ function readSelectedAcademiaId() {
 
 /**
  * Decodifica payload JWT (base64url) robusto (UTF-8).
- * NO valida firma: solo para extraer claims livianos (rol_id).
+ * NO valida firma: solo para extraer claims livianos.
  */
 function decodeJwtPayload(token) {
   try {
@@ -103,9 +107,22 @@ function decodeJwtPayload(token) {
 function extractRolFromToken(token) {
   const p = decodeJwtPayload(token);
   const u = p?.user ?? p?.payload ?? p ?? {};
-  const raw = u?.rol_id ?? u?.role_id ?? u?.role ?? 0;
+  const raw = u?.rol_id ?? u?.role_id ?? u?.role ?? u?.rol ?? 0;
   const n = Number(raw);
   return Number.isFinite(n) ? n : 0;
+}
+
+function extractAcademiaIdFromToken(token) {
+  const p = decodeJwtPayload(token);
+  const u = p?.user ?? p?.payload ?? p ?? {};
+  const raw =
+    u?.academia_id ??
+    u?.academy_id ??
+    p?.academia_id ??
+    p?.academy_id ??
+    0;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
 /* -------------------- Path matcher (robusto) -------------------- */
@@ -164,7 +181,6 @@ function shouldSendAcademiaHeader(url = "") {
     "/tipo_pago",
     "/tipo-pago",
 
-    // ✅ el que te está fallando
     "/medio-pago",
     "/medios-pago",
 
@@ -231,20 +247,25 @@ apiPrivate.interceptors.request.use((config) => {
     delete plain.authorization;
   }
 
-  // Tenant header (solo rol 3 + rutas tenantizadas)
+  // ✅ Tenant header: rol 1/2/3 para rutas tenantizadas
   if (token && shouldSendAcademiaHeader(config?.url)) {
     const rol = extractRolFromToken(token);
 
+    let academiaId = 0;
+
     if (rol === 3) {
-      const academiaId = readSelectedAcademiaId();
-      if (academiaId > 0) {
-        plain[ACADEMIA_HEADER] = String(academiaId);
-      } else {
-        delete plain[ACADEMIA_HEADER];
-      }
-    } else {
-      delete plain[ACADEMIA_HEADER];
+      // superadmin: usa selector (academia target)
+      academiaId = readSelectedAcademiaId();
+    } else if (rol === 1 || rol === 2) {
+      // admin/staff: usa academia del token (fuente de verdad)
+      academiaId = extractAcademiaIdFromToken(token);
+
+      // compat: si por alguna razón el token no trae, intenta selector
+      if (!academiaId) academiaId = readSelectedAcademiaId();
     }
+
+    if (academiaId > 0) plain[ACADEMIA_HEADER] = String(academiaId);
+    else delete plain[ACADEMIA_HEADER];
 
     // Debug opt-in (request)
     if (API_DEBUG) {
@@ -278,7 +299,6 @@ apiPrivate.interceptors.request.use((config) => {
 apiPrivate.interceptors.response.use(
   (res) => res,
   (error) => {
-    // AbortController / axios cancel: no ensuciar logs
     const isCanceled =
       error?.code === "ERR_CANCELED" ||
       error?.name === "CanceledError" ||
@@ -289,7 +309,7 @@ apiPrivate.interceptors.response.use(
 
     // ✅ solo 401 “real” limpia token
     if (status === 401) {
-      const msg = String(data?.message || "").toLowerCase();
+      const msg = String(data?.message || data?.detail || "").toLowerCase();
       const shouldClear =
         msg.includes("token inválido") ||
         msg.includes("token invalido") ||
@@ -323,7 +343,6 @@ apiPrivate.interceptors.response.use(
       data,
       code: error?.code ?? null,
       isCanceled: !!isCanceled,
-      // útil para tu prettyError del componente
       requestHint: {
         hasAuth: !!error?.config?.headers?.Authorization,
         xAcademia: error?.config?.headers?.[ACADEMIA_HEADER] ?? null,
@@ -338,7 +357,6 @@ apiPrivate.interceptors.response.use(
         : {}),
     };
 
-    // ✅ Log “real” que tú pediste (cuando falla) + sin spam por cancel
     if (!isCanceled) {
       const m = (method || "GET").toUpperCase();
       const st = status || 0;
@@ -352,7 +370,6 @@ apiPrivate.interceptors.response.use(
         data: norm.data,
         hasAuth: norm.requestHint.hasAuth,
         xAcademia: norm.requestHint.xAcademia,
-        // Señales típicas
         isNetworkError:
           st === 0 ||
           String(norm.message || "").toLowerCase().includes("network error") ||
@@ -366,3 +383,12 @@ apiPrivate.interceptors.response.use(
 
 export default api;
 export { decodeJwtPayload };
+
+/* -------------------- DEV helpers (para consola sin import) -------------------- */
+if (import.meta.env.DEV) {
+  // te evita el “Cannot use import statement outside a module”
+  window.WELI = window.WELI || {};
+  window.WELI.decodeJwtPayload = decodeJwtPayload;
+  window.WELI.getToken = getToken;
+  window.WELI.API_BASE_URL = API_BASE_URL;
+}
