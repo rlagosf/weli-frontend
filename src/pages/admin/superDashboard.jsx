@@ -1,7 +1,12 @@
 // src/pages/admin/superDashboard.jsx
+
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
+import api, {
+  getToken,
+  clearToken,
+  ACADEMIA_STORAGE_KEY,
+} from "../../services/api";
 import { useTheme } from "../../context/ThemeContext";
 import { LogOut, Plus, Building2, Sun, Moon } from "lucide-react";
 import { jwtDecode } from "jwt-decode";
@@ -10,9 +15,11 @@ import { jwtDecode } from "jwt-decode";
 const academiasPath = "/academias";
 const deportesPath = "/deportes";
 
+const MAX_SUCURSALES = 50;
+
 function pickAcademias(payload) {
   if (!payload) return [];
-  if (Array.isArray(payload?.items)) return payload.items; // ✅ estándar catálogos: { ok, count, items }
+  if (Array.isArray(payload?.items)) return payload.items;
   if (Array.isArray(payload?.data)) return payload.data;
   if (Array.isArray(payload?.academias)) return payload.academias;
   if (Array.isArray(payload?.rows)) return payload.rows;
@@ -22,7 +29,7 @@ function pickAcademias(payload) {
 
 function pickDeportes(payload) {
   if (!payload) return [];
-  if (Array.isArray(payload?.items)) return payload.items; // ✅ estándar
+  if (Array.isArray(payload?.items)) return payload.items;
   if (Array.isArray(payload?.data)) return payload.data;
   if (Array.isArray(payload?.deportes)) return payload.deportes;
   if (Array.isArray(payload?.rows)) return payload.rows;
@@ -31,40 +38,102 @@ function pickDeportes(payload) {
 }
 
 /* ───────────── Auth helpers (backend rules) ───────────── */
+
 const isExpired = (decoded) => {
   const now = Math.floor(Date.now() / 1000);
   return !decoded?.exp || decoded.exp <= now;
 };
 
 const extractRol = (decoded) => {
-  const raw = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
+  const raw =
+    decoded?.rol_id ??
+    decoded?.role_id ??
+    decoded?.role ??
+    decoded?.rol;
+
   const n = Number(raw);
+
   return Number.isFinite(n) ? n : 0;
 };
 
 const buildAuthHeaders = () => {
   const token = getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+
+  return token
+    ? {
+        Authorization: `Bearer ${token}`,
+      }
+    : {};
 };
 
 /* ───────────── Modal ───────────── */
-const Modal = ({ open, onClose, title, subtitle, darkMode, children }) => {
+
+const Modal = ({
+  open,
+  onClose,
+  title,
+  subtitle,
+  darkMode,
+  children,
+}) => {
+  useEffect(() => {
+    if (!open) return;
+
+    // Bloquear scroll del contenido posterior.
+    const previousOverflow = document.body.style.overflow;
+
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} aria-hidden="true" />
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      {/*
+        Fondo completamente bloqueado.
+
+        IMPORTANTE:
+        No contiene onClick, por lo que presionarlo no cierra el modal
+        y tampoco permite interactuar con el Dashboard posterior.
+      */}
+      <div
+        className="absolute inset-0 bg-black/60"
+        aria-hidden="true"
+      />
+
       <div
         className={[
-          "relative w-full max-w-xl rounded-2xl shadow-2xl border p-6",
-          darkMode ? "bg-ra-marron/95 border-white/10 text-white" : "bg-ra-cream border-ra-marron/15 text-ra-marron",
+          "relative z-10 w-full max-w-xl rounded-2xl shadow-2xl border p-6",
+          "max-h-[90vh] overflow-y-auto",
+          darkMode
+            ? "bg-ra-marron/95 border-white/10 text-white"
+            : "bg-ra-cream border-ra-marron/15 text-ra-marron",
         ].join(" ")}
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-extrabold tracking-tightish">{title}</h2>
+            <h2 className="text-2xl font-extrabold tracking-tightish">
+              {title}
+            </h2>
+
             {subtitle ? (
-              <p className={darkMode ? "text-white/70 text-sm mt-1" : "text-ra-marron/70 text-sm mt-1"}>{subtitle}</p>
+              <p
+                className={
+                  darkMode
+                    ? "text-white/70 text-sm mt-1"
+                    : "text-ra-marron/70 text-sm mt-1"
+                }
+              >
+                {subtitle}
+              </p>
             ) : null}
           </div>
 
@@ -89,8 +158,11 @@ const Modal = ({ open, onClose, title, subtitle, darkMode, children }) => {
   );
 };
 
+/* ───────────────────────────────────────────────────────── */
+
 export default function SuperDashboard() {
   const navigate = useNavigate();
+
   const { darkMode, toggleTheme } = useTheme();
 
   const [academias, setAcademias] = useState([]);
@@ -104,27 +176,52 @@ export default function SuperDashboard() {
   const [openCreate, setOpenCreate] = useState(false);
   const [creating, setCreating] = useState(false);
 
-  const [form, setForm] = useState({ nombre: "", deporte_id: "", estado_id: "1" });
+  /* ───────── Formulario nueva academia ───────── */
+
+  const [form, setForm] = useState({
+    nombre: "",
+    deporte_id: "",
+    estado_id: "1",
+
+    // La academia siempre parte con al menos una sucursal.
+    sucursales: [""],
+  });
 
   /* ───────── Guard: solo rol 3 + token válido ───────── */
+
   useEffect(() => {
     try {
       const token = getToken();
-      if (!token) throw new Error("no-token");
+
+      if (!token) {
+        throw new Error("no-token");
+      }
 
       const decoded = jwtDecode(token);
-      if (isExpired(decoded)) throw new Error("expired");
+
+      if (isExpired(decoded)) {
+        throw new Error("expired");
+      }
 
       const rol = extractRol(decoded);
+
       if (rol !== 3) {
-        navigate("/admin", { replace: true });
+        navigate("/admin", {
+          replace: true,
+        });
+
         return;
       }
     } catch {
       clearToken();
-      navigate("/login", { replace: true });
+
+      navigate("/login", {
+        replace: true,
+      });
     }
   }, [navigate]);
+
+  /* ───────── Cargar academias ───────── */
 
   const loadAcademias = useCallback(async (signal) => {
     setLoading(true);
@@ -133,32 +230,56 @@ export default function SuperDashboard() {
     try {
       const res = await api.get(academiasPath, {
         signal,
-        headers: { ...buildAuthHeaders(), "Cache-Control": "no-cache" },
+
+        headers: {
+          ...buildAuthHeaders(),
+          "Cache-Control": "no-cache",
+        },
       });
-      setAcademias(pickAcademias(res?.data ?? {}));
+
+      setAcademias(
+        pickAcademias(res?.data ?? {})
+      );
     } catch (err) {
       if (signal?.aborted) return;
 
-      const status = err?.status ?? err?.response?.status ?? 0;
+      const status =
+        err?.status ??
+        err?.response?.status ??
+        0;
+
       const message =
         err?.data?.message ||
         err?.response?.data?.message ||
         err?.message ||
         "Error cargando academias";
 
-      if (status === 401) setMsg("No autorizado (token ausente/expirado).");
-      else if (status === 403) setMsg("Acceso denegado: requiere rol superadmin.");
-      else if (status === 404) setMsg("Endpoint no encontrado.");
-      else setMsg(String(message));
+      if (status === 401) {
+        setMsg(
+          "No autorizado (token ausente/expirado)."
+        );
+      } else if (status === 403) {
+        setMsg(
+          "Acceso denegado: requiere rol superadmin."
+        );
+      } else if (status === 404) {
+        setMsg("Endpoint no encontrado.");
+      } else {
+        setMsg(String(message));
+      }
 
-      // si backend ya cortó sesión → limpiar
+      // Si backend ya cortó sesión → limpiar.
       if (status === 401 || status === 403) {
         clearToken();
       }
     } finally {
-      if (!signal?.aborted) setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   }, []);
+
+  /* ───────── Cargar deportes ───────── */
 
   const loadDeportes = useCallback(async (signal) => {
     setDeportesReady(false);
@@ -166,18 +287,40 @@ export default function SuperDashboard() {
     try {
       const res = await api.get(deportesPath, {
         signal,
-        headers: { ...buildAuthHeaders(), "Cache-Control": "no-cache" },
+
+        headers: {
+          ...buildAuthHeaders(),
+          "Cache-Control": "no-cache",
+        },
       });
 
-      const raw = pickDeportes(res?.data ?? {});
+      const raw = pickDeportes(
+        res?.data ?? {}
+      );
+
       const normalized = (raw || [])
         .map((d) => ({
-          id: Number(d?.id ?? d?.deporte_id ?? 0),
-          nombre: String(d?.nombre ?? d?.name ?? "").trim(),
+          id: Number(
+            d?.id ??
+              d?.deporte_id ??
+              0
+          ),
+
+          nombre: String(
+            d?.nombre ??
+              d?.name ??
+              ""
+          ).trim(),
         }))
-        .filter((d) => Number.isFinite(d.id) && d.id > 0 && d.nombre.length > 0);
+        .filter(
+          (d) =>
+            Number.isFinite(d.id) &&
+            d.id > 0 &&
+            d.nombre.length > 0
+        );
 
       setDeportes(normalized);
+
       setDeportesReady(true);
     } catch {
       setDeportes([]);
@@ -185,113 +328,431 @@ export default function SuperDashboard() {
     }
   }, []);
 
+  /* ───────── Carga inicial ───────── */
+
   useEffect(() => {
     const ctrl = new AbortController();
+
     loadAcademias(ctrl.signal);
+
     loadDeportes(ctrl.signal);
+
     return () => ctrl.abort();
-  }, [loadAcademias, loadDeportes]);
+  }, [
+    loadAcademias,
+    loadDeportes,
+  ]);
+
+  /* ───────── Filtrado ───────── */
 
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return academias;
+    const needle = q
+      .trim()
+      .toLowerCase();
+
+    if (!needle) {
+      return academias;
+    }
 
     return academias.filter((a) => {
-      const name = String(a?.nombre ?? "").toLowerCase();
-      const sportName = String(a?.deporte_nombre ?? "").toLowerCase();
-      const estadoName = String(a?.estado_nombre ?? "").toLowerCase();
-      return name.includes(needle) || sportName.includes(needle) || estadoName.includes(needle);
+      const name = String(
+        a?.nombre ?? ""
+      ).toLowerCase();
+
+      const sportName = String(
+        a?.deporte_nombre ?? ""
+      ).toLowerCase();
+
+      const estadoName = String(
+        a?.estado_nombre ?? ""
+      ).toLowerCase();
+
+      return (
+        name.includes(needle) ||
+        sportName.includes(needle) ||
+        estadoName.includes(needle)
+      );
     });
-  }, [academias, q]);
+  }, [
+    academias,
+    q,
+  ]);
+
+  /* ───────── Entrar academia ───────── */
 
   const enterAcademia = (a) => {
-    const id = Number(a?.id ?? 0);
-    if (!Number.isFinite(id) || id <= 0) return;
+    const id = Number(
+      a?.id ?? 0
+    );
+
+    if (
+      !Number.isFinite(id) ||
+      id <= 0
+    ) {
+      return;
+    }
 
     const snapshot = {
       id,
-      nombre: a?.nombre ?? null,
-      deporte_id: a?.deporte_id ?? null,
-      deporte_nombre: a?.deporte_nombre ?? null,
-      estado_id: a?.estado_id ?? null,
-      estado_nombre: a?.estado_nombre ?? null,
+
+      nombre:
+        a?.nombre ?? null,
+
+      deporte_id:
+        a?.deporte_id ?? null,
+
+      deporte_nombre:
+        a?.deporte_nombre ?? null,
+
+      estado_id:
+        a?.estado_id ?? null,
+
+      estado_nombre:
+        a?.estado_nombre ?? null,
+
       ts: Date.now(),
     };
 
     try {
-      // ✅ key unificada (misma que usan los módulos scoping)
-      localStorage.setItem(ACADEMIA_STORAGE_KEY, JSON.stringify(snapshot));
+      // Key unificada para los módulos scoping.
+      localStorage.setItem(
+        ACADEMIA_STORAGE_KEY,
+        JSON.stringify(snapshot)
+      );
 
-      // ✅ evento para módulos que escuchan selector super
-      window.dispatchEvent(new Event("weli:selectedAcademiaChanged"));
+      // Evento para módulos que escuchan selector super.
+      window.dispatchEvent(
+        new Event(
+          "weli:selectedAcademiaChanged"
+        )
+      );
     } catch {}
 
-    // salto real
-    window.location.assign("/super-dashboard/admin/dashboard");
+    // Salto real.
+    window.location.assign(
+      "/super-dashboard/admin/dashboard"
+    );
   };
 
-  const handleCerrarSesion = useCallback(async () => {
-    const headers = buildAuthHeaders();
+  /* ───────── Cerrar sesión ───────── */
 
-    try {
-      await api.post("/auth/logout", null, { headers });
-    } catch {
-      // idempotente
-    } finally {
-      clearToken();
+  const handleCerrarSesion =
+    useCallback(async () => {
+      const headers =
+        buildAuthHeaders();
+
       try {
-        localStorage.removeItem(ACADEMIA_STORAGE_KEY);
-      } catch {}
-      window.location.replace("/");
-    }
-  }, []);
+        await api.post(
+          "/auth/logout",
+          null,
+          {
+            headers,
+          }
+        );
+      } catch {
+        // idempotente
+      } finally {
+        clearToken();
+
+        try {
+          localStorage.removeItem(
+            ACADEMIA_STORAGE_KEY
+          );
+        } catch {}
+
+        window.location.replace("/");
+      }
+    }, []);
+
+  /* ========================================================
+     MODAL NUEVA ACADEMIA
+  ======================================================== */
 
   const openCreateModal = () => {
     setMsg("");
-    setForm({ nombre: "", deporte_id: "", estado_id: "1" });
+
+    setForm({
+      nombre: "",
+      deporte_id: "",
+      estado_id: "1",
+      sucursales: [""],
+    });
+
     setOpenCreate(true);
   };
 
+  const closeCreateModal = () => {
+    if (creating) {
+      return;
+    }
+
+    setOpenCreate(false);
+
+    setMsg("");
+  };
+
+  /* ───────── Agregar sucursal ───────── */
+
+  const addSucursal = () => {
+    setForm((current) => {
+      if (
+        current.sucursales.length >=
+        MAX_SUCURSALES
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+
+        sucursales: [
+          ...current.sucursales,
+          "",
+        ],
+      };
+    });
+  };
+
+  /* ───────── Actualizar sucursal ───────── */
+
+  const updateSucursal = (
+    index,
+    value
+  ) => {
+    setForm((current) => ({
+      ...current,
+
+      sucursales:
+        current.sucursales.map(
+          (sucursal, i) =>
+            i === index
+              ? value
+              : sucursal
+        ),
+    }));
+  };
+
+  /* ───────── Eliminar sucursal ───────── */
+
+  const removeSucursal = (index) => {
+    setForm((current) => {
+      // Siempre debe permanecer
+      // al menos una sucursal.
+      if (
+        current.sucursales.length <= 1
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+
+        sucursales:
+          current.sucursales.filter(
+            (_, i) => i !== index
+          ),
+      };
+    });
+  };
+
+  /* ========================================================
+     CREAR ACADEMIA
+  ======================================================== */
+
   const submitCreate = async (e) => {
     e.preventDefault();
+
     setMsg("");
 
-    const nombre = String(form.nombre || "").trim();
-    const deporte_id = Number(form.deporte_id);
-    const estado_id = Number(form.estado_id);
+    const nombre = String(
+      form.nombre || ""
+    ).trim();
 
-    if (nombre.length < 2) return setMsg("El nombre debe tener al menos 2 caracteres.");
-    if (!Number.isFinite(deporte_id) || deporte_id <= 0) return setMsg("Debes seleccionar un deporte válido.");
-    if (!Number.isFinite(estado_id) || estado_id <= 0) return setMsg("Debes indicar un estado válido.");
+    const deporte_id = Number(
+      form.deporte_id
+    );
+
+    const estado_id = Number(
+      form.estado_id
+    );
+
+    const sucursales =
+      form.sucursales.map(
+        (sucursal) =>
+          String(
+            sucursal || ""
+          ).trim()
+      );
+
+    /* ───────── Validaciones generales ───────── */
+
+    if (nombre.length < 2) {
+      return setMsg(
+        "El nombre debe tener al menos 2 caracteres."
+      );
+    }
+
+    if (
+      !Number.isFinite(deporte_id) ||
+      deporte_id <= 0
+    ) {
+      return setMsg(
+        "Debes seleccionar un deporte válido."
+      );
+    }
+
+    if (
+      !Number.isFinite(estado_id) ||
+      estado_id <= 0
+    ) {
+      return setMsg(
+        "Debes indicar un estado válido."
+      );
+    }
+
+    /* ───────── Validaciones sucursales ───────── */
+
+    if (sucursales.length === 0) {
+      return setMsg(
+        "Debes registrar al menos una sucursal."
+      );
+    }
+
+    if (
+      sucursales.length >
+      MAX_SUCURSALES
+    ) {
+      return setMsg(
+        `No puedes registrar más de ${MAX_SUCURSALES} sucursales.`
+      );
+    }
+
+    if (
+      sucursales.some(
+        (sucursal) =>
+          sucursal.length < 2
+      )
+    ) {
+      return setMsg(
+        "Todas las sucursales deben tener un nombre de al menos 2 caracteres."
+      );
+    }
+
+    if (
+      sucursales.some(
+        (sucursal) =>
+          sucursal.length > 100
+      )
+    ) {
+      return setMsg(
+        "El nombre de una sucursal no puede superar los 100 caracteres."
+      );
+    }
+
+    /* ───────── Evitar duplicados ───────── */
+
+    const sucursalesNormalizadas =
+      sucursales.map(
+        (sucursal) =>
+          sucursal.toLocaleLowerCase(
+            "es"
+          )
+      );
+
+    if (
+      new Set(
+        sucursalesNormalizadas
+      ).size !==
+      sucursalesNormalizadas.length
+    ) {
+      return setMsg(
+        "No puedes registrar sucursales duplicadas."
+      );
+    }
+
+    /* ───────── Enviar al backend ───────── */
 
     setCreating(true);
+
     try {
       await api.post(
         academiasPath,
-        { nombre, deporte_id, estado_id },
-        { headers: buildAuthHeaders() }
+        {
+          nombre,
+          deporte_id,
+          estado_id,
+
+          // Array completo de sucursales.
+          sucursales,
+        },
+        {
+          headers:
+            buildAuthHeaders(),
+        }
       );
 
       setOpenCreate(false);
 
-      const ctrl = new AbortController();
-      await loadAcademias(ctrl.signal);
+      setForm({
+        nombre: "",
+        deporte_id: "",
+        estado_id: "1",
+        sucursales: [""],
+      });
+
+      const ctrl =
+        new AbortController();
+
+      await loadAcademias(
+        ctrl.signal
+      );
     } catch (err) {
-      const status = err?.status ?? err?.response?.status ?? 0;
+      const status =
+        err?.status ??
+        err?.response?.status ??
+        0;
+
       const message =
         err?.data?.message ||
-        err?.response?.data?.message ||
+        err?.response?.data
+          ?.message ||
         err?.message ||
         "Error creando academia";
 
-      if (status === 409) setMsg("Ya existe una academia con ese nombre.");
-      else if (status === 401) setMsg("No autorizado. Inicia sesión nuevamente.");
-      else if (status === 403) setMsg("Acceso denegado: requiere rol superadmin.");
-      else setMsg(String(message));
+      if (status === 409) {
+        setMsg(
+          String(message)
+        );
+      } else if (
+        status === 401
+      ) {
+        setMsg(
+          "No autorizado. Inicia sesión nuevamente."
+        );
+      } else if (
+        status === 403
+      ) {
+        setMsg(
+          "Acceso denegado: requiere rol superadmin."
+        );
+      } else {
+        setMsg(
+          String(message)
+        );
+      }
 
-      if (status === 401 || status === 403) {
+      if (
+        status === 401 ||
+        status === 403
+      ) {
         clearToken();
-        navigate("/login", { replace: true });
+
+        navigate(
+          "/login",
+          {
+            replace: true,
+          }
+        );
       }
     } finally {
       setCreating(false);
@@ -299,12 +760,18 @@ export default function SuperDashboard() {
   };
 
   /* ───────────── Theme classes (WELI) ───────────── */
+
   const shell = darkMode
     ? "bg-[#111827] text-white"
     : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
 
-  const headerSub = darkMode ? "text-white/70" : "text-ra-marron/70";
-  const buttonIcon = darkMode ? "hover:bg-white/10" : "hover:bg-white/30";
+  const headerSub = darkMode
+    ? "text-white/70"
+    : "text-ra-marron/70";
+
+  const buttonIcon = darkMode
+    ? "hover:bg-white/10"
+    : "hover:bg-white/30";
 
   const searchInput = darkMode
     ? "bg-white/10 border-white/15 text-white placeholder-white/40 focus:border-white/30"
@@ -329,182 +796,659 @@ export default function SuperDashboard() {
     ? "bg-white/10 border-white/15 text-white placeholder-white/40 focus:border-white/30"
     : "bg-white border-ra-marron/15 text-ra-marron placeholder-ra-marron/40 focus:border-ra-terracotta";
 
+  /* ========================================================
+     RENDER
+  ======================================================== */
+
   return (
-    <div className={`${shell} min-h-screen font-sans`}>
+    <div
+      className={`${shell} min-h-screen font-sans`}
+    >
+      {/* ───────── Header ───────── */}
+
       <header className="flex items-center justify-between px-6 pt-6">
         <div>
-          <h1 className="text-4xl font-extrabold tracking-tightish">Panel de Academias</h1>
-          <p className={`text-sm mt-1 ${headerSub}`}>Selecciona una academia para entrar a su panel.</p>
+          <h1 className="text-4xl font-extrabold tracking-tightish">
+            Panel de Academias
+          </h1>
+
+          <p
+            className={`text-sm mt-1 ${headerSub}`}
+          >
+            Selecciona una academia
+            para entrar a su panel.
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <button title="Cambiar tema" onClick={toggleTheme} className={`p-2 rounded-xl transition ${buttonIcon}`}>
-            {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+          <button
+            title="Cambiar tema"
+            onClick={toggleTheme}
+            className={`p-2 rounded-xl transition ${buttonIcon}`}
+          >
+            {darkMode ? (
+              <Sun size={20} />
+            ) : (
+              <Moon size={20} />
+            )}
           </button>
 
-          <button title="Crear academia" onClick={openCreateModal} className={`p-2 rounded-xl transition ${buttonIcon}`}>
+          <button
+            title="Crear academia"
+            onClick={openCreateModal}
+            className={`p-2 rounded-xl transition ${buttonIcon}`}
+          >
             <Plus size={20} />
           </button>
 
-          <button title="Cerrar sesión" onClick={handleCerrarSesion} className={`p-2 rounded-xl transition ${buttonIcon}`}>
+          <button
+            title="Cerrar sesión"
+            onClick={
+              handleCerrarSesion
+            }
+            className={`p-2 rounded-xl transition ${buttonIcon}`}
+          >
             <LogOut size={20} />
           </button>
         </div>
       </header>
 
+      {/* ───────── Contenido ───────── */}
+
       <main className="px-6 pb-20">
         <div className="mt-6">
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) =>
+              setQ(
+                e.target.value
+              )
+            }
             placeholder="Buscar por nombre, deporte o estado…"
             className={`w-full md:w-[560px] rounded-2xl px-5 py-3 border outline-none transition ${searchInput}`}
           />
         </div>
 
-        {loading && <div className={`mt-10 ${darkMode ? "text-white/70" : "text-ra-marron/70"}`}>Cargando academias…</div>}
-
-        {!loading && msg && <div className={`mt-8 rounded-2xl border px-5 py-4 font-semibold ${msgBox}`}>{msg}</div>}
-
-        {!loading && !msg && (
-          <>
-            <div className="mt-8 grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {filtered.map((a) => {
-                const id = Number(a?.id ?? 0);
-                const nombre = a?.nombre ?? `Academia #${id}`;
-                const deporteNombre = a?.deporte_nombre ?? "—";
-                const estadoNombre = a?.estado_nombre ?? "—";
-
-                return (
-                  <button
-                    key={String(id)}
-                    type="button"
-                    onClick={() => enterAcademia(a)}
-                    className={`${card} rounded-2xl p-6 shadow-lg transition transform flex flex-col items-center justify-center gap-3 h-44 hover:-translate-y-1 text-center`}
-                  >
-                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-ra-terracotta/90 border border-white/10">
-                      <Building2 className="w-8 h-8 text-white" />
-                    </div>
-
-                    <div className={`font-extrabold text-lg leading-tight ${darkMode ? "text-white" : "text-ra-marron"}`}>
-                      {nombre}
-                    </div>
-
-                    <div className={`text-xs inline-flex items-center gap-2 rounded-full px-3 py-1 border ${badge}`}>
-                      <span>{deporteNombre}</span>
-                      <span className={darkMode ? "text-white/40" : "text-ra-marron/40"}>•</span>
-                      <span>{estadoNombre}</span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {filtered.length === 0 && (
-              <div className={`mt-10 ${darkMode ? "text-white/70" : "text-ra-marron/70"}`}>
-                No hay academias que coincidan con tu búsqueda.
-              </div>
-            )}
-          </>
+        {loading && (
+          <div
+            className={`mt-10 ${
+              darkMode
+                ? "text-white/70"
+                : "text-ra-marron/70"
+            }`}
+          >
+            Cargando academias…
+          </div>
         )}
+
+        {!loading &&
+          msg &&
+          !openCreate && (
+            <div
+              className={`mt-8 rounded-2xl border px-5 py-4 font-semibold ${msgBox}`}
+            >
+              {msg}
+            </div>
+          )}
+
+        {!loading &&
+          !msg && (
+            <>
+              <div className="mt-8 grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                {filtered.map(
+                  (a) => {
+                    const id =
+                      Number(
+                        a?.id ??
+                          0
+                      );
+
+                    const nombre =
+                      a?.nombre ??
+                      `Academia #${id}`;
+
+                    const deporteNombre =
+                      a?.deporte_nombre ??
+                      "—";
+
+                    const estadoNombre =
+                      a?.estado_nombre ??
+                      "—";
+
+                    return (
+                      <button
+                        key={String(
+                          id
+                        )}
+                        type="button"
+                        onClick={() =>
+                          enterAcademia(
+                            a
+                          )
+                        }
+                        className={`${card} rounded-2xl p-6 shadow-lg transition transform flex flex-col items-center justify-center gap-3 h-44 hover:-translate-y-1 text-center`}
+                      >
+                        <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-ra-terracotta/90 border border-white/10">
+                          <Building2 className="w-8 h-8 text-white" />
+                        </div>
+
+                        <div
+                          className={`font-extrabold text-lg leading-tight ${
+                            darkMode
+                              ? "text-white"
+                              : "text-ra-marron"
+                          }`}
+                        >
+                          {
+                            nombre
+                          }
+                        </div>
+
+                        <div
+                          className={`text-xs inline-flex items-center gap-2 rounded-full px-3 py-1 border ${badge}`}
+                        >
+                          <span>
+                            {
+                              deporteNombre
+                            }
+                          </span>
+
+                          <span
+                            className={
+                              darkMode
+                                ? "text-white/40"
+                                : "text-ra-marron/40"
+                            }
+                          >
+                            •
+                          </span>
+
+                          <span>
+                            {
+                              estadoNombre
+                            }
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  }
+                )}
+              </div>
+
+              {filtered.length ===
+                0 && (
+                <div
+                  className={`mt-10 ${
+                    darkMode
+                      ? "text-white/70"
+                      : "text-ra-marron/70"
+                  }`}
+                >
+                  No hay academias
+                  que coincidan con
+                  tu búsqueda.
+                </div>
+              )}
+            </>
+          )}
       </main>
+
+      {/* =====================================================
+          MODAL CREAR ACADEMIA
+      ===================================================== */}
 
       <Modal
         open={openCreate}
-        onClose={() => (!creating ? setOpenCreate(false) : null)}
+        onClose={
+          closeCreateModal
+        }
         title="Nueva academia"
-        subtitle="Crea una nueva academia y defínela con su deporte y estado."
+        subtitle="Crea una nueva academia, define su deporte y registra sus sucursales."
         darkMode={darkMode}
       >
-        <form onSubmit={submitCreate} className="space-y-4">
+        <form
+          onSubmit={
+            submitCreate
+          }
+          className="space-y-4"
+        >
+          {/* ───────── Nombre ───────── */}
+
           <div>
-            <label className={`text-sm font-bold ${darkMode ? "text-white/80" : "text-ra-marron/80"}`}>Nombre</label>
+            <label
+              className={`text-sm font-bold ${
+                darkMode
+                  ? "text-white/80"
+                  : "text-ra-marron/80"
+              }`}
+            >
+              Nombre
+            </label>
+
             <input
-              value={form.nombre}
-              onChange={(e) => setForm((s) => ({ ...s, nombre: e.target.value }))}
+              value={
+                form.nombre
+              }
+              onChange={(e) =>
+                setForm(
+                  (s) => ({
+                    ...s,
+                    nombre:
+                      e.target
+                        .value,
+                  })
+                )
+              }
               className={`mt-2 w-full rounded-xl px-4 py-3 border outline-none transition ${modalInput}`}
               placeholder="Ej: Academia WELI"
               maxLength={120}
-              disabled={creating}
+              disabled={
+                creating
+              }
             />
           </div>
 
+          {/* ───────── Deporte / Estado ───────── */}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className={`text-sm font-bold ${darkMode ? "text-white/80" : "text-ra-marron/80"}`}>Deporte</label>
+              <label
+                className={`text-sm font-bold ${
+                  darkMode
+                    ? "text-white/80"
+                    : "text-ra-marron/80"
+                }`}
+              >
+                Deporte
+              </label>
 
               <select
-                value={form.deporte_id}
-                onChange={(e) => setForm((s) => ({ ...s, deporte_id: e.target.value }))}
-                className={selectDark}
-                disabled={creating || !deportesReady}
+                value={
+                  form.deporte_id
+                }
+                onChange={(e) =>
+                  setForm(
+                    (s) => ({
+                      ...s,
+
+                      deporte_id:
+                        e.target
+                          .value,
+                    })
+                  )
+                }
+                className={
+                  selectDark
+                }
+                disabled={
+                  creating ||
+                  !deportesReady
+                }
               >
                 {!deportesReady && (
-                  <option value="" disabled>
-                    Cargando deportes…
+                  <option
+                    value=""
+                    disabled
+                  >
+                    Cargando
+                    deportes…
                   </option>
                 )}
 
-                {deportesReady && deportes.length === 0 && (
-                  <option value="" disabled>
-                    No hay deportes (crea registros en tabla deportes)
-                  </option>
-                )}
-
-                {deportesReady && deportes.length > 0 && (
-                  <>
-                    <option value="" disabled>
-                      Selecciona…
+                {deportesReady &&
+                  deportes.length ===
+                    0 && (
+                    <option
+                      value=""
+                      disabled
+                    >
+                      No hay
+                      deportes
+                      (crea
+                      registros
+                      en tabla
+                      deportes)
                     </option>
+                  )}
 
-                    {deportes
-                      .slice()
-                      .sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), "es", { sensitivity: "base" }))
-                      .map((d) => (
-                        <option key={String(d.id)} value={String(d.id)}>
-                          {d.nombre}
-                        </option>
-                      ))}
-                  </>
-                )}
+                {deportesReady &&
+                  deportes.length >
+                    0 && (
+                    <>
+                      <option
+                        value=""
+                        disabled
+                      >
+                        Selecciona…
+                      </option>
+
+                      {deportes
+                        .slice()
+                        .sort(
+                          (
+                            a,
+                            b
+                          ) =>
+                            String(
+                              a.nombre
+                            ).localeCompare(
+                              String(
+                                b.nombre
+                              ),
+                              "es",
+                              {
+                                sensitivity:
+                                  "base",
+                              }
+                            )
+                        )
+                        .map(
+                          (d) => (
+                            <option
+                              key={String(
+                                d.id
+                              )}
+                              value={String(
+                                d.id
+                              )}
+                            >
+                              {
+                                d.nombre
+                              }
+                            </option>
+                          )
+                        )}
+                    </>
+                  )}
               </select>
             </div>
 
             <div>
-              <label className={`text-sm font-bold ${darkMode ? "text-white/80" : "text-ra-marron/80"}`}>Estado</label>
+              <label
+                className={`text-sm font-bold ${
+                  darkMode
+                    ? "text-white/80"
+                    : "text-ra-marron/80"
+                }`}
+              >
+                Estado
+              </label>
 
               <select
-                value={form.estado_id}
-                onChange={(e) => setForm((s) => ({ ...s, estado_id: e.target.value }))}
-                className={selectDark}
-                disabled={creating}
+                value={
+                  form.estado_id
+                }
+                onChange={(e) =>
+                  setForm(
+                    (s) => ({
+                      ...s,
+
+                      estado_id:
+                        e.target
+                          .value,
+                    })
+                  )
+                }
+                className={
+                  selectDark
+                }
+                disabled={
+                  creating
+                }
               >
-                <option value="1">Activado</option>
-                <option value="2">Desactivado</option>
+                <option value="1">
+                  Activado
+                </option>
+
+                <option value="2">
+                  Desactivado
+                </option>
               </select>
             </div>
           </div>
+
+          {/* =================================================
+              SUCURSALES
+          ================================================= */}
+
+          <div className="pt-2">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <label
+                  className={`text-sm font-bold ${
+                    darkMode
+                      ? "text-white/80"
+                      : "text-ra-marron/80"
+                  }`}
+                >
+                  Sucursales
+                </label>
+
+                <p
+                  className={`text-xs mt-1 ${
+                    darkMode
+                      ? "text-white/50"
+                      : "text-ra-marron/50"
+                  }`}
+                >
+                  Registra las
+                  sucursales que
+                  tendrá esta
+                  academia.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  addSucursal
+                }
+                disabled={
+                  creating ||
+                  form
+                    .sucursales
+                    .length >=
+                    MAX_SUCURSALES
+                }
+                className={[
+                  "inline-flex items-center gap-2 rounded-xl px-3 py-2",
+                  "border text-sm font-bold transition",
+                  "disabled:opacity-50 disabled:cursor-not-allowed",
+
+                  darkMode
+                    ? "bg-white/10 border-white/15 hover:bg-white/15 text-white"
+                    : "bg-white/60 border-ra-marron/15 hover:bg-white text-ra-marron",
+                ].join(
+                  " "
+                )}
+                title={
+                  form
+                    .sucursales
+                    .length >=
+                  MAX_SUCURSALES
+                    ? `Máximo ${MAX_SUCURSALES} sucursales`
+                    : "Agregar sucursal"
+                }
+              >
+                <Plus
+                  size={16}
+                />
+
+                Agregar
+              </button>
+            </div>
+
+            {/* Cantidad registrada */}
+
+            <div
+              className={`mt-2 text-xs ${
+                darkMode
+                  ? "text-white/40"
+                  : "text-ra-marron/50"
+              }`}
+            >
+              {
+                form
+                  .sucursales
+                  .length
+              }{" "}
+              de{" "}
+              {
+                MAX_SUCURSALES
+              }{" "}
+              sucursales
+            </div>
+
+            {/* Campos dinámicos */}
+
+            <div className="mt-4 space-y-3">
+              {form.sucursales.map(
+                (
+                  sucursal,
+                  index
+                ) => (
+                  <div
+                    key={
+                      index
+                    }
+                    className="flex items-center gap-3"
+                  >
+                    <div className="flex-1">
+                      <label
+                        className={`text-xs font-semibold ${
+                          darkMode
+                            ? "text-white/60"
+                            : "text-ra-marron/60"
+                        }`}
+                      >
+                        Sucursal{" "}
+                        {index +
+                          1}
+                      </label>
+
+                      <input
+                        value={
+                          sucursal
+                        }
+                        onChange={(
+                          e
+                        ) =>
+                          updateSucursal(
+                            index,
+                            e
+                              .target
+                              .value
+                          )
+                        }
+                        className={`mt-1 w-full rounded-xl px-4 py-3 border outline-none transition ${modalInput}`}
+                        placeholder={`Ej: Sucursal ${
+                          index +
+                          1
+                        }`}
+                        maxLength={
+                          100
+                        }
+                        disabled={
+                          creating
+                        }
+                      />
+                    </div>
+
+                    {form
+                      .sucursales
+                      .length >
+                      1 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          removeSucursal(
+                            index
+                          )
+                        }
+                        disabled={
+                          creating
+                        }
+                        className={[
+                          "shrink-0 mt-5 rounded-xl px-3 py-3 border",
+                          "font-bold transition",
+
+                          darkMode
+                            ? "bg-red-500/10 border-red-300/20 text-red-200 hover:bg-red-500/20"
+                            : "bg-red-50 border-red-200 text-red-700 hover:bg-red-100",
+                        ].join(
+                          " "
+                        )}
+                        title={`Eliminar sucursal ${
+                          index +
+                          1
+                        }`}
+                        aria-label={`Eliminar sucursal ${
+                          index +
+                          1
+                        }`}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+
+          {/* ───────── Mensajes del formulario ───────── */}
+
+          {msg && (
+            <div
+              className={`rounded-xl border px-4 py-3 text-sm font-semibold ${msgBox}`}
+            >
+              {msg}
+            </div>
+          )}
+
+          {/* ───────── Botones ───────── */}
 
           <div className="flex items-center justify-end gap-3 pt-2">
             <button
               type="button"
-              onClick={() => setOpenCreate(false)}
+              onClick={
+                closeCreateModal
+              }
               className={[
                 "rounded-xl px-5 py-3 border font-bold transition",
-                darkMode ? "bg-white/10 border-white/15 hover:bg-white/15 text-white" : "bg-white/60 border-ra-marron/15 hover:bg-white/80 text-ra-marron",
-              ].join(" ")}
-              disabled={creating}
+
+                darkMode
+                  ? "bg-white/10 border-white/15 hover:bg-white/15 text-white"
+                  : "bg-white/60 border-ra-marron/15 hover:bg-white/80 text-ra-marron",
+              ].join(
+                " "
+              )}
+              disabled={
+                creating
+              }
             >
               Cancelar
             </button>
 
             <button
               type="submit"
-              className="rounded-xl px-6 py-3 font-extrabold text-white bg-ra-terracotta hover:opacity-90 active:scale-[0.98] transition"
-              disabled={creating || !deportesReady || !form.deporte_id}
-              title={!deportesReady ? "Cargando deportes…" : !form.deporte_id ? "Selecciona un deporte" : ""}
+              className="rounded-xl px-6 py-3 font-extrabold text-white bg-ra-terracotta hover:opacity-90 active:scale-[0.98] transition disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={
+                creating ||
+                !deportesReady ||
+                !form.deporte_id
+              }
+              title={
+                !deportesReady
+                  ? "Cargando deportes…"
+                  : !form.deporte_id
+                    ? "Selecciona un deporte"
+                    : ""
+              }
             >
-              {creating ? "Creando…" : "Crear"}
+              {creating
+                ? "Creando…"
+                : "Crear"}
             </button>
           </div>
         </form>
