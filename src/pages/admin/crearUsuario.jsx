@@ -233,7 +233,7 @@ export default function CrearUsuario() {
       try {
         const listaRaw = await tryGetList(["/roles", "/rol"], { signal: abort.signal });
 
-        const lista = (Array.isArray(listaRaw) ? listaRaw : [])
+        const listaNormalizada = (Array.isArray(listaRaw) ? listaRaw : [])
           .map((r) => {
             const id = r?.id ?? r?.rol_id ?? r?.role_id ?? r?.ID ?? null;
             const nombre =
@@ -242,15 +242,45 @@ export default function CrearUsuario() {
               r?.name ??
               r?.desc ??
               (id != null ? String(id) : "");
-            return { id: Number(id), nombre: String(nombre).trim() };
+
+            return {
+              id: Number(id),
+              nombre: String(nombre).trim(),
+            };
           })
-          .filter((r) => Number.isFinite(r.id) && r.id > 0 && r.nombre.length > 0);
+          .filter(
+            (r) =>
+              Number.isFinite(r.id) &&
+              r.id > 0 &&
+              r.nombre.length > 0
+          );
+
+        // Seguridad de UI:
+        // - rol 1 (admin) NO puede ver/seleccionar rol 3 (superadmin).
+        // - rol 3 (superadmin) sí puede crear cualquier rol permitido por backend.
+        const lista =
+          g.rol === 3
+            ? listaNormalizada
+            : listaNormalizada.filter((r) => r.id !== 3);
 
         setRoles(lista);
 
-        setFormData((prev) =>
-          !prev.rol_id && lista.length === 1 ? { ...prev, rol_id: String(lista[0].id) } : prev
-        );
+        // Si por cualquier motivo quedó seleccionado un rol que el usuario
+        // actual no puede asignar, lo limpiamos.
+        setFormData((prev) => {
+          const rolSeleccionado = Number(prev.rol_id);
+          const permitido = lista.some((r) => r.id === rolSeleccionado);
+
+          if (prev.rol_id && !permitido) {
+            return { ...prev, rol_id: "" };
+          }
+
+          if (!prev.rol_id && lista.length === 1) {
+            return { ...prev, rol_id: String(lista[0].id) };
+          }
+
+          return prev;
+        });
       } catch (err) {
         if (abort.signal.aborted) return;
 
@@ -305,10 +335,24 @@ export default function CrearUsuario() {
       const rut = String(formData.rut_usuario || "");
       const rolId = Number(formData.rol_id);
 
-      if (!isValidRut(rut)) return setError("El RUT debe ser de 7 u 8 dígitos (sin DV).");
-      if (!roles.find((r) => r.id === rolId)) return setError("Rol seleccionado inválido.");
-      if (!isStrongPassword(formData.password))
+      if (!isValidRut(rut)) {
+        return setError("El RUT debe ser de 7 u 8 dígitos (sin DV).");
+      }
+
+      // Regla crítica:
+      // SOLO un superadmin (rol 3) puede crear otro superadmin.
+      // Esta validación protege incluso si alguien manipula el DOM/estado del frontend.
+      if (rolId === 3 && g.rol !== 3) {
+        return setError("No tienes permisos para crear usuarios superadmin.");
+      }
+
+      if (!roles.find((r) => r.id === rolId)) {
+        return setError("Rol seleccionado inválido.");
+      }
+
+      if (!isStrongPassword(formData.password)) {
         return setError("La contraseña debe tener al menos 6 caracteres.");
+      }
 
       // ✅ academia target SIEMPRE se evalúa en el submit (no congelado)
       const academiaId = getAcademiaIdFromStorage();

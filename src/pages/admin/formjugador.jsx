@@ -276,6 +276,11 @@ export default function FormJugador() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Búsqueda de identidad canónica del apoderado por RUT.
+  const [buscandoApoderado, setBuscandoApoderado] = useState(false);
+  const [apoderadoEncontrado, setApoderadoEncontrado] = useState(false);
+  const [apoderadoLookupMsg, setApoderadoLookupMsg] = useState("");
+
   // Modal creado.
   const [createdOpen, setCreatedOpen] = useState(false);
   const [createdInfo, setCreatedInfo] = useState({
@@ -527,6 +532,24 @@ export default function FormJugador() {
 
     if (name === "rut_jugador" || name === "rut_apoderado") {
       value = onlyInt(value).slice(0, 8);
+
+      if (name === "rut_apoderado") {
+        // Si cambia el RUT, invalida cualquier identidad previamente encontrada.
+        setApoderadoEncontrado(false);
+        setApoderadoLookupMsg("");
+
+        setFormData((prev) => ({
+          ...prev,
+          rut_apoderado: value,
+
+          // Solo limpiamos el nombre si venía autocompletado desde backend.
+          nombre_apoderado: apoderadoEncontrado
+            ? ""
+            : prev.nombre_apoderado,
+        }));
+
+        return;
+      }
     }
 
     if (name === "edad") value = onlyInt(value).slice(0, 3);
@@ -555,6 +578,114 @@ export default function FormJugador() {
       [name]: value,
     }));
   };
+
+  /* ───────── Buscar apoderado existente por RUT ───────── */
+  useEffect(() => {
+    if (paso !== 2) return;
+
+    const rut = String(formData.rut_apoderado || "").replace(/\D/g, "");
+
+    // El sistema de apoderados_auth trabaja con 8 dígitos sin DV.
+    if (rut.length !== 8) {
+      setBuscandoApoderado(false);
+      setApoderadoEncontrado(false);
+      setApoderadoLookupMsg("");
+      return;
+    }
+
+    const ctrl = new AbortController();
+
+    const timer = setTimeout(async () => {
+      setBuscandoApoderado(true);
+      setApoderadoLookupMsg("");
+
+      try {
+        const headers = buildHeaders(rolActual);
+
+        const res = await api.get(
+          `/jugadores/apoderado/rut/${rut}`,
+          {
+            signal: ctrl.signal,
+            headers,
+          }
+        );
+
+        const body = res?.data ?? {};
+        const item = body?.item ?? body?.data ?? body;
+
+        const nombre = String(item?.nombre_apoderado ?? "").trim();
+
+        if (!nombre) {
+          setApoderadoEncontrado(false);
+          setApoderadoLookupMsg("Apoderado nuevo: ingresa su nombre completo.");
+          return;
+        }
+
+        setFormData((prev) => ({
+          ...prev,
+          nombre_apoderado: nombre,
+        }));
+
+        setApoderadoEncontrado(true);
+        setApoderadoLookupMsg("✓ Apoderado encontrado. Nombre autocompletado.");
+      } catch (err) {
+        if (ctrl.signal.aborted) return;
+
+        const status =
+          err?.status ??
+          err?.response?.status ??
+          0;
+
+        if (status === 404) {
+          setApoderadoEncontrado(false);
+          setFormData((prev) => ({
+            ...prev,
+            nombre_apoderado: "",
+          }));
+          setApoderadoLookupMsg("Apoderado nuevo: ingresa su nombre completo.");
+          return;
+        }
+
+        if (status === 401) {
+          clearToken();
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        if (status === 403) {
+          if (rolActual === 3) {
+            setError(
+              "⚠️ Superadmin: falta x-academia-id o academia no autorizada."
+            );
+            return;
+          }
+
+          clearToken();
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        setApoderadoEncontrado(false);
+        setApoderadoLookupMsg(
+          "No fue posible verificar el RUT del apoderado."
+        );
+      } finally {
+        if (!ctrl.signal.aborted) {
+          setBuscandoApoderado(false);
+        }
+      }
+    }, 350);
+
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [
+    paso,
+    formData.rut_apoderado,
+    rolActual,
+    navigate,
+  ]);
 
   const toggleSucursal = (id) => {
     const sid = String(id);
@@ -837,6 +968,9 @@ export default function FormJugador() {
         sucursal_ids: [],
       });
 
+      setApoderadoEncontrado(false);
+      setApoderadoLookupMsg("");
+      setBuscandoApoderado(false);
       setPaso(1);
     } catch (err) {
       const st = err?.status ?? err?.response?.status ?? 0;
@@ -1496,14 +1630,36 @@ export default function FormJugador() {
                       name="rut_apoderado"
                       value={formData.rut_apoderado}
                       onChange={handleChange}
-                      placeholder="Sin puntos, guion ni DV"
+                      placeholder="8 dígitos, sin puntos, guion ni DV"
                       className={ui.input}
                       inputMode="numeric"
+                      maxLength={8}
                       required
                     />
-                    <p className={`${ui.helper} mt-1`}>
-                      Este dato debe ser la clave para detectar un apoderado ya registrado.
-                    </p>
+
+                    <div className="mt-1.5 min-h-[18px]">
+                      {buscandoApoderado ? (
+                        <p className={ui.helper}>
+                          Buscando apoderado…
+                        </p>
+                      ) : apoderadoLookupMsg ? (
+                        <p
+                          className={
+                            apoderadoEncontrado
+                              ? darkMode
+                                ? "text-xs text-emerald-200"
+                                : "text-xs text-emerald-700"
+                              : ui.helper
+                          }
+                        >
+                          {apoderadoLookupMsg}
+                        </p>
+                      ) : (
+                        <p className={ui.helper}>
+                          Al completar el RUT, WELI verificará si el apoderado ya existe.
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -1512,10 +1668,37 @@ export default function FormJugador() {
                       name="nombre_apoderado"
                       value={formData.nombre_apoderado}
                       onChange={handleChange}
-                      placeholder="Nombre completo del apoderado"
-                      className={ui.input}
+                      placeholder={
+                        buscandoApoderado
+                          ? "Buscando apoderado…"
+                          : apoderadoEncontrado
+                            ? "Nombre registrado"
+                            : "Nombre completo del apoderado"
+                      }
+                      className={[
+                        ui.input,
+                        apoderadoEncontrado
+                          ? darkMode
+                            ? "opacity-80 cursor-not-allowed"
+                            : "bg-emerald-50/70 cursor-not-allowed"
+                          : "",
+                      ].join(" ")}
+                      readOnly={apoderadoEncontrado}
+                      disabled={buscandoApoderado}
                       required
                     />
+
+                    {apoderadoEncontrado && (
+                      <p
+                        className={
+                          darkMode
+                            ? "text-xs text-emerald-200 mt-1.5"
+                            : "text-xs text-emerald-700 mt-1.5"
+                        }
+                      >
+                        Este nombre proviene del registro maestro de apoderados.
+                      </p>
+                    )}
                   </div>
 
                   <div className="md:col-span-2">
@@ -1534,12 +1717,13 @@ export default function FormJugador() {
                   className={[
                     "mt-5 rounded-xl border px-4 py-3 text-xs sm:text-sm",
                     darkMode
-                      ? "border-amber-300/15 bg-amber-500/[0.07] text-amber-100/90"
-                      : "border-amber-700/15 bg-amber-500/[0.08] text-amber-900",
+                      ? "border-white/10 bg-white/[0.04] text-white/70"
+                      : "border-ra-marron/10 bg-white/45 text-ra-marron/70",
                   ].join(" ")}
                 >
-                  La comprobación automática de un apoderado existente por RUT debe ser respaldada por el backend.
-                  Este formulario no consulta ni expone registros mediante una ruta inventada.
+                  Si el RUT ya está registrado, WELI reutiliza automáticamente el nombre
+                  canónico del apoderado. Si es un RUT nuevo, podrás ingresar su nombre
+                  y quedará asociado a esa identidad al crear el jugador.
                 </div>
               </section>
 

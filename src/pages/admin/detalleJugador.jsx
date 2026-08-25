@@ -67,8 +67,9 @@ const unwrapOne = (raw) => {
     Object.keys(raw).length > 0 &&
     !("ok" in raw) &&
     !("items" in raw)
-  )
+  ) {
     return raw;
+  }
 
   return null;
 };
@@ -98,7 +99,7 @@ const buildFotoDataUrl = (j) => {
 };
 
 /* ─────────────────────────────
-   Stats helpers (joined base + sport)
+   Estadísticas multi-deporte
 ───────────────────────────── */
 const safeNum = (v, def = 0) => {
   const n = Number(v);
@@ -124,8 +125,269 @@ const flattenJoinedStats = (payload) => {
   return out;
 };
 
+const BASE_STATS = {
+  "Base / Generales": [
+    "minutos_jugados",
+    "partidos_jugados",
+    "lesiones",
+    "dias_baja",
+    "sanciones_federativas",
+  ],
+};
+
+const SPORT_STATS = {
+  1: {
+    nombre: "Fútbol",
+    grupos: {
+      Ofensivas: [
+        "goles",
+        "asistencias",
+        "tiros_libres",
+        "penales",
+        "tiros_arco",
+        "tiros_fuera",
+        "tiros_bloqueados",
+        "regates_exitosos",
+        "centros_acertados",
+        "pases_clave",
+      ],
+      Defensivas: [
+        "intercepciones",
+        "despejes",
+        "duelos_ganados",
+        "entradas_exitosas",
+        "bloqueos",
+        "recuperaciones",
+      ],
+      Técnicas: [
+        "pases_completados",
+        "pases_errados",
+        "posesion_perdida",
+        "offsides",
+        "faltas_cometidas",
+        "faltas_recibidas",
+      ],
+      Físicas: [
+        "distancia_recorrida_km",
+        "sprints",
+        "duelos_aereos_ganados",
+      ],
+      Disciplina: [
+        "tarjetas_amarillas",
+        "tarjetas_rojas",
+        "torneos_convocados",
+        "titular_partidos",
+      ],
+    },
+  },
+  2: {
+    nombre: "Vóleibol",
+    grupos: {
+      Ataque: ["ataque_intentos", "ataque_puntos", "ataque_errores"],
+      Saque: ["saques_total", "saques_aces", "saques_positivos", "saques_errores"],
+      Bloqueo: ["bloqueos_punto", "bloqueos_toques"],
+      Recepción: ["recepciones_total", "recepcion_positiva", "recepcion_perfecta"],
+      Defensa: ["defensas_recuperadas"],
+      Armado: ["armados_total", "armados_precision"],
+      Eficiencia: ["sideout_pct", "breakpoints_pct", "errores_totales"],
+    },
+  },
+  3: {
+    nombre: "Tenis",
+    grupos: {
+      Servicio: [
+        "primer_servicio_pct",
+        "puntos_primer_servicio",
+        "puntos_segundo_servicio",
+        "aces",
+        "dobles_faltas",
+      ],
+      "Break Points": ["break_points_oportunidades", "break_points_convertidos"],
+      Juego: ["winners", "errores_no_forzados", "peloteos_cortos_ganados"],
+      Totales: ["puntos_ganados_total", "juegos_ganados_total"],
+    },
+  },
+  4: {
+    nombre: "Pádel",
+    grupos: {
+      Servicio: ["primer_saque_pct", "puntos_primer_saque", "puntos_segundo_saque"],
+      "Puntos de Oro": [
+        "puntos_oro_jugados",
+        "puntos_oro_ganados",
+        "puntos_oro_ganados_con_saque",
+      ],
+      Precisión: ["errores_no_forzados", "errores_forzados", "winners"],
+      Posicionamiento: ["tiempo_red_pct", "tiempo_fondo_pct", "puntos_red_ganados"],
+      Voleas: ["voleas_total", "voleas_ganadoras", "voleas_errores"],
+      Remates: ["remates_total", "remates_ganadores", "remates_errores"],
+    },
+  },
+  5: {
+    nombre: "Tenis de mesa",
+    grupos: {
+      "Servicio / Devolución": [
+        "efectividad_servicio_pct",
+        "efectividad_devolucion_pct",
+        "primer_saque_pct",
+      ],
+      Juego: ["errores_no_forzados", "winners"],
+      Presión: ["puntos_presion_jugados", "puntos_presion_ganados"],
+      Dobles: ["dobles_puntos_jugados", "dobles_puntos_ganados"],
+      Fisiología: ["fc_media", "fc_max", "lactato"],
+    },
+  },
+  6: {
+    nombre: "Básquetbol",
+    grupos: {
+      Producción: ["puntos", "asistencias", "plus_minus", "pir", "per"],
+      Rebotes: ["rebotes_ofensivos", "rebotes_defensivos"],
+      Defensa: ["robos", "bloqueos"],
+      Control: ["perdidas", "faltas"],
+      Eficiencia: ["ts_pct", "efg_pct", "usg_pct"],
+    },
+  },
+};
+
+const FIELD_LABELS = {
+  minutos_jugados: "Minutos Jugados",
+  partidos_jugados: "Partidos Jugados",
+  lesiones: "Lesiones",
+  dias_baja: "Días de Baja",
+  sanciones_federativas: "Sanciones Federativas",
+
+  goles: "Goles",
+  asistencias: "Asistencias",
+  tiros_libres: "Tiros Libres",
+  penales: "Penales",
+  tiros_arco: "Tiros al Arco",
+  tiros_fuera: "Tiros Fuera",
+  tiros_bloqueados: "Tiros Bloqueados",
+  regates_exitosos: "Regates Exitosos",
+  centros_acertados: "Centros Acertados",
+  pases_clave: "Pases Clave",
+  intercepciones: "Intercepciones",
+  despejes: "Despejes",
+  duelos_ganados: "Duelos Ganados",
+  entradas_exitosas: "Entradas Exitosas",
+  bloqueos: "Bloqueos",
+  recuperaciones: "Recuperaciones",
+  pases_completados: "Pases Completados",
+  pases_errados: "Pases Errados",
+  posesion_perdida: "Posesión Perdida",
+  offsides: "Offsides",
+  faltas_cometidas: "Faltas Cometidas",
+  faltas_recibidas: "Faltas Recibidas",
+  distancia_recorrida_km: "Distancia Recorrida (km)",
+  sprints: "Sprints",
+  duelos_aereos_ganados: "Duelos Aéreos Ganados",
+  tarjetas_amarillas: "Tarjetas Amarillas",
+  tarjetas_rojas: "Tarjetas Rojas",
+  torneos_convocados: "Torneos Convocados",
+  titular_partidos: "Partidos como Titular",
+
+  ataque_intentos: "Intentos de Ataque",
+  ataque_puntos: "Puntos de Ataque",
+  ataque_errores: "Errores de Ataque",
+  saques_total: "Saques Totales",
+  saques_aces: "Aces de Saque",
+  saques_positivos: "Saques Positivos",
+  saques_errores: "Errores de Saque",
+  bloqueos_punto: "Bloqueos Punto",
+  bloqueos_toques: "Toques de Bloqueo",
+  recepciones_total: "Recepciones Totales",
+  recepcion_positiva: "Recepción Positiva",
+  recepcion_perfecta: "Recepción Perfecta",
+  defensas_recuperadas: "Defensas Recuperadas",
+  armados_total: "Armados Totales",
+  armados_precision: "Precisión de Armado",
+  sideout_pct: "Sideout (%)",
+  breakpoints_pct: "Breakpoints (%)",
+  errores_totales: "Errores Totales",
+
+  primer_servicio_pct: "Primer Servicio (%)",
+  puntos_primer_servicio: "Puntos Primer Servicio",
+  puntos_segundo_servicio: "Puntos Segundo Servicio",
+  aces: "Aces",
+  dobles_faltas: "Dobles Faltas",
+  break_points_oportunidades: "Break Points - Oportunidades",
+  break_points_convertidos: "Break Points - Convertidos",
+  winners: "Winners",
+  errores_no_forzados: "Errores No Forzados",
+  peloteos_cortos_ganados: "Peloteos Cortos Ganados",
+  puntos_ganados_total: "Puntos Ganados",
+  juegos_ganados_total: "Juegos Ganados",
+
+  primer_saque_pct: "Primer Saque (%)",
+  puntos_primer_saque: "Puntos Primer Saque",
+  puntos_segundo_saque: "Puntos Segundo Saque",
+  puntos_oro_jugados: "Puntos de Oro Jugados",
+  puntos_oro_ganados: "Puntos de Oro Ganados",
+  puntos_oro_ganados_con_saque: "Puntos de Oro Ganados con Saque",
+  errores_forzados: "Errores Forzados",
+  tiempo_red_pct: "Tiempo en Red (%)",
+  tiempo_fondo_pct: "Tiempo en Fondo (%)",
+  puntos_red_ganados: "Puntos Ganados en Red",
+  voleas_total: "Voleas Totales",
+  voleas_ganadoras: "Voleas Ganadoras",
+  voleas_errores: "Errores de Volea",
+  remates_total: "Remates Totales",
+  remates_ganadores: "Remates Ganadores",
+  remates_errores: "Errores de Remate",
+
+  efectividad_servicio_pct: "Efectividad de Servicio (%)",
+  efectividad_devolucion_pct: "Efectividad de Devolución (%)",
+  puntos_presion_jugados: "Puntos de Presión Jugados",
+  puntos_presion_ganados: "Puntos de Presión Ganados",
+  dobles_puntos_jugados: "Puntos de Dobles Jugados",
+  dobles_puntos_ganados: "Puntos de Dobles Ganados",
+  fc_media: "Frecuencia Cardíaca Media",
+  fc_max: "Frecuencia Cardíaca Máxima",
+  lactato: "Lactato",
+
+  puntos: "Puntos",
+  rebotes_ofensivos: "Rebotes Ofensivos",
+  rebotes_defensivos: "Rebotes Defensivos",
+  robos: "Robos",
+  perdidas: "Pérdidas",
+  faltas: "Faltas",
+  ts_pct: "True Shooting (%)",
+  efg_pct: "eFG (%)",
+  usg_pct: "Usage (%)",
+  plus_minus: "+/-",
+  pir: "PIR",
+  per: "PER",
+};
+
+const getSportConfig = (deporteId) =>
+  SPORT_STATS[Number(deporteId)] || {
+    nombre: "Deporte no configurado",
+    grupos: {},
+  };
+
+const buildStatSections = (estadisticas, deporteId) => {
+  if (!estadisticas || typeof estadisticas !== "object") return {};
+
+  const sport = getSportConfig(deporteId);
+  const groups = {
+    ...BASE_STATS,
+    ...sport.grupos,
+  };
+
+  const out = {};
+
+  Object.entries(groups).forEach(([groupName, fields]) => {
+    out[groupName] = {};
+
+    fields.forEach((field) => {
+      out[groupName][FIELD_LABELS[field] || field] = safeNum(estadisticas?.[field], 0);
+    });
+  });
+
+  return out;
+};
+
 /* ─────────────────────────────
-   Auth / Scope (Conjunto X)
+   Auth / Scope
 ───────────────────────────── */
 const isExpired = (decoded) => {
   const now = Math.floor(Date.now() / 1000);
@@ -154,9 +416,6 @@ const getAcademiaIdFromStorage = () => {
   }
 };
 
-/**
- * ✅ headers fallback (solo si tu api no inyecta por interceptor)
- */
 const buildHeadersFallback = (rol) => {
   const token = getToken?.() || "";
   const h = token ? { Authorization: `Bearer ${token}` } : {};
@@ -250,7 +509,6 @@ export default function DetalleJugador() {
     };
   }, []);
 
-  // ✅ RUT: state -> params
   const rut = useMemo(() => {
     const fromState = location.state?.rut;
     const fromParams = params?.rut;
@@ -258,7 +516,6 @@ export default function DetalleJugador() {
     return r != null ? String(r).trim() : "";
   }, [location.state, params]);
 
-  // ✅ Parent path (no hardcode)
   const parentPath = useMemo(() => {
     if (location.state?.from) return String(location.state.from);
     return String(location.pathname || "")
@@ -272,10 +529,6 @@ export default function DetalleJugador() {
   );
   const basePath = superTree ? "/super-dashboard/admin/dashboard" : "/admin";
 
-  /* =======================
-     UI estilo SuperDashboard.jsx
-     - nada de "cuadritos" para campos
-  ======================= */
   const ui = useMemo(() => {
     const shell = darkMode
       ? "bg-[#111827] text-white"
@@ -292,15 +545,24 @@ export default function DetalleJugador() {
       "rounded-2xl border shadow-md " +
       (darkMode ? "bg-white/8 border-white/15" : "bg-white/55 border-ra-marron/15");
 
-    // filas limpias (sin caja)
+    const baseStatsCard =
+      "rounded-2xl border shadow-md " +
+      (darkMode
+        ? "bg-amber-500/[0.07] border-amber-300/15"
+        : "bg-amber-50/70 border-amber-700/15");
+
     const row =
       "py-3 flex items-start justify-between gap-4 border-b last:border-b-0 " +
       (darkMode ? "border-white/10" : "border-ra-marron/15");
 
-    const rowLabel = darkMode ? "text-white/75 text-sm font-semibold" : "text-ra-marron/70 text-sm font-semibold";
-    const rowValue = darkMode ? "text-white text-sm font-bold text-right" : "text-ra-marron text-sm font-bold text-right";
+    const rowLabel = darkMode
+      ? "text-white/75 text-sm font-semibold"
+      : "text-ra-marron/70 text-sm font-semibold";
 
-    // inputs overlay edición
+    const rowValue = darkMode
+      ? "text-white text-sm font-bold text-right"
+      : "text-ra-marron text-sm font-bold text-right";
+
     const input =
       "w-full p-2 rounded-lg text-sm outline-none border transition " +
       "focus:ring-2 focus:ring-[rgba(170,80,19,0.22)] focus:border-[rgba(170,80,19,0.35)] " +
@@ -320,7 +582,9 @@ export default function DetalleJugador() {
     const btnPrimaryStyle = {
       background: `linear-gradient(135deg, ${PALETTE.copper}, ${PALETTE.terracotta})`,
       color: "#1a1208",
-      border: darkMode ? "1px solid rgba(255,255,255,0.20)" : "1px solid rgba(109,88,41,0.18)",
+      border: darkMode
+        ? "1px solid rgba(255,255,255,0.20)"
+        : "1px solid rgba(109,88,41,0.18)",
     };
 
     const danger =
@@ -328,6 +592,12 @@ export default function DetalleJugador() {
       (darkMode
         ? "border-red-200/20 bg-red-500/10 text-red-100"
         : "border-red-200 bg-red-50 text-red-800");
+
+    const info =
+      "rounded-2xl border px-5 py-4 " +
+      (darkMode
+        ? "border-sky-300/15 bg-sky-500/[0.07] text-sky-100"
+        : "border-sky-700/15 bg-sky-50/80 text-sky-900");
 
     const successToast = {
       backgroundColor: "rgba(34,197,94,0.92)",
@@ -340,6 +610,7 @@ export default function DetalleJugador() {
       subText,
       card,
       sectionCard,
+      baseStatsCard,
       row,
       rowLabel,
       rowValue,
@@ -348,6 +619,7 @@ export default function DetalleJugador() {
       btnPrimary,
       btnPrimaryStyle,
       danger,
+      info,
       successToast,
     };
   }, [darkMode]);
@@ -373,7 +645,6 @@ export default function DetalleJugador() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
 
-  /* ───────── Guard rail: sin rut no hay detalle ───────── */
   useEffect(() => {
     if (!rut) {
       const backTo = parentPath || basePath;
@@ -381,7 +652,6 @@ export default function DetalleJugador() {
     }
   }, [rut, parentPath, basePath, navigate, location.state]);
 
-  /* ───────── Breadcrumb (sin hardcode) ───────── */
   useEffect(() => {
     const currentPath = location.pathname + location.search;
 
@@ -402,7 +672,6 @@ export default function DetalleJugador() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.search, parentPath, basePath]);
 
-  /* ───────── Auth + scope ───────── */
   useEffect(() => {
     try {
       const token = getToken();
@@ -435,7 +704,6 @@ export default function DetalleJugador() {
     }
   }, [navigate, superTree]);
 
-  /* ───────── Carga datos ───────── */
   useEffect(() => {
     if (!rolActual || !rut) return;
 
@@ -447,7 +715,6 @@ export default function DetalleJugador() {
       setErr("");
 
       try {
-        // 1) Jugador
         const rj = await getWithFallback(`/jugadores/rut/${encodeURIComponent(rut)}`, {
           signal: abort.signal,
           headers,
@@ -464,7 +731,6 @@ export default function DetalleJugador() {
 
         setFotoDataUrl(buildFotoDataUrl(j));
 
-        // 2) Stats joined
         let est = {};
         let estId = null;
 
@@ -476,9 +742,9 @@ export default function DetalleJugador() {
             const candidates = [
               `/estadisticas/by-jugador/${encodeURIComponent(String(jugadorId))}`,
               deporteId
-                ? `/estadisticas/by-jugador/${encodeURIComponent(String(jugadorId))}?deporte_id=${encodeURIComponent(
-                    String(deporteId)
-                  )}`
+                ? `/estadisticas/by-jugador/${encodeURIComponent(
+                    String(jugadorId)
+                  )}?deporte_id=${encodeURIComponent(String(deporteId))}`
                 : null,
               `/estadisticas/jugador/${encodeURIComponent(String(jugadorId))}`,
             ].filter(Boolean);
@@ -501,7 +767,6 @@ export default function DetalleJugador() {
               } catch (e) {
                 const st = e?.status ?? e?.response?.status ?? 0;
                 if (st === 401 || st === 403) throw e;
-                continue;
               }
             }
 
@@ -514,15 +779,12 @@ export default function DetalleJugador() {
               }
 
               est = flat;
-            } else {
-              est = {};
             }
           }
         } catch {
           est = {};
         }
 
-        // 3) Catálogos
         const [posList, catList, estbList, prevList, estList, sucList, comList] =
           await Promise.all([
             tryGetList(["/posiciones"], { signal: abort.signal, headers }),
@@ -573,23 +835,29 @@ export default function DetalleJugador() {
             (catMap.has(Number(j.categoria_id)) ? { nombre: catMap.get(Number(j.categoria_id)) } : null),
           establec_educ:
             j.establec_educ ??
-            (estbMap.has(Number(j.establec_educ_id)) ? { nombre: estbMap.get(Number(j.establec_educ_id)) } : null),
+            (estbMap.has(Number(j.establec_educ_id))
+              ? { nombre: estbMap.get(Number(j.establec_educ_id)) }
+              : null),
           prevision_medica:
             j.prevision_medica ??
-            (prevMap.has(Number(j.prevision_medica_id)) ? { nombre: prevMap.get(Number(j.prevision_medica_id)) } : null),
+            (prevMap.has(Number(j.prevision_medica_id))
+              ? { nombre: prevMap.get(Number(j.prevision_medica_id)) }
+              : null),
           estado:
-            j.estado ?? (estMap.has(Number(j.estado_id)) ? { nombre: estMap.get(Number(j.estado_id)) } : null),
+            j.estado ??
+            (estMap.has(Number(j.estado_id)) ? { nombre: estMap.get(Number(j.estado_id)) } : null),
           sucursal:
-            j.sucursal ?? (sucMap.has(Number(j.sucursal_id)) ? { nombre: sucMap.get(Number(j.sucursal_id)) } : null),
+            j.sucursal ??
+            (sucMap.has(Number(j.sucursal_id)) ? { nombre: sucMap.get(Number(j.sucursal_id)) } : null),
           comuna:
-            j.comuna ?? (comMap.has(Number(j.comuna_id)) ? { nombre: comMap.get(Number(j.comuna_id)) } : null),
+            j.comuna ??
+            (comMap.has(Number(j.comuna_id)) ? { nombre: comMap.get(Number(j.comuna_id)) } : null),
         };
 
         setJugador(jugadorEnriquecido);
         setEstadisticas(est);
         setStatsId(estId);
 
-        // fecha -> yyyy-mm-dd
         const iso = j?.fecha_nacimiento;
         let ymd = "";
         if (iso) {
@@ -643,7 +911,6 @@ export default function DetalleJugador() {
     return () => abort.abort();
   }, [rut, rolActual, navigate, parentPath, location.state, basePath]);
 
-  /* ───────── Helpers UI ───────── */
   const labelNombre = useCallback(
     (arr, id) => arr.find((i) => Number(i.id) === Number(id))?.nombre || "-",
     []
@@ -665,59 +932,20 @@ export default function DetalleJugador() {
     return String(fecha);
   };
 
-  const secciones = useMemo(() => {
-    if (!estadisticas) return {};
-    return {
-      Ofensivas: {
-        Goles: estadisticas.goles ?? 0,
-        Asistencias: estadisticas.asistencias ?? 0,
-        "Tiros Libres": estadisticas.tiros_libres ?? 0,
-        Penales: estadisticas.penales ?? 0,
-        "Tiros al Arco": estadisticas.tiros_arco ?? 0,
-        "Tiros Fuera": estadisticas.tiros_fuera ?? 0,
-        "Tiros Bloqueados": estadisticas.tiros_bloqueados ?? 0,
-        "Regates Exitosos": estadisticas.regates_exitosos ?? 0,
-        "Centros Acertados": estadisticas.centros_acertados ?? 0,
-        "Pases Clave": estadisticas.pases_clave ?? 0,
-      },
-      Defensivas: {
-        Intercepciones: estadisticas.intercepciones ?? 0,
-        Despejes: estadisticas.despejes ?? 0,
-        "Duelos Ganados": estadisticas.duelos_ganados ?? 0,
-        "Entradas Exitosas": estadisticas.entradas_exitosas ?? 0,
-        Bloqueos: estadisticas.bloqueos ?? 0,
-        Recuperaciones: estadisticas.recuperaciones ?? 0,
-      },
-      Técnicas: {
-        "Pases Completados": estadisticas.pases_completados ?? 0,
-        "Pases Errados": estadisticas.pases_errados ?? 0,
-        "Posesión Perdida": estadisticas.posesion_perdida ?? 0,
-        Offsides: estadisticas.offsides ?? 0,
-        "Faltas Cometidas": estadisticas.faltas_cometidas ?? 0,
-        "Faltas Recibidas": estadisticas.faltas_recibidas ?? 0,
-      },
-      Físicas: {
-        "Distancia Recorrida (km)": estadisticas.distancia_recorrida_km ?? 0,
-        Sprints: estadisticas.sprints ?? 0,
-        "Duelos Aéreos Ganados": estadisticas.duelos_aereos_ganados ?? 0,
-        "Minutos Jugados": estadisticas.minutos_jugados ?? 0,
-        "Partidos Jugados": estadisticas.partidos_jugados ?? 0,
-      },
-      Médicas: {
-        Lesiones: estadisticas.lesiones ?? 0,
-        "Días de Baja": estadisticas.dias_baja ?? 0,
-      },
-      Disciplina: {
-        "Tarjetas Amarillas": estadisticas.tarjetas_amarillas ?? 0,
-        "Tarjetas Rojas": estadisticas.tarjetas_rojas ?? 0,
-        "Sanciones Federativas": estadisticas.sanciones_federativas ?? 0,
-        "Torneos Convocados": estadisticas.torneos_convocados ?? 0,
-        "Titular en Partidos": estadisticas.titular_partidos ?? 0,
-      },
-    };
-  }, [estadisticas]);
+  const deporteId = useMemo(
+    () => Number(jugador?.deporte_id ?? jugador?.id_deporte ?? 0) || null,
+    [jugador]
+  );
 
-  const handleChange = (e) => setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  const sportConfig = useMemo(() => getSportConfig(deporteId), [deporteId]);
+
+  const secciones = useMemo(
+    () => buildStatSections(estadisticas, deporteId),
+    [estadisticas, deporteId]
+  );
+
+  const handleChange = (e) =>
+    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
 
   const guardarCambios = async (e) => {
     e.preventDefault();
@@ -784,15 +1012,34 @@ export default function DetalleJugador() {
       setJugador((prev) => ({
         ...(prev || {}),
         ...payload,
-        posicion: posiciones.find((p) => Number(p.id) === Number(payload.posicion_id)) || prev?.posicion || null,
-        categoria: categorias.find((c) => Number(c.id) === Number(payload.categoria_id)) || prev?.categoria || null,
+        posicion:
+          posiciones.find((p) => Number(p.id) === Number(payload.posicion_id)) ||
+          prev?.posicion ||
+          null,
+        categoria:
+          categorias.find((c) => Number(c.id) === Number(payload.categoria_id)) ||
+          prev?.categoria ||
+          null,
         establec_educ:
-          establecimientos.find((e) => Number(e.id) === Number(payload.establec_educ_id)) || prev?.establec_educ || null,
+          establecimientos.find((e) => Number(e.id) === Number(payload.establec_educ_id)) ||
+          prev?.establec_educ ||
+          null,
         prevision_medica:
-          previsiones.find((p) => Number(p.id) === Number(payload.prevision_medica_id)) || prev?.prevision_medica || null,
-        estado: estados.find((e) => Number(e.id) === Number(payload.estado_id)) || prev?.estado || null,
-        sucursal: sucursales.find((s) => Number(s.id) === Number(payload.sucursal_id)) || prev?.sucursal || null,
-        comuna: comunas.find((c) => Number(c.id) === Number(payload.comuna_id)) || prev?.comuna || null,
+          previsiones.find((p) => Number(p.id) === Number(payload.prevision_medica_id)) ||
+          prev?.prevision_medica ||
+          null,
+        estado:
+          estados.find((e) => Number(e.id) === Number(payload.estado_id)) ||
+          prev?.estado ||
+          null,
+        sucursal:
+          sucursales.find((s) => Number(s.id) === Number(payload.sucursal_id)) ||
+          prev?.sucursal ||
+          null,
+        comuna:
+          comunas.find((c) => Number(c.id) === Number(payload.comuna_id)) ||
+          prev?.comuna ||
+          null,
       }));
 
       setEditMode(false);
@@ -837,7 +1084,11 @@ export default function DetalleJugador() {
           return;
         }
 
-        setJugador((prev) => ({ ...(prev || {}), contrato_prestacion: b64, contrato_prestacion_mime: mime }));
+        setJugador((prev) => ({
+          ...(prev || {}),
+          contrato_prestacion: b64,
+          contrato_prestacion_mime: mime,
+        }));
       }
 
       const mimeLower = String(mime || "").toLowerCase();
@@ -869,7 +1120,6 @@ export default function DetalleJugador() {
 
   const canEdit = rolActual === 1 || rolActual === 3;
 
-  // UI labels
   const rows = [
     ["Email", "email"],
     ["Teléfono", "telefono"],
@@ -894,7 +1144,6 @@ export default function DetalleJugador() {
 
   return (
     <div className={`${ui.shell} min-h-screen font-sans`}>
-      {/* Header SuperDashboard */}
       <header className="px-6 pt-6 text-center">
         <div
           className="w-36 h-36 sm:w-40 sm:h-40 mx-auto rounded-full overflow-hidden flex items-center justify-center text-6xl border"
@@ -921,7 +1170,12 @@ export default function DetalleJugador() {
         </h1>
 
         <p className={`text-sm mt-2 ${ui.subText}`}>
-          {jugador.posicion?.nombre || "-"} · {jugador.edad ?? "-"} años · {jugador.categoria?.nombre || "-"}
+          {jugador.posicion?.nombre || "-"} · {jugador.edad ?? "-"} años ·{" "}
+          {jugador.categoria?.nombre || "-"}
+        </p>
+
+        <p className={`text-sm mt-1 ${ui.subText}`}>
+          Deporte: <span className="font-extrabold">{sportConfig.nombre}</span>
         </p>
       </header>
 
@@ -932,7 +1186,6 @@ export default function DetalleJugador() {
           </div>
         )}
 
-        {/* Datos (sin cuadros) */}
         <div className="max-w-6xl mx-auto mt-6">
           <section className={`${ui.card} p-4 md:p-6 relative`}>
             {canEdit && (
@@ -951,7 +1204,11 @@ export default function DetalleJugador() {
               </button>
             )}
 
-            <h2 className={`text-xl font-extrabold mb-4 ${darkMode ? "text-white" : "text-ra-marron"}`}>
+            <h2
+              className={`text-xl font-extrabold mb-4 ${
+                darkMode ? "text-white" : "text-ra-marron"
+              }`}
+            >
               Datos del jugador
             </h2>
 
@@ -968,7 +1225,9 @@ export default function DetalleJugador() {
                         aria-label="Ver contrato"
                       >
                         <FileText size={18} color={darkMode ? PALETTE.cream : PALETTE.brown} />
-                        <span className={darkMode ? "text-white/85" : "text-ra-marron/85"}>Ver contrato</span>
+                        <span className={darkMode ? "text-white/85" : "text-ra-marron/85"}>
+                          Ver contrato
+                        </span>
                       </button>
                     );
                   }
@@ -978,15 +1237,25 @@ export default function DetalleJugador() {
                   if (key === "categoria_id")
                     return jugador.categoria?.nombre || labelNombre(categorias, jugador.categoria_id);
                   if (key === "establec_educ_id")
-                    return jugador.establec_educ?.nombre || labelNombre(establecimientos, jugador.establec_educ_id);
+                    return (
+                      jugador.establec_educ?.nombre ||
+                      labelNombre(establecimientos, jugador.establec_educ_id)
+                    );
                   if (key === "prevision_medica_id")
-                    return jugador.prevision_medica?.nombre || labelNombre(previsiones, jugador.prevision_medica_id);
-                  if (key === "estado_id") return jugador.estado?.nombre || labelNombre(estados, jugador.estado_id);
+                    return (
+                      jugador.prevision_medica?.nombre ||
+                      labelNombre(previsiones, jugador.prevision_medica_id)
+                    );
+                  if (key === "estado_id")
+                    return jugador.estado?.nombre || labelNombre(estados, jugador.estado_id);
                   if (key === "sucursal_id")
                     return jugador.sucursal?.nombre || labelNombre(sucursales, jugador.sucursal_id);
-                  if (key === "comuna_id") return jugador.comuna?.nombre || labelNombre(comunas, jugador.comuna_id);
-                  if (key === "fecha_nacimiento") return formatearFechaLocal(jugador.fecha_nacimiento);
-                  if (key === "estadistica_id") return statsId ?? jugador.estadistica_id ?? "-";
+                  if (key === "comuna_id")
+                    return jugador.comuna?.nombre || labelNombre(comunas, jugador.comuna_id);
+                  if (key === "fecha_nacimiento")
+                    return formatearFechaLocal(jugador.fecha_nacimiento);
+                  if (key === "estadistica_id")
+                    return statsId ?? jugador.estadistica_id ?? "-";
 
                   return jugador[key] ?? "-";
                 };
@@ -1002,66 +1271,128 @@ export default function DetalleJugador() {
           </section>
         </div>
 
-        {/* Gráficas */}
         <section className="max-w-6xl mx-auto mt-10 space-y-6">
-          <h2 className="text-2xl font-extrabold" style={{ color: darkMode ? PALETTE.cream : PALETTE.brown }}>
-            Estadísticas del Jugador
-          </h2>
+          <div>
+            <h2
+              className="text-2xl font-extrabold"
+              style={{ color: darkMode ? PALETTE.cream : PALETTE.brown }}
+            >
+              Estadísticas del Jugador — {sportConfig.nombre}
+            </h2>
 
-          {Object.entries(secciones).map(([titulo, data]) => (
-            <div key={titulo} className={`${ui.sectionCard} p-4 md:p-6`}>
-              <h3 className="text-lg font-extrabold mb-4" style={{ color: darkMode ? PALETTE.cream : PALETTE.brown }}>
-                {titulo}
-              </h3>
-
-              <div className="relative h-[320px] w-full">
-                <Bar
-                  data={{
-                    labels: Object.keys(data),
-                    datasets: [
-                      {
-                        label: titulo,
-                        data: Object.values(data),
-                        backgroundColor: darkMode ? "rgba(170,80,19,0.55)" : "rgba(226,119,59,0.35)",
-                        borderColor: darkMode ? "rgba(170,80,19,0.95)" : "rgba(109,88,41,0.55)",
-                        borderWidth: 1,
-                      },
-                    ],
-                  }}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                      x: {
-                        ticks: { color: darkMode ? "rgba(255,255,255,0.82)" : "rgba(109,88,41,0.82)" },
-                        grid: { color: darkMode ? "rgba(255,255,255,0.10)" : "rgba(109,88,41,0.12)" },
-                      },
-                      y: {
-                        beginAtZero: true,
-                        ticks: { color: darkMode ? "rgba(255,255,255,0.82)" : "rgba(109,88,41,0.82)" },
-                        grid: { color: darkMode ? "rgba(255,255,255,0.10)" : "rgba(109,88,41,0.12)" },
-                      },
-                    },
-                  }}
-                />
+            <div className={`${ui.info} mt-3`}>
+              <div className="text-sm">
+                Se muestran las métricas comunes de <code>stats_base</code> y únicamente las
+                estadísticas específicas correspondientes a <b>{sportConfig.nombre}</b>.
               </div>
             </div>
-          ))}
+          </div>
+
+          {Object.keys(secciones).length === 0 ? (
+            <div className={`${ui.sectionCard} p-6 text-center`}>
+              <p className={ui.subText}>
+                No existen estadísticas registradas para este jugador.
+              </p>
+            </div>
+          ) : (
+            Object.entries(secciones).map(([titulo, data]) => {
+              const isBase = titulo === "Base / Generales";
+
+              return (
+                <div
+                  key={titulo}
+                  className={`${isBase ? ui.baseStatsCard : ui.sectionCard} p-4 md:p-6`}
+                >
+                  <h3
+                    className="text-lg font-extrabold mb-1"
+                    style={{ color: darkMode ? PALETTE.cream : PALETTE.brown }}
+                  >
+                    {titulo}
+                  </h3>
+
+                  {isBase && (
+                    <p className={`text-xs mb-4 ${ui.subText}`}>
+                      Métricas comunes a todos los deportes.
+                    </p>
+                  )}
+
+                  <div className="relative h-[320px] w-full">
+                    <Bar
+                      data={{
+                        labels: Object.keys(data),
+                        datasets: [
+                          {
+                            label: titulo,
+                            data: Object.values(data),
+                            backgroundColor: darkMode
+                              ? "rgba(170,80,19,0.55)"
+                              : "rgba(226,119,59,0.35)",
+                            borderColor: darkMode
+                              ? "rgba(170,80,19,0.95)"
+                              : "rgba(109,88,41,0.55)",
+                            borderWidth: 1,
+                          },
+                        ],
+                      }}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                          x: {
+                            ticks: {
+                              color: darkMode
+                                ? "rgba(255,255,255,0.82)"
+                                : "rgba(109,88,41,0.82)",
+                            },
+                            grid: {
+                              color: darkMode
+                                ? "rgba(255,255,255,0.10)"
+                                : "rgba(109,88,41,0.12)",
+                            },
+                          },
+                          y: {
+                            beginAtZero: true,
+                            ticks: {
+                              color: darkMode
+                                ? "rgba(255,255,255,0.82)"
+                                : "rgba(109,88,41,0.82)",
+                            },
+                            grid: {
+                              color: darkMode
+                                ? "rgba(255,255,255,0.10)"
+                                : "rgba(109,88,41,0.12)",
+                            },
+                          },
+                        },
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })
+          )}
         </section>
       </main>
 
-      {/* Overlay Edición */}
       {editMode && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 overflow-auto">
           <form
             onSubmit={guardarCambios}
             className={`w-full max-w-2xl ${ui.card} rounded-2xl p-6 space-y-6 overflow-y-auto max-h-[90vh]`}
           >
-            <div className="flex justify-between items-center mb-2 border-b pb-3 relative"
-              style={{ borderColor: darkMode ? "rgba(255,255,255,0.10)" : "rgba(109,88,41,0.15)" }}
+            <div
+              className="flex justify-between items-center mb-2 border-b pb-3 relative"
+              style={{
+                borderColor: darkMode
+                  ? "rgba(255,255,255,0.10)"
+                  : "rgba(109,88,41,0.15)",
+              }}
             >
-              <h3 className="text-xl font-extrabold text-center w-full" style={{ color: darkMode ? PALETTE.cream : PALETTE.brown }}>
+              <h3
+                className="text-xl font-extrabold text-center w-full"
+                style={{ color: darkMode ? PALETTE.cream : PALETTE.brown }}
+              >
                 Editar Información del Jugador
               </h3>
 
@@ -1071,7 +1402,11 @@ export default function DetalleJugador() {
                 className="absolute top-1 right-1 text-xl hover:opacity-90"
                 title="Cerrar"
                 aria-label="Cerrar"
-                style={{ color: darkMode ? "rgba(255,255,255,0.85)" : "rgba(109,88,41,0.85)" }}
+                style={{
+                  color: darkMode
+                    ? "rgba(255,255,255,0.85)"
+                    : "rgba(109,88,41,0.85)",
+                }}
               >
                 <FiX />
               </button>
@@ -1091,7 +1426,11 @@ export default function DetalleJugador() {
                 ["Teléfono Apoderado", "telefono_apoderado", "text"],
               ].map(([label, key, type]) => (
                 <div key={key}>
-                  <label className={`block text-sm font-semibold mb-1 ${darkMode ? "text-white/85" : "text-ra-marron/85"}`}>
+                  <label
+                    className={`block text-sm font-semibold mb-1 ${
+                      darkMode ? "text-white/85" : "text-ra-marron/85"
+                    }`}
+                  >
                     {label}
                   </label>
                   <input
@@ -1105,7 +1444,11 @@ export default function DetalleJugador() {
               ))}
 
               <div>
-                <label className={`block text-sm font-semibold mb-1 ${darkMode ? "text-white/85" : "text-ra-marron/85"}`}>
+                <label
+                  className={`block text-sm font-semibold mb-1 ${
+                    darkMode ? "text-white/85" : "text-ra-marron/85"
+                  }`}
+                >
                   Fecha Nacimiento
                 </label>
                 <input
@@ -1127,10 +1470,19 @@ export default function DetalleJugador() {
                 ["Comuna", "comuna_id", comunas],
               ].map(([label, key, arr]) => (
                 <div key={key}>
-                  <label className={`block text-sm font-semibold mb-1 ${darkMode ? "text-white/85" : "text-ra-marron/85"}`}>
+                  <label
+                    className={`block text-sm font-semibold mb-1 ${
+                      darkMode ? "text-white/85" : "text-ra-marron/85"
+                    }`}
+                  >
                     {label}
                   </label>
-                  <select name={key} value={formData[key] || ""} onChange={handleChange} className={ui.input}>
+                  <select
+                    name={key}
+                    value={formData[key] || ""}
+                    onChange={handleChange}
+                    className={ui.input}
+                  >
                     <option value="">Seleccione</option>
                     {arr.map((x) => (
                       <option key={x.id} value={x.id}>
@@ -1142,7 +1494,11 @@ export default function DetalleJugador() {
               ))}
 
               <div className="sm:col-span-2">
-                <label className={`block text-sm font-semibold mb-1 ${darkMode ? "text-white/85" : "text-ra-marron/85"}`}>
+                <label
+                  className={`block text-sm font-semibold mb-1 ${
+                    darkMode ? "text-white/85" : "text-ra-marron/85"
+                  }`}
+                >
                   Dirección
                 </label>
                 <input
@@ -1156,7 +1512,11 @@ export default function DetalleJugador() {
               </div>
 
               <div>
-                <label className={`block text-sm font-semibold mb-1 ${darkMode ? "text-white/85" : "text-ra-marron/85"}`}>
+                <label
+                  className={`block text-sm font-semibold mb-1 ${
+                    darkMode ? "text-white/85" : "text-ra-marron/85"
+                  }`}
+                >
                   Estadística ID
                 </label>
                 <input
@@ -1166,13 +1526,21 @@ export default function DetalleJugador() {
                   disabled
                   className={`${ui.input} opacity-70 cursor-not-allowed`}
                 />
-                <p className={`text-xs mt-1 ${darkMode ? "text-white/60" : "text-ra-marron/60"}`}>
+                <p
+                  className={`text-xs mt-1 ${
+                    darkMode ? "text-white/60" : "text-ra-marron/60"
+                  }`}
+                >
                   Campo informativo (no editable)
                 </p>
               </div>
 
               <div className="sm:col-span-2">
-                <label className={`block text-sm font-semibold mb-1 ${darkMode ? "text-white/85" : "text-ra-marron/85"}`}>
+                <label
+                  className={`block text-sm font-semibold mb-1 ${
+                    darkMode ? "text-white/85" : "text-ra-marron/85"
+                  }`}
+                >
                   Contrato firmado
                 </label>
                 <div className="flex items-center gap-2">
@@ -1181,7 +1549,11 @@ export default function DetalleJugador() {
                     Disponible en la tarjeta (Ver contrato)
                   </span>
                 </div>
-                <p className={`text-xs mt-1 ${darkMode ? "text-white/60" : "text-ra-marron/60"}`}>
+                <p
+                  className={`text-xs mt-1 ${
+                    darkMode ? "text-white/60" : "text-ra-marron/60"
+                  }`}
+                >
                   Se abre en una nueva pestaña como PDF (estilo histórico).
                 </p>
               </div>
@@ -1190,7 +1562,11 @@ export default function DetalleJugador() {
             {err && <p className="text-red-200 text-sm font-bold">{err}</p>}
 
             <div className="flex justify-end gap-3 pt-2">
-              <button type="button" onClick={() => setEditMode(false)} className={ui.btnGhost}>
+              <button
+                type="button"
+                onClick={() => setEditMode(false)}
+                className={ui.btnGhost}
+              >
                 Cancelar
               </button>
 
