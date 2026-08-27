@@ -1,72 +1,110 @@
 // src/pages/admin/login.jsx
-import { useEffect, useRef, useState, useCallback } from "react";
+
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { login as loginService } from "../../services/auth";
-import Footer from "../../components/footer";
+import api, { apiPublic, getToken, setToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
 import IsLoading from "../../components/isLoading";
-
 import logoOficial from "../../statics/logo/logo-oficial.png";
 import logoWeli from "../../statics/logo/logo-weli.png";
-
-// ✅ api + token helpers
-import api, { getToken, setToken, clearToken } from "../../services/api";
 
 const REQUEST_TIMEOUT_MS = 10_000;
 const ACCENT = "#aa5013";
 
-// ✅ Rutas finales
 const SUPER_DASH_PATH = "/super-dashboard";
 const ADMIN_DASH_PATH = "/admin";
 
-// ✅ Storage keys normados
-const USER_INFO_KEY = "user_info";
-const SELECTED_ACADEMIA_KEY = "weli_selected_academia";
+const USER_INFO_KEY = "weli_user_info";
+const ALLOWED_PANEL_ROLES = new Set([1, 2, 3]);
+
+/* ───────────────────────── Storage ───────────────────────── */
+
+function safeStorageSet(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function safeStorageRemove(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {}
+}
+
+function clearAcademiaScope() {
+  safeStorageRemove(ACADEMIA_STORAGE_KEY);
+}
+
+function hardClearLocal() {
+  clearToken();
+  safeStorageRemove(USER_INFO_KEY);
+  clearAcademiaScope();
+}
 
 /* ───────────────────────── Helpers ───────────────────────── */
-function safeJsonStringify(obj) {
+
+function safeJsonStringify(value) {
   try {
-    return JSON.stringify(obj);
+    return JSON.stringify(value);
   } catch {
     return "";
   }
 }
 
+/**
+ * Contrato actual de auth.ts:
+ *
+ * {
+ *   ok: true,
+ *   token: "...",
+ *   rol_id: 1,
+ *   user: {...}
+ * }
+ *
+ * Ya no se aceptan nombres históricos de tokens.
+ */
 function pickTokenFromPayload(payload) {
-  return (
-    payload?.weli_token ||
-    payload?.token ||
-    payload?.access_token ||
-    payload?.jwt ||
-    payload?.bearer ||
-    payload?.auth_token ||
-    payload?.rafc_token
-  );
+  const token = payload?.token;
+  return typeof token === "string" && token.trim() ? token.trim() : "";
 }
 
 function pickUserFromPayload(payload) {
-  return payload?.user || payload?.usuario || payload?.apoderado || null;
+  return payload?.user && typeof payload.user === "object" ? payload.user : null;
 }
 
-function safePath(p, fallback = "") {
-  if (typeof p !== "string") return fallback;
-  if (!p.startsWith("/")) return fallback;
-  return p;
+function safePath(path, fallback = "") {
+  if (typeof path !== "string") return fallback;
+
+  const normalized = path.trim();
+
+  if (!normalized.startsWith("/")) return fallback;
+  if (normalized.startsWith("//")) return fallback;
+  if (normalized.includes("\\")) return fallback;
+
+  return normalized;
 }
 
-function roleFromPayloadOrToken(payload, token) {
-  // 1) payload
-  const rolPayload = Number(payload?.rol_id ?? payload?.user?.rol_id ?? 0);
-  if (Number.isFinite(rolPayload) && rolPayload > 0) return rolPayload;
-
-  // 2) token
+function decodePanelToken(token) {
   try {
     const decoded = jwtDecode(token);
-    const raw = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? 0;
-    const rolToken = Number(raw);
-    return Number.isFinite(rolToken) ? rolToken : 0;
+
+    const rol = Number(decoded?.rol_id ?? decoded?.user?.rol_id ?? 0);
+    const exp = Number(decoded?.exp ?? 0);
+
+    if (!Number.isInteger(rol) || !ALLOWED_PANEL_ROLES.has(rol)) return null;
+    if (!Number.isFinite(exp) || exp <= 0) return null;
+
+    return {
+      decoded,
+      rol_id: rol,
+      exp,
+    };
   } catch {
-    return 0;
+    return null;
   }
 }
 
@@ -75,79 +113,18 @@ function defaultByRole(rol_id) {
 }
 
 function isAllowedRedirectForRole(path, rol_id) {
-  if (!path) return false;
-  // ✅ Superadmin: permitir /super-dashboard o /admin*
-  if (rol_id === 3) return path === SUPER_DASH_PATH || path.startsWith("/admin");
-  // ✅ Admin/Staff: solo /admin*
-  return path.startsWith("/admin");
+  if (!path || !ALLOWED_PANEL_ROLES.has(rol_id)) return false;
+
+  const isAdminPath = path === ADMIN_DASH_PATH || path.startsWith(`${ADMIN_DASH_PATH}/`);
+
+  if (rol_id === 3) {
+    return path === SUPER_DASH_PATH || path.startsWith(`${SUPER_DASH_PATH}/`) || isAdminPath;
+  }
+
+  return isAdminPath;
 }
 
-// ✅ AcademiaId: payload o token
-function academiaIdFromPayloadOrToken(payload, token) {
-  // 1) payload directo o dentro de user
-  const rawPayload =
-    payload?.academia_id ??
-    payload?.academy_id ??
-    payload?.academiaId ??
-    payload?.academyId ??
-    payload?.user?.academia_id ??
-    payload?.user?.academy_id ??
-    payload?.user?.academiaId ??
-    payload?.user?.academyId ??
-    null;
-
-  const asNumPayload = Number(rawPayload);
-  if (Number.isFinite(asNumPayload) && asNumPayload > 0) return asNumPayload;
-
-  // 2) token
-  try {
-    const decoded = jwtDecode(token);
-    const rawToken =
-      decoded?.academia_id ??
-      decoded?.academy_id ??
-      decoded?.academiaId ??
-      decoded?.academyId ??
-      decoded?.tenant_id ?? // por si usaste tenant_id
-      null;
-
-    const asNumToken = Number(rawToken);
-    if (Number.isFinite(asNumToken) && asNumToken > 0) return asNumToken;
-  } catch {}
-
-  return 0;
-}
-
-// ✅ Persistir scope (lo que usa api para header x-academia-id)
-function setAcademiaScope(academia_id) {
-  try {
-    if (academia_id && Number(academia_id) > 0) {
-      localStorage.setItem(SELECTED_ACADEMIA_KEY, String(Number(academia_id)));
-      return true;
-    }
-  } catch {}
-  return false;
-}
-
-function clearAcademiaScope() {
-  try {
-    localStorage.removeItem(SELECTED_ACADEMIA_KEY);
-  } catch {}
-}
-
-// ✅ Limpieza dura (panel)
-function hardClearLocal() {
-  try {
-    clearToken();
-  } catch {}
-
-  try {
-    localStorage.removeItem(USER_INFO_KEY);
-    localStorage.removeItem("apoderado_must_change_password"); // por si quedó sucio de antes
-    localStorage.removeItem("rafc_token");
-    localStorage.removeItem("rafc_auth_debug");
-    clearAcademiaScope();
-  } catch {}
-}
+/* ───────────────────────── Componente ───────────────────────── */
 
 export default function Login() {
   const [form, setForm] = useState({ nombre_usuario: "", password: "" });
@@ -157,126 +134,139 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // si ProtectedRoute manda { state: { from: location.pathname } }
-  const rawRedirect = location?.state?.from;
-  const redirectRequested = safePath(rawRedirect, "");
+  const redirectRequested = safePath(location?.state?.from, "");
 
   const abortRef = useRef(null);
   const mountedRef = useRef(true);
 
+  /* ───────────────────────── Mount ───────────────────────── */
+
   useEffect(() => {
     mountedRef.current = true;
+
     return () => {
       mountedRef.current = false;
+
       try {
         abortRef.current?.abort?.();
       } catch {}
     };
   }, []);
 
-  const setMsgSafe = useCallback((m) => {
-    if (!mountedRef.current) return;
-    setMensaje(m);
+  const setMsgSafe = useCallback((message) => {
+    if (mountedRef.current) setMensaje(message);
   }, []);
 
-  const setLoadingSafe = useCallback((v) => {
-    if (!mountedRef.current) return;
-    setIsLoading(v);
+  const setLoadingSafe = useCallback((value) => {
+    if (mountedRef.current) setIsLoading(value);
   }, []);
 
-  /**
-   * ✅ Boot:
-   * - Si hay token: valida exp
-   * - Ping backend
-   * - Reconstruye scope x-academia-id según rol (admin/staff obligados)
-   * - Redirige por rol
-   */
+  /* ───────────────────────── Sesión existente ───────────────────────── */
+
   useEffect(() => {
     let alive = true;
 
     const boot = async () => {
-      let t = "";
-      try {
-        t = getToken() || "";
-      } catch {}
+      const token = getToken() || "";
+      if (!token) return;
 
-      if (!t) return;
+      const tokenInfo = decodePanelToken(token);
 
-      // 1) Exp local
-      try {
-        const decoded = jwtDecode(t);
-        const now = Math.floor(Date.now() / 1000);
-        if (decoded?.exp && now >= decoded.exp - 30) {
-          hardClearLocal();
-          return;
-        }
-      } catch {
+      if (!tokenInfo) {
         hardClearLocal();
         return;
       }
 
-      // 2) Ping rápido (si no responde, no redirigir)
+      const now = Math.floor(Date.now() / 1000);
+
+      /*
+       * Margen de 30 segundos para evitar entrar
+       * con un token prácticamente expirado.
+       */
+      if (now >= tokenInfo.exp - 30) {
+        hardClearLocal();
+        return;
+      }
+
+      /*
+       * Health público:
+       * solo confirma disponibilidad del backend.
+       * La verdadera validación del JWT la realiza
+       * authz.ts en cada endpoint protegido.
+       */
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 1500);
 
       try {
-        await api.get("/health", {
+        await apiPublic.get("/health", {
           signal: controller.signal,
-          meta: { isPublic: true },
         });
 
         if (!alive) return;
 
-        // 3) Rol desde token
-        const decoded = jwtDecode(t);
-        const rolRaw = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? 0;
-        const rol_id = Number(rolRaw);
-        const rol = Number.isFinite(rol_id) ? rol_id : 0;
+        /*
+         * Ningún usuario debe conservar un selector tenant
+         * procedente de una sesión anterior.
+         *
+         * - Admin/Staff usan academia_id del JWT.
+         * - Superadmin elegirá academia nuevamente.
+         */
+        clearAcademiaScope();
 
-        // 4) Scope academia
-        if (rol === 3) {
-          // superadmin: que el selector decida (evita scopes “fantasma”)
-          clearAcademiaScope();
-        } else {
-          // admin/staff: debe existir SIEMPRE
-          const acad = academiaIdFromPayloadOrToken(null, t);
-          const ok = setAcademiaScope(acad);
-          if (!ok) {
-            hardClearLocal();
-            return;
-          }
-        }
-
-        navigate(defaultByRole(rol), { replace: true });
+        navigate(defaultByRole(tokenInfo.rol_id), {
+          replace: true,
+        });
       } catch {
-        hardClearLocal();
+        /*
+         * Si el backend simplemente está caído,
+         * no destruimos una sesión todavía válida.
+         *
+         * Solo evitamos la redirección automática.
+         */
       } finally {
         clearTimeout(timer);
       }
     };
 
-    boot();
+    void boot();
+
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [navigate]);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
+  /* ───────────────────────── Inputs ───────────────────────── */
 
-    if (name === "password") {
-      setForm((prev) => ({ ...prev, password: value }));
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+
+    if (name === "nombre_usuario") {
+      setForm((prev) => ({
+        ...prev,
+        nombre_usuario: value.trimStart(),
+      }));
       return;
     }
 
-    if (name === "nombre_usuario") {
-      setForm((prev) => ({ ...prev, nombre_usuario: value.trimStart() }));
+    if (name === "password") {
+      /*
+       * No se eliminan comillas ni caracteres especiales.
+       *
+       * La contraseña debe viajar exactamente como fue escrita.
+       * SQL Injection se evita en auth.ts mediante query parametrizada.
+       */
+      setForm((prev) => ({
+        ...prev,
+        password: value,
+      }));
     }
   };
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
+  /* ───────────────────────── Login ───────────────────────── */
+
+  const handleLogin = async (event) => {
+    event.preventDefault();
+
     if (isLoading) return;
 
     setMsgSafe("");
@@ -284,14 +274,26 @@ export default function Login() {
     const nombre_usuario = String(form.nombre_usuario ?? "").trim();
     const password = String(form.password ?? "");
 
-    if (nombre_usuario.length < 3 || password.length < 4) {
-      setMsgSafe("❌ Usuario y/o contraseña muy cortos");
+    /*
+     * Mismos límites funcionales utilizados por LoginSchema
+     * en auth.ts.
+     */
+    if (nombre_usuario.length < 3 || nombre_usuario.length > 80) {
+      setMsgSafe("❌ El nombre de usuario debe contener entre 3 y 80 caracteres.");
+      return;
+    }
+
+    if (password.length < 4 || password.length > 200) {
+      setMsgSafe("❌ La contraseña debe contener entre 4 y 200 caracteres.");
       return;
     }
 
     setLoadingSafe(true);
 
-    // limpiar sesión previa (panel)
+    /*
+     * Una nueva autenticación nunca hereda
+     * datos de una sesión anterior.
+     */
     hardClearLocal();
 
     const controller = new AbortController();
@@ -304,107 +306,158 @@ export default function Login() {
     }, REQUEST_TIMEOUT_MS);
 
     try {
-      const res = await loginService(nombre_usuario, password, {
+      const response = await loginService(nombre_usuario, password, {
         signal: controller.signal,
         timeoutMs: REQUEST_TIMEOUT_MS,
       });
 
-      const payload = res?.data ?? res ?? {};
+      const payload = response?.data ?? response ?? {};
       const token = pickTokenFromPayload(payload);
 
       if (!token) {
-        console.log("[LOGIN ADMIN UI] token missing", {
-          nombre_usuario,
-          payloadKeys: Object.keys(payload || {}),
-          payload,
-        });
-        setMsgSafe("❌ No se recibió token desde el servidor.");
+        setMsgSafe("❌ El servidor no entregó un token de autenticación válido.");
         return;
       }
 
-      // ✅ Persistir token (weli_token)
-      setToken(String(token));
+      /* ───────── Validar JWT recibido ───────── */
 
-      // ✅ user_info (si viene)
-      const user = pickUserFromPayload(payload);
-      if (user) {
-        try {
-          localStorage.setItem(USER_INFO_KEY, safeJsonStringify(user));
-        } catch {}
+      const tokenInfo = decodePanelToken(token);
+
+      if (!tokenInfo) {
+        hardClearLocal();
+        setMsgSafe("❌ El servidor entregó una sesión inválida.");
+        return;
       }
 
-      // ✅ Rol: payload o token
-      const rol_id = roleFromPayloadOrToken(payload, String(token));
+      const now = Math.floor(Date.now() / 1000);
 
-      // ✅ Scope x-academia-id
-      if (rol_id === 3) {
-        // superadmin: que seleccione academia después (evita tenant incorrecto)
-        clearAcademiaScope();
-      } else {
-        // admin/staff: set obligatorio desde payload o token
-        const acad = academiaIdFromPayloadOrToken(payload, String(token));
-        const ok = setAcademiaScope(acad);
-        if (!ok) {
-          // si no puedo asegurar scope, corto de raíz (evita 403-loop)
-          hardClearLocal();
-          setMsgSafe("❌ No se pudo determinar la academia del usuario (scope).");
-          return;
+      if (now >= tokenInfo.exp) {
+        hardClearLocal();
+        setMsgSafe("❌ El servidor entregó una sesión expirada.");
+        return;
+      }
+
+      /*
+       * El rol retornado fuera del JWT debe coincidir
+       * con el rol firmado dentro del token.
+       */
+      const payloadRole = Number(payload?.rol_id ?? payload?.user?.rol_id ?? 0);
+
+      if (!Number.isInteger(payloadRole) || payloadRole !== tokenInfo.rol_id) {
+        hardClearLocal();
+        setMsgSafe("❌ La información de sesión recibida es inconsistente.");
+        return;
+      }
+
+      /* ───────── Persistir token WELI ───────── */
+
+      const tokenStored = setToken(token);
+
+      if (!tokenStored) {
+        hardClearLocal();
+        setMsgSafe("❌ No fue posible almacenar la sesión de forma local.");
+        return;
+      }
+
+      /* ───────── Información visible del usuario ───────── */
+
+      const user = pickUserFromPayload(payload);
+
+      if (user) {
+        const userJson = safeJsonStringify(user);
+
+        if (userJson) {
+          safeStorageSet(USER_INFO_KEY, userJson);
         }
       }
 
-      const fallback = defaultByRole(rol_id);
+      /*
+       * Nunca persistimos academia para Admin/Staff.
+       *
+       * api.js:
+       * - rol 1/2 → academia_id desde JWT.
+       * - rol 3   → selector posterior.
+       */
+      clearAcademiaScope();
 
-      // ✅ Redirect solicitado (si es válido para el rol); si no, fallback por rol
+      /* ───────── Redirect ───────── */
+
+      const fallback = defaultByRole(tokenInfo.rol_id);
+
       const finalRedirect =
-        redirectRequested && isAllowedRedirectForRole(redirectRequested, rol_id)
+        redirectRequested && isAllowedRedirectForRole(redirectRequested, tokenInfo.rol_id)
           ? redirectRequested
           : fallback;
 
-      navigate(finalRedirect, { replace: true });
-    } catch (err) {
-      const status = err?.response?.status ?? err?.status;
+      navigate(finalRedirect, {
+        replace: true,
+      });
+    } catch (error) {
+      const status = Number(error?.response?.status ?? error?.status ?? 0);
 
-      if (err?.code === "TIMEOUT" || err?.name === "AbortError") {
-        setMsgSafe("❌ El servidor tardó demasiado (timeout). Intenta nuevamente.");
+      const message =
+        error?.response?.data?.message ??
+        error?.data?.message ??
+        error?.message ??
+        "";
+
+      if (
+        error?.code === "TIMEOUT" ||
+        error?.code === "ECONNABORTED" ||
+        error?.code === "ERR_CANCELED" ||
+        error?.name === "AbortError" ||
+        error?.name === "CanceledError"
+      ) {
+        setMsgSafe("❌ El servidor tardó demasiado. Intenta nuevamente.");
       } else if (status === 400 || status === 401) {
-        const msg = err?.response?.data?.message;
-        setMsgSafe(msg ? `❌ ${msg}` : "❌ Credenciales inválidas");
+        /*
+         * No diferenciamos usuario inexistente de contraseña incorrecta.
+         */
+        setMsgSafe("❌ Credenciales inválidas");
       } else if (status === 403) {
-        const msg = err?.response?.data?.message;
-        setMsgSafe(msg ? `❌ ${msg}` : "❌ Acceso denegado");
+        setMsgSafe("❌ Acceso denegado");
       } else if (status === 429) {
-        const ra = Number(err?.response?.headers?.["retry-after"] ?? 0);
-        setMsgSafe(ra ? `❌ Demasiados intentos. Espera ${ra}s.` : "❌ Demasiados intentos.");
+        const retryAfter = Number(error?.response?.headers?.["retry-after"] ?? 0);
+
+        setMsgSafe(
+          retryAfter > 0
+            ? `❌ Demasiados intentos. Intenta nuevamente en ${retryAfter} segundos.`
+            : "❌ Demasiados intentos. Intenta nuevamente más tarde."
+        );
+      } else if (status >= 500) {
+        setMsgSafe("❌ El servidor no pudo procesar el inicio de sesión.");
       } else {
-        const msg = err?.response?.data?.message || err?.message || "Error de conexión";
-        setMsgSafe(`❌ ${msg}`);
+        setMsgSafe(message ? `❌ ${message}` : "❌ No fue posible conectar con el servidor.");
       }
     } finally {
       clearTimeout(timeoutId);
-      abortRef.current = null;
+
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
+
       setLoadingSafe(false);
     }
   };
 
+  /* ───────────────────────── UI ───────────────────────── */
+
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-ra-marron via-ra-terracotta to-ra-sand font-sans">
-      {/* Halo / difuminado WELI */}
+      {/* Halo WELI */}
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
         <div
           className="absolute -top-44 left-1/2 -translate-x-1/2 w-[920px] h-[920px] rounded-full blur-3xl opacity-35"
-          style={{
-            background: "radial-gradient(circle, rgba(170,80,19,0.55), transparent 60%)",
-          }}
+          style={{ background: "radial-gradient(circle, rgba(170,80,19,0.55), transparent 60%)" }}
         />
+
         <div
           className="absolute -bottom-56 -left-40 w-[860px] h-[860px] rounded-full blur-3xl opacity-30"
-          style={{
-            background: "radial-gradient(circle, rgba(109,88,41,0.75), transparent 60%)",
-          }}
+          style={{ background: "radial-gradient(circle, rgba(109,88,41,0.75), transparent 60%)" }}
         />
       </div>
 
-      {/* Overlay Loading */}
+      {/* Loading */}
       {isLoading && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-md">
           <div className="w-full max-w-md px-4">
@@ -418,9 +471,11 @@ export default function Login() {
                   decoding="async"
                   draggable={false}
                 />
+
                 <p className="text-white font-extrabold tracking-widest uppercase text-sm">
                   Ingresando...
                 </p>
+
                 <IsLoading />
               </div>
             </div>
@@ -431,7 +486,7 @@ export default function Login() {
       {/* Body */}
       <main className="flex-1 flex items-center justify-center px-4 py-10">
         <div className="flex w-full max-w-5xl overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm">
-          {/* Left image (desktop) */}
+          {/* Imagen izquierda */}
           <div className="w-full hidden md:block md:w-1/2">
             <div className="relative h-full">
               <img
@@ -442,11 +497,14 @@ export default function Login() {
                 decoding="async"
                 draggable={false}
               />
+
               <div className="absolute inset-0 bg-black/25" />
+
               <div className="absolute bottom-6 left-6 right-6">
                 <p className="text-white/90 text-lg font-extrabold tracking-wide">
                   Administración WELI
                 </p>
+
                 <p className="text-white/70 text-sm mt-1 leading-relaxed">
                   Orden, trazabilidad y control en un solo panel.
                 </p>
@@ -454,12 +512,13 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Right form */}
+          {/* Formulario */}
           <div className="w-full md:w-1/2 flex items-center justify-center py-10">
             <form
               onSubmit={handleLogin}
               className="w-full max-w-md px-6 sm:px-10 flex flex-col"
               autoComplete="on"
+              noValidate
             >
               <div className="flex flex-col items-center">
                 <img
@@ -470,9 +529,11 @@ export default function Login() {
                   decoding="async"
                   draggable={false}
                 />
+
                 <h2 className="mt-4 text-3xl text-white font-extrabold tracking-tight">
                   Ingreso Panel
                 </h2>
+
                 <p className="text-sm text-white/70 mt-2 text-center">
                   Entrarás automáticamente al panel según tu rol.
                 </p>
@@ -499,8 +560,12 @@ export default function Login() {
 
                   <input
                     name="nombre_usuario"
+                    type="text"
                     placeholder="Nombre de usuario"
                     autoComplete="username"
+                    maxLength={80}
+                    spellCheck={false}
+                    autoCapitalize="none"
                     className="bg-transparent text-white/90 placeholder-white/50 outline-none text-sm w-full h-full pr-5"
                     value={form.nombre_usuario}
                     onChange={handleChange}
@@ -509,7 +574,7 @@ export default function Login() {
                   />
                 </div>
 
-                {/* Password */}
+                {/* Contraseña */}
                 <div className="flex items-center w-full bg-transparent border border-white/20 h-12 rounded-full overflow-hidden pl-5 gap-3">
                   <svg
                     width="13"
@@ -530,6 +595,8 @@ export default function Login() {
                     type="password"
                     autoComplete="current-password"
                     placeholder="Contraseña"
+                    minLength={4}
+                    maxLength={200}
                     className="bg-transparent text-white/90 placeholder-white/50 outline-none text-sm w-full h-full pr-5"
                     value={form.password}
                     onChange={handleChange}
@@ -539,7 +606,7 @@ export default function Login() {
                 </div>
 
                 {mensaje && (
-                  <div className="text-center text-sm font-bold text-red-300">
+                  <div className="text-center text-sm font-bold text-red-300" role="alert">
                     {mensaje}
                   </div>
                 )}

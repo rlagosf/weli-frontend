@@ -28,11 +28,12 @@ const toArray = (resp) => {
 const isCanceled = (e) =>
   e?.name === "CanceledError" ||
   e?.code === "ERR_CANCELED" ||
-  String(e?.message || "").toLowerCase().includes("canceled");
+  String(e?.message || "")
+    .toLowerCase()
+    .includes("canceled");
 
 const getStatus = (e) => e?.status ?? e?.response?.status;
-const getMessage = (e, fallback = "Error") =>
-  e?.message || e?.data?.message || e?.response?.data?.message || fallback;
+const getMessage = (e, fallback = "Error") => e?.message || e?.data?.message || e?.response?.data?.message || fallback;
 
 // Normaliza URLs: genera ["/path", "/path/"] sin duplicar
 const withSlashVariants = (path) => {
@@ -337,7 +338,10 @@ export default function RegistroNoticias() {
   }, [estados]);
 
   const findEstadoIdByName = useMemo(() => {
-    const norm = (s) => String(s || "").trim().toLowerCase();
+    const norm = (s) =>
+      String(s || "")
+        .trim()
+        .toLowerCase();
     const byName = new Map(estados.map((e) => [norm(e.nombre), Number(e.id)]));
     return (name) => byName.get(norm(name)) ?? null;
   }, [estados]);
@@ -554,7 +558,7 @@ export default function RegistroNoticias() {
           imagen_preview:
             it?.imagen_base64 && it?.imagen_mime
               ? `data:${it.imagen_mime};base64,${it.imagen_base64}`
-              : thumbsRef.current[it?.id] ?? null,
+              : (thumbsRef.current[it?.id] ?? null),
 
           imagen_mime: it?.imagen_mime ?? null,
           imagen_base64: null,
@@ -874,7 +878,9 @@ export default function RegistroNoticias() {
   const cardBase = darkMode
     ? "bg-[#1f2937] border border-[#2b3341] hover:border-[#e82d89]"
     : "bg-white border border-[#eee] hover:border-[#e82d89]";
-  const inputBase = darkMode ? "bg-[#374151] text-white border border-gray-600" : "bg-gray-50 text-black border border-gray-300";
+  const inputBase = darkMode
+    ? "bg-[#374151] text-white border border-gray-600"
+    : "bg-gray-50 text-black border border-gray-300";
 
   const badgeEstadoClass = (id) => {
     const name = String(estadoNombre(id)).toLowerCase();
@@ -897,9 +903,15 @@ export default function RegistroNoticias() {
     }
 
     if (it?.imagen_bytes)
-      return <div className="w-full h-full flex items-center justify-center text-xs opacity-70 font-semibold">Cargando miniatura…</div>;
+      return (
+        <div className="w-full h-full flex items-center justify-center text-xs opacity-70 font-semibold">
+          Cargando miniatura…
+        </div>
+      );
 
-    return <div className="w-full h-full flex items-center justify-center text-xs opacity-70 font-semibold">Sin imagen</div>;
+    return (
+      <div className="w-full h-full flex items-center justify-center text-xs opacity-70 font-semibold">Sin imagen</div>
+    );
   };
 
   const isCardCreating = form.slotType === "card" && Number.isInteger(form.slotIndex);
@@ -958,7 +970,9 @@ export default function RegistroNoticias() {
                   </div>
 
                   <div className="mt-2 text-xl font-extrabold">{popupSlot.item.titulo}</div>
-                  <div className="mt-1 text-sm opacity-75 font-semibold">{popupSlot.item.resumen || popupSlot.item.slug}</div>
+                  <div className="mt-1 text-sm opacity-75 font-semibold">
+                    {popupSlot.item.resumen || popupSlot.item.slug}
+                  </div>
 
                   <div className="mt-3 text-sm font-semibold opacity-80">
                     Click para abrir {isArchivedItem(popupSlot.item) ? "(solo lectura)" : "y editar"}.
@@ -969,7 +983,9 @@ export default function RegistroNoticias() {
               <div className="flex flex-col items-center justify-center text-center gap-2">
                 <div>
                   <div className="text-lg font-extrabold">Crear anuncio principal</div>
-                  <div className="text-sm opacity-75 font-semibold">Este anuncio será publicado en primera plana al acceder al sitio</div>
+                  <div className="text-sm opacity-75 font-semibold">
+                    Este anuncio será publicado en primera plana al acceder al sitio
+                  </div>
                 </div>
 
                 <div className="mt-2 w-14 h-14 rounded-2xl bg-[#e82d89] text-white flex items-center justify-center shadow">
@@ -998,7 +1014,9 @@ export default function RegistroNoticias() {
                   {it ? (
                     <>
                       <div className="flex items-center justify-between gap-2">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full border text-xs font-bold ${badgeEstadoClass(it.estado_noticia_id)}`}>
+                        <span
+                          className={`inline-flex items-center px-3 py-1 rounded-full border text-xs font-bold ${badgeEstadoClass(it.estado_noticia_id)}`}
+                        >
                           {isArchivedItem(it) ? "ARCHIVADA" : estadoNombre(it.estado_noticia_id)}
                         </span>
                         <span className="text-xs opacity-70 font-semibold">#{it.id}</span>
@@ -1043,7 +1061,9 @@ export default function RegistroNoticias() {
                   title="Archivada: solo lectura"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full border text-xs font-bold ${badgeEstadoClass(it.estado_noticia_id)}`}>
+                    <span
+                      className={`inline-flex items-center px-3 py-1 rounded-full border text-xs font-bold ${badgeEstadoClass(it.estado_noticia_id)}`}
+                    >
                       ARCHIVADA
                     </span>
                     <span className="text-xs opacity-70 font-semibold">#{it.id}</span>
@@ -1061,7 +1081,9 @@ export default function RegistroNoticias() {
               ))}
             </div>
           ) : (
-            <div className={`rounded-xl p-4 border ${darkMode ? "border-white/10 bg-white/5" : "border-black/10 bg-black/5"}`}>
+            <div
+              className={`rounded-xl p-4 border ${darkMode ? "border-white/10 bg-white/5" : "border-black/10 bg-black/5"}`}
+            >
               <div className="text-sm font-semibold opacity-80">No hay noticias anteriores todavía.</div>
             </div>
           )}
@@ -1080,8 +1102,16 @@ export default function RegistroNoticias() {
           >
             <div className="p-4 sm:p-5 flex items-center justify-between">
               <div className="font-extrabold">
-                {form.id ? `Editar noticia #${form.id}` : form.slotType === "popup" ? "Crear POPUP" : `Crear noticia (slot #${form.slotIndex})`}
-                {isReadOnly && <div className="mt-1 text-xs font-bold text-red-300">ARCHIVADA · Solo lectura (no se permite editar)</div>}
+                {form.id
+                  ? `Editar noticia #${form.id}`
+                  : form.slotType === "popup"
+                    ? "Crear POPUP"
+                    : `Crear noticia (slot #${form.slotIndex})`}
+                {isReadOnly && (
+                  <div className="mt-1 text-xs font-bold text-red-300">
+                    ARCHIVADA · Solo lectura (no se permite editar)
+                  </div>
+                )}
               </div>
 
               <button
@@ -1104,7 +1134,9 @@ export default function RegistroNoticias() {
             ) : (
               <div className="p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4">
                 {/* IZQUIERDA */}
-                <div className={`${darkMode ? "bg-[#111827]" : "bg-white"} rounded-xl p-4 border ${darkMode ? "border-white/10" : "border-black/10"}`}>
+                <div
+                  className={`${darkMode ? "bg-[#111827]" : "bg-white"} rounded-xl p-4 border ${darkMode ? "border-white/10" : "border-black/10"}`}
+                >
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs font-bold opacity-75">Título</label>
@@ -1165,7 +1197,9 @@ export default function RegistroNoticias() {
                         className={`w-full mt-1 p-2 rounded ${inputBase} ${isReadOnly ? "opacity-70 cursor-not-allowed" : ""}`}
                         value={form.estado_noticia_id ?? ""}
                         disabled={isReadOnly}
-                        onChange={(e) => setForm((p) => ({ ...p, estado_noticia_id: e.target.value ? Number(e.target.value) : null }))}
+                        onChange={(e) =>
+                          setForm((p) => ({ ...p, estado_noticia_id: e.target.value ? Number(e.target.value) : null }))
+                        }
                       >
                         <option value="">— Seleccionar —</option>
                         {estados.map((es) => (
@@ -1178,8 +1212,12 @@ export default function RegistroNoticias() {
 
                     <div>
                       <label className="text-xs font-bold opacity-75">Pinned</label>
-                      <div className={`mt-1 p-2 rounded border ${darkMode ? "border-white/10" : "border-black/10"} flex items-center justify-between`}>
-                        <label className={`flex items-center gap-2 text-sm font-semibold ${isReadOnly ? "opacity-70" : ""}`}>
+                      <div
+                        className={`mt-1 p-2 rounded border ${darkMode ? "border-white/10" : "border-black/10"} flex items-center justify-between`}
+                      >
+                        <label
+                          className={`flex items-center gap-2 text-sm font-semibold ${isReadOnly ? "opacity-70" : ""}`}
+                        >
                           <input
                             type="checkbox"
                             checked={!!form.pinned}
@@ -1202,13 +1240,21 @@ export default function RegistroNoticias() {
                         />
                       </div>
 
-                      {isCardCreating && <div className="text-xs opacity-70 mt-1">Slot fijo: esta noticia quedará en el slot #{form.slotIndex}.</div>}
+                      {isCardCreating && (
+                        <div className="text-xs opacity-70 mt-1">
+                          Slot fijo: esta noticia quedará en el slot #{form.slotIndex}.
+                        </div>
+                      )}
                     </div>
 
                     <div className="md:col-span-2">
                       <label className="text-xs font-bold opacity-75">Popup</label>
-                      <div className={`mt-1 p-3 rounded border ${darkMode ? "border-white/10 bg-white/5" : "border-black/10 bg-black/5"}`}>
-                        <label className={`flex items-center gap-2 text-sm font-semibold ${isReadOnly ? "opacity-70" : ""}`}>
+                      <div
+                        className={`mt-1 p-3 rounded border ${darkMode ? "border-white/10 bg-white/5" : "border-black/10 bg-black/5"}`}
+                      >
+                        <label
+                          className={`flex items-center gap-2 text-sm font-semibold ${isReadOnly ? "opacity-70" : ""}`}
+                        >
                           <input
                             type="checkbox"
                             checked={!!form.is_popup}
@@ -1217,7 +1263,11 @@ export default function RegistroNoticias() {
                               setForm((p) => {
                                 const checked = e.target.checked;
                                 const nextEstado = p.estado_noticia_id ?? getDefaultEstadoForSlot("popup");
-                                return { ...p, is_popup: checked, estado_noticia_id: checked ? nextEstado : p.estado_noticia_id };
+                                return {
+                                  ...p,
+                                  is_popup: checked,
+                                  estado_noticia_id: checked ? nextEstado : p.estado_noticia_id,
+                                };
                               })
                             }
                           />
@@ -1248,7 +1298,9 @@ export default function RegistroNoticias() {
                           </div>
                         </div>
 
-                        <div className="text-xs opacity-70 mt-2">Si marcas popup, el backend exige inicio. Fin es opcional.</div>
+                        <div className="text-xs opacity-70 mt-2">
+                          Si marcas popup, el backend exige inicio. Fin es opcional.
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1273,7 +1325,9 @@ export default function RegistroNoticias() {
                       onClick={handleSave}
                       disabled={saving || archiving || isReadOnly}
                       className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-white ${
-                        saving || archiving || isReadOnly ? "bg-[#e82d89]/50 cursor-not-allowed" : "bg-[#e82d89] hover:bg-pink-700"
+                        saving || archiving || isReadOnly
+                          ? "bg-[#e82d89]/50 cursor-not-allowed"
+                          : "bg-[#e82d89] hover:bg-pink-700"
                       }`}
                     >
                       <Save size={16} />
@@ -1283,7 +1337,9 @@ export default function RegistroNoticias() {
                 </div>
 
                 {/* DERECHA */}
-                <div className={`${darkMode ? "bg-[#111827]" : "bg-white"} rounded-xl p-4 border ${darkMode ? "border-white/10" : "border-black/10"}`}>
+                <div
+                  className={`${darkMode ? "bg-[#111827]" : "bg-white"} rounded-xl p-4 border ${darkMode ? "border-white/10" : "border-black/10"}`}
+                >
                   <div className="flex items-center justify-between">
                     <div className="font-bold">Imagen</div>
 
@@ -1320,16 +1376,22 @@ export default function RegistroNoticias() {
                     </div>
                   </div>
 
-                  <div className={`mt-3 rounded-xl overflow-hidden border ${darkMode ? "border-white/10 bg-white/5" : "border-black/10 bg-black/5"}`}>
+                  <div
+                    className={`mt-3 rounded-xl overflow-hidden border ${darkMode ? "border-white/10 bg-white/5" : "border-black/10 bg-black/5"}`}
+                  >
                     {form.imagen_preview ? (
                       <img src={form.imagen_preview} alt="Preview" className="w-full h-48 object-cover" />
                     ) : (
-                      <div className="h-48 flex items-center justify-center text-xs font-semibold opacity-70">Sin imagen</div>
+                      <div className="h-48 flex items-center justify-center text-xs font-semibold opacity-70">
+                        Sin imagen
+                      </div>
                     )}
                   </div>
 
                   <div className="mt-2 text-xs opacity-75 font-semibold">
-                    {form.imagen_bytes ? `Optimizada: ~${Math.round(form.imagen_bytes / 1024)}KB (${form.imagen_mime})` : "Tip: ideal < 600KB"}
+                    {form.imagen_bytes
+                      ? `Optimizada: ~${Math.round(form.imagen_bytes / 1024)}KB (${form.imagen_mime})`
+                      : "Tip: ideal < 600KB"}
                   </div>
 
                   <div className="mt-4 p-3 rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5">
@@ -1347,7 +1409,8 @@ export default function RegistroNoticias() {
             )}
 
             <div className="px-4 sm:px-6 pb-4 text-xs opacity-70 font-semibold">
-              Archivadas bajan a “Noticias anteriores” y no se pueden editar (pero sí abrir en modo lectura, porque somos civilizados).
+              Archivadas bajan a “Noticias anteriores” y no se pueden editar (pero sí abrir en modo lectura, porque
+              somos civilizados).
             </div>
           </div>
         </div>

@@ -1,35 +1,29 @@
 // src/hooks/useInactividadLogout.jsx
+
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import api, { getToken, clearToken } from "../services/api";
+import { jwtDecode } from "jwt-decode";
+import { getToken, clearToken } from "../services/api";
 
-/** Decode liviano (sin dependencia extra) */
-function decodeJwt(token) {
-  try {
-    const [, payload] = String(token).split(".");
-    if (!payload) return null;
-    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
+const USER_INFO_KEY = "weli_user_info";
 
 function getUserModeFromToken(token) {
-  const decoded = decodeJwt(token);
-  const type = String(decoded?.type ?? "").toLowerCase();
-  return type === "apoderado" ? "apoderado" : "admin";
+  try {
+    const decoded = jwtDecode(token);
+    const type = String(decoded?.type ?? decoded?.user?.type ?? "").trim().toLowerCase();
+
+    return type === "apoderado" ? "apoderado" : "admin";
+  } catch {
+    return "admin";
+  }
 }
 
 export default function useInactividadLogout({
   timeoutMs = 5 * 60 * 1000,
   pingMs = 15 * 1000,
-
-  // ✅ WELI keys
   storageKey = "weli_lastActivity",
   forceKey = "weli_forceLogout",
-
-  // ✅ Rutas por tipo de usuario
+  redirectTo,
   redirectAdminTo = "/login",
   redirectApoderadoTo = "/login-apoderado",
 } = {}) {
@@ -38,148 +32,267 @@ export default function useInactividadLogout({
   const timerRef = useRef(null);
   const bcRef = useRef(null);
   const lastSetRef = useRef(0);
+  const loggingOutRef = useRef(false);
 
-  const markActivity = (ts = Date.now()) => {
-    if (ts - lastSetRef.current < 800) return;
-    lastSetRef.current = ts;
+  /* ───────────────────────── Activity ───────────────────────── */
+
+  const markActivity = (timestamp = Date.now()) => {
+    if (!getToken()) return;
+
+    if (timestamp - lastSetRef.current < 800) {
+      return;
+    }
+
+    lastSetRef.current = timestamp;
+
     try {
-      localStorage.setItem(storageKey, String(ts));
+      localStorage.setItem(storageKey, String(timestamp));
     } catch {}
   };
 
-  const resolveRedirect = () => {
+  /* ───────────────────────── Logout helpers ───────────────────────── */
+
+  const getRedirectBeforeLogout = () => {
+    if (redirectTo) return redirectTo;
+
     const token = getToken();
-    if (!token) return redirectAdminTo;
+
+    if (!token) {
+      return redirectAdminTo;
+    }
+
     return getUserModeFromToken(token) === "apoderado"
       ? redirectApoderadoTo
       : redirectAdminTo;
   };
 
-  const doLogoutEverywhere = () => {
-    clearToken();
-
+  const clearLocalSession = () => {
     try {
-      localStorage.setItem(forceKey, String(Date.now()));
+      clearToken();
     } catch {}
 
-    const to = resolveRedirect();
+    try {
+      localStorage.removeItem(USER_INFO_KEY);
+      localStorage.removeItem("apoderado_must_change_password");
+      localStorage.removeItem(storageKey);
+    } catch {}
+  };
+
+  /**
+   * Ejecuta el logout local.
+   *
+   * broadcast=true:
+   * comunica logout a otras pestañas.
+   *
+   * broadcast=false:
+   * logout recibido desde otra pestaña;
+   * no vuelve a emitir para evitar loops.
+   */
+  const doLogout = ({ broadcast = false } = {}) => {
+    if (loggingOutRef.current) return;
+
+    loggingOutRef.current = true;
+
+    /*
+     * Resolver destino ANTES de eliminar el JWT.
+     */
+    const destination = getRedirectBeforeLogout();
+
+    clearLocalSession();
+
+    if (broadcast) {
+      /*
+       * Storage event para pestañas que no soporten
+       * BroadcastChannel.
+       */
+      try {
+        localStorage.setItem(forceKey, String(Date.now()));
+      } catch {}
+
+      /*
+       * Canal moderno entre pestañas.
+       */
+      try {
+        bcRef.current?.postMessage("forceLogout");
+      } catch {}
+    }
 
     try {
-      navigate(to, { replace: true });
+      navigate(destination, { replace: true });
     } catch {
-      window.location.href = to;
+      window.location.replace(destination);
     }
   };
 
+  /* ───────────────────────── Inactivity ───────────────────────── */
+
   const checkInactivity = () => {
     const token = getToken();
-    if (!token) return;
 
-    let last = 0;
+    if (!token || loggingOutRef.current) {
+      return;
+    }
+
+    let lastActivity = 0;
+
     try {
-      last = Number(localStorage.getItem(storageKey) || "0");
+      lastActivity = Number(localStorage.getItem(storageKey) || "0");
     } catch {
-      last = 0;
+      lastActivity = 0;
     }
 
     const now = Date.now();
 
-    if (!last) {
+    if (!Number.isFinite(lastActivity) || lastActivity <= 0) {
       markActivity(now);
       return;
     }
 
-    if (now - last >= timeoutMs) doLogoutEverywhere();
+    if (now - lastActivity >= timeoutMs) {
+      doLogout({ broadcast: true });
+    }
   };
 
+  /* ───────────────────────── Lifecycle ───────────────────────── */
+
   useEffect(() => {
-    if (getToken()) markActivity();
+    loggingOutRef.current = false;
 
-    // Requests cuentan como actividad (solo si hay token)
-    const interceptorId = api.interceptors.request.use((cfg) => {
-      if (getToken()) markActivity();
-      return cfg;
-    });
+    /*
+     * Al montar una zona privada con token válido,
+     * comenzamos una nueva ventana de actividad.
+     *
+     * Esto evita que una marca antigua provoque
+     * logout instantáneo después de iniciar sesión.
+     */
+    if (getToken()) {
+      markActivity(Date.now());
+    }
 
-    const onAnyActivity = () => markActivity();
-    const optsPassive = { passive: true };
     const doc = document;
+    const passive = { passive: true };
 
-    doc.addEventListener("click", onAnyActivity, optsPassive);
-    doc.addEventListener("keydown", onAnyActivity, optsPassive);
-    doc.addEventListener("pointerdown", onAnyActivity, optsPassive);
-    doc.addEventListener("pointermove", onAnyActivity, optsPassive);
-    doc.addEventListener("touchstart", onAnyActivity, optsPassive);
-    doc.addEventListener("touchmove", onAnyActivity, optsPassive);
-    window.addEventListener("mousemove", onAnyActivity, optsPassive);
-    window.addEventListener("wheel", onAnyActivity, optsPassive);
+    const onActivity = () => markActivity(Date.now());
 
-    const onScrollCapture = () => markActivity();
-    doc.addEventListener("scroll", onScrollCapture, true);
+    /*
+     * Actividad humana.
+     *
+     * No usamos requests HTTP como actividad porque
+     * polling/background requests no deberían mantener
+     * una sesión viva indefinidamente.
+     */
+    doc.addEventListener("click", onActivity, passive);
+    doc.addEventListener("keydown", onActivity);
+    doc.addEventListener("pointerdown", onActivity, passive);
+    doc.addEventListener("pointermove", onActivity, passive);
+    doc.addEventListener("touchstart", onActivity, passive);
+    doc.addEventListener("scroll", onActivity, true);
 
-    const onVis = () => {
-      if (!doc.hidden) markActivity();
+    window.addEventListener("mousemove", onActivity, passive);
+    window.addEventListener("wheel", onActivity, passive);
+
+    const onVisibilityChange = () => {
+      if (!doc.hidden) markActivity(Date.now());
     };
-    doc.addEventListener("visibilitychange", onVis);
 
-    const onFocus = () => markActivity();
+    const onFocus = () => {
+      markActivity(Date.now());
+    };
+
+    doc.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("focus", onFocus);
 
-    // Cross-tab logout via storage
-    const onStorage = (e) => {
-      if (e.key === forceKey && e.newValue) doLogoutEverywhere();
+    /* ───────── Cross-tab: localStorage ───────── */
+
+    const onStorage = (event) => {
+      if (event.key === forceKey && event.newValue) {
+        doLogout({ broadcast: false });
+      }
+
+      /*
+       * Si otra pestaña registra actividad,
+       * no hace falta reescribir storage:
+       * todas comparten el mismo localStorage.
+       */
     };
+
     window.addEventListener("storage", onStorage);
 
-    // BroadcastChannel
+    /* ───────── Cross-tab: BroadcastChannel ───────── */
+
     try {
-      const channelName = `weli_bc_${forceKey}`;
-      bcRef.current = new BroadcastChannel(channelName);
-      bcRef.current.onmessage = (msg) => {
-        if (msg?.data === "forceLogout") doLogoutEverywhere();
-        if (msg?.data === "activityPing") markActivity();
+      bcRef.current = new BroadcastChannel(`weli_bc_${forceKey}`);
+
+      bcRef.current.onmessage = (event) => {
+        if (event?.data === "forceLogout") {
+          doLogout({ broadcast: false });
+        }
       };
     } catch {
       bcRef.current = null;
     }
 
-    timerRef.current = setInterval(checkInactivity, pingMs);
+    /* ───────── Timer ───────── */
+
+    timerRef.current = window.setInterval(checkInactivity, pingMs);
+
+    /*
+     * No llamamos a logout inmediatamente:
+     * markActivity() acaba de inicializar la sesión actual.
+     */
     checkInactivity();
 
     return () => {
-      try { clearInterval(timerRef.current); } catch {}
-      try { api.interceptors.request.eject(interceptorId); } catch {}
-      try { window.removeEventListener("storage", onStorage); } catch {}
+      if (timerRef.current) {
+        window.clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
 
-      try {
-        doc.removeEventListener("click", onAnyActivity, optsPassive);
-        doc.removeEventListener("keydown", onAnyActivity, optsPassive);
-        doc.removeEventListener("pointerdown", onAnyActivity, optsPassive);
-        doc.removeEventListener("pointermove", onAnyActivity, optsPassive);
-        doc.removeEventListener("touchstart", onAnyActivity, optsPassive);
-        doc.removeEventListener("touchmove", onAnyActivity, optsPassive);
-        doc.removeEventListener("scroll", onScrollCapture, true);
-        doc.removeEventListener("visibilitychange", onVis);
-      } catch {}
+      doc.removeEventListener("click", onActivity);
+      doc.removeEventListener("keydown", onActivity);
+      doc.removeEventListener("pointerdown", onActivity);
+      doc.removeEventListener("pointermove", onActivity);
+      doc.removeEventListener("touchstart", onActivity);
+      doc.removeEventListener("scroll", onActivity, true);
+      doc.removeEventListener("visibilitychange", onVisibilityChange);
 
-      try { window.removeEventListener("mousemove", onAnyActivity, optsPassive); } catch {}
-      try { window.removeEventListener("wheel", onAnyActivity, optsPassive); } catch {}
-      try { window.removeEventListener("focus", onFocus); } catch {}
+      window.removeEventListener("mousemove", onActivity);
+      window.removeEventListener("wheel", onActivity);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("storage", onStorage);
 
       if (bcRef.current) {
-        try { bcRef.current.close(); } catch {}
+        try {
+          bcRef.current.close();
+        } catch {}
+
         bcRef.current = null;
       }
     };
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeoutMs, pingMs, storageKey, forceKey, redirectAdminTo, redirectApoderadoTo]);
+  }, [
+    timeoutMs,
+    pingMs,
+    storageKey,
+    forceKey,
+    redirectTo,
+    redirectAdminTo,
+    redirectApoderadoTo,
+  ]);
+
+  /* ───────────────────────── Public API ───────────────────────── */
 
   const forceLogout = () => {
-    try {
-      bcRef.current?.postMessage("forceLogout");
-    } catch {}
-    doLogoutEverywhere();
+    doLogout({ broadcast: true });
   };
 
-  return { forceLogout, markActivityNow: () => markActivity() };
+  const markActivityNow = () => {
+    markActivity(Date.now());
+  };
+
+  return {
+    forceLogout,
+    markActivityNow,
+  };
 }

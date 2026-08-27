@@ -19,8 +19,7 @@ export default function Pagos() {
   const location = useLocation();
   useMobileAutoScrollTop();
 
-  const selectedRut =
-    location.state?.rut || new URLSearchParams(location.search).get("rut") || "";
+  const selectedRut = location.state?.rut || new URLSearchParams(location.search).get("rut") || "";
 
   const currentPath = location.pathname + location.search;
 
@@ -28,14 +27,9 @@ export default function Pagos() {
      Breadcrumb
   ───────────────────────────── */
   useEffect(() => {
-    const prev = Array.isArray(location.state?.breadcrumb)
-      ? location.state.breadcrumb
-      : null;
+    const prev = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : null;
 
-    const alreadyOk =
-      Array.isArray(prev) &&
-      prev.length >= 1 &&
-      prev[prev.length - 1]?.label === "Ingresar pagos";
+    const alreadyOk = Array.isArray(prev) && prev.length >= 1 && prev[prev.length - 1]?.label === "Ingresar pagos";
 
     if (alreadyOk) return;
 
@@ -140,15 +134,11 @@ export default function Pagos() {
       if (!data) return null;
       if (data.errors?.fieldErrors) {
         const fe = data.errors.fieldErrors;
-        const msgs = Object.entries(fe).flatMap(([k, arr]) =>
-          (arr || []).map((m) => `[${k}] ${m}`)
-        );
+        const msgs = Object.entries(fe).flatMap(([k, arr]) => (arr || []).map((m) => `[${k}] ${m}`));
         if (msgs.length) return msgs.join(" | ");
       }
       if (Array.isArray(data.detail) && data.detail.length) {
-        return data.detail
-          .map((d) => `[${(d.loc || []).join(".")}] ${d.msg}`)
-          .join(" | ");
+        return data.detail.map((d) => `[${(d.loc || []).join(".")}] ${d.msg}`).join(" | ");
       }
       if (typeof data.detail === "string") return data.detail;
       if (typeof data.message === "string") return data.message;
@@ -162,11 +152,7 @@ export default function Pagos() {
   };
 
   const resolveCategoriaNombre = (j) => {
-    const fromObj =
-      j?.categoria?.nombre ??
-      j?.categoria?.descripcion ??
-      j?.categoria?.label ??
-      null;
+    const fromObj = j?.categoria?.nombre ?? j?.categoria?.descripcion ?? j?.categoria?.label ?? null;
     if (fromObj && String(fromObj).trim()) return String(fromObj).trim();
 
     const fromFlat = j?.categoria_nombre ?? j?.nombre_categoria ?? null;
@@ -269,11 +255,7 @@ export default function Pagos() {
       const rut = String(j?.rut_jugador ?? j?.rut ?? "");
       const nombre = String(j?.nombre_jugador ?? j?.nombre ?? j?.nombre_completo ?? "");
       const cat = resolveCategoriaNombre(j);
-      return (
-        rut.includes(f) ||
-        nombre.toLowerCase().includes(f) ||
-        String(cat).toLowerCase().includes(f)
-      );
+      return rut.includes(f) || nombre.toLowerCase().includes(f) || String(cat).toLowerCase().includes(f);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jugadores, filtro, categoriasMap]);
@@ -351,13 +333,7 @@ export default function Pagos() {
     setError("");
     setIsSubmitting(true);
 
-    if (
-      !selectedRut ||
-      !form.tipo_pago_id ||
-      !form.monto ||
-      !form.fecha_pago ||
-      !form.medio_pago_id
-    ) {
+    if (!selectedRut || !form.tipo_pago_id || !form.monto || !form.fecha_pago || !form.medio_pago_id) {
       setError("Debes completar todos los campos obligatorios.");
       setIsSubmitting(false);
       return;
@@ -419,14 +395,7 @@ export default function Pagos() {
     "px-4 py-2 rounded-xl border transition font-semibold text-sm hover:bg-black/10 dark:hover:bg-white/10";
 
   const disableSubmit = useMemo(() => {
-    return (
-      !selectedRut ||
-      !form.tipo_pago_id ||
-      !form.monto ||
-      !form.fecha_pago ||
-      !form.medio_pago_id ||
-      isSubmitting
-    );
+    return !selectedRut || !form.tipo_pago_id || !form.monto || !form.fecha_pago || !form.medio_pago_id || isSubmitting;
   }, [selectedRut, form, isSubmitting]);
 
   /* ─────────────────────────────
@@ -508,9 +477,7 @@ export default function Pagos() {
                                 darkMode ? "border-[#334155]" : "border-gray-200"
                               }`}
                             >
-                              <span className="font-semibold">
-                                {formatRutWithDV(String(rutRaw ?? ""))}
-                              </span>
+                              <span className="font-semibold">{formatRutWithDV(String(rutRaw ?? ""))}</span>
                             </td>
 
                             <td
@@ -562,9 +529,7 @@ export default function Pagos() {
             Volver a jugadores
           </button>
 
-          <div className="text-sm font-semibold">
-            RUT: {formatRutWithDV(String(selectedRut))}
-          </div>
+          <div className="text-sm font-semibold">RUT: {formatRutWithDV(String(selectedRut))}</div>
         </div>
 
         <h2 className="text-2xl font-bold mb-6 text-center">Registrar Pago</h2>
@@ -663,9 +628,7 @@ export default function Pagos() {
               type="submit"
               disabled={disableSubmit}
               className={`w-full py-3 rounded-xl transition font-semibold ${
-                disableSubmit
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-[#e82d89] text-white hover:bg-[#c61f74]"
+                disableSubmit ? "bg-gray-400 cursor-not-allowed" : "bg-[#e82d89] text-white hover:bg-[#c61f74]"
               }`}
             >
               {isSubmitting ? "Guardando..." : "Guardar"}

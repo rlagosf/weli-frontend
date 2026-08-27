@@ -3,12 +3,7 @@ import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useTheme } from "../../context/ThemeContext";
 import { jwtDecode } from "jwt-decode";
-import {
-  WalletCards as WalletIcon,
-  Users,
-  CreditCard,
-  BarChart3,
-} from "lucide-react";
+import { WalletCards as WalletIcon, Users, CreditCard, BarChart3 } from "lucide-react";
 import { getToken, clearToken } from "../../services/api";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
@@ -20,14 +15,14 @@ export default function EstadosCuenta() {
   useEffect(() => {
     try {
       const token = getToken();
-      if (!token) throw new Error('no-token');
+      if (!token) throw new Error("no-token");
 
       const decoded = jwtDecode(token);
       const now = Math.floor(Date.now() / 1000);
 
       if (!decoded?.exp || decoded.exp <= now) {
         clearToken();
-        navigate('/login', { replace: true });
+        navigate("/login", { replace: true });
         return;
       }
 
@@ -35,40 +30,40 @@ export default function EstadosCuenta() {
       const rol = Number.isFinite(Number(rawRol)) ? Number(rawRol) : 0;
 
       if (rol !== 1) {
-        navigate('/admin', { replace: true });
+        navigate("/admin", { replace: true });
         return;
       }
     } catch {
       clearToken();
-      navigate('/login', { replace: true });
+      navigate("/login", { replace: true });
     }
   }, [navigate]);
 
   useMobileAutoScrollTop();
 
   // 🎨 Estilos según tema (alineados al dashboard / configuración)
-  const estiloFondo = darkMode ? 'bg-[#111827] text-white' : 'bg-white text-[#1d0b0b]';
+  const estiloFondo = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";
 
   // ✅ Ajuste: acento WELI (antes #e82d89 de RAFC)
   const cardBase = darkMode
-    ? 'bg-[#1f2937] border border-[#2b3341] hover:border-[#24C6FF]'
-    : 'bg-white border border-[#eee] hover:border-[#24C6FF]';
+    ? "bg-[#1f2937] border border-[#2b3341] hover:border-[#24C6FF]"
+    : "bg-white border border-[#eee] hover:border-[#24C6FF]";
 
   // 📚 Rutas del módulo financiero con íconos
   const modulosFinancieros = [
     {
-      nombre: 'Jugadores con mensualidad vencida',
-      ruta: '/admin/modulo-financiero/jugadores-pendientes',
+      nombre: "Jugadores con mensualidad vencida",
+      ruta: "/admin/modulo-financiero/jugadores-pendientes",
       Icon: Users,
     },
     {
-      nombre: 'Pagos centralizados',
-      ruta: '/admin/modulo-financiero/pagos-centralizados',
+      nombre: "Pagos centralizados",
+      ruta: "/admin/modulo-financiero/pagos-centralizados",
       Icon: CreditCard,
     },
     {
-      nombre: 'Power BI Finanzas (gráficos)',
-      ruta: '/admin/modulo-financiero/power-bi',
+      nombre: "Power BI Finanzas (gráficos)",
+      ruta: "/admin/modulo-financiero/power-bi",
       Icon: BarChart3,
     },
   ];
@@ -77,7 +72,7 @@ export default function EstadosCuenta() {
     <div className={`${estiloFondo} min-h-[calc(100vh-100px)] px-4 pt-4 pb-16 font-weli`}>
       {/* 💰 Título principal del módulo financiero */}
       <h2 className="text-2xl font-bold mb-8 text-center flex items-center justify-center gap-2">
-         Módulo Financiero — Estado de Cuenta
+        Módulo Financiero — Estado de Cuenta
       </h2>
 
       {/* 🗂 Tarjetas de acceso a los submódulos (igual look&feel que Configuración) */}

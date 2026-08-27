@@ -18,10 +18,10 @@ export default function IsLoading() {
   }, []);
 
   // 🎨 Paleta WELI (hex directos para estilos inline)
-  const weliCopper = "#aa5013";     // ra.fucsia (acento cobre)
+  const weliCopper = "#aa5013"; // ra.fucsia (acento cobre)
   const weliTerracotta = "#e2773b"; // ra.terracotta
-  const weliSand = "#ffdda1";       // ra.sand
-  const weliCream = "#e8dac4";      // ra.cream
+  const weliSand = "#ffdda1"; // ra.sand
+  const weliCream = "#e8dac4"; // ra.cream
 
   // Fondo/track según modo, pero coherente con WELI
   const backgroundColor = darkMode ? "#0f0b06" : weliCream;
@@ -114,9 +114,7 @@ export default function IsLoading() {
               rgba(170,80,19,0) 100%
             )`,
             animation: "weli-indeterminate 1.1s ease-in-out infinite",
-            boxShadow: darkMode
-              ? "0 0 16px rgba(170,80,19,0.45)"
-              : "0 0 12px rgba(109,88,41,0.22)",
+            boxShadow: darkMode ? "0 0 16px rgba(170,80,19,0.45)" : "0 0 12px rgba(109,88,41,0.22)",
           }}
         />
         <div

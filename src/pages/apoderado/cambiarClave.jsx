@@ -34,8 +34,7 @@ export default function CambiarClaveApoderado() {
     const st = getErrStatus(err);
     const data = getErrData(err);
 
-    const backendMsg =
-      data?.message || data?.detail || data?.error || err?.message || null;
+    const backendMsg = data?.message || data?.detail || data?.error || err?.message || null;
 
     if (st === 401 || st === 403) {
       return "❌ Clave actual incorrecta o sesión inválida.";
@@ -102,9 +101,7 @@ export default function CambiarClaveApoderado() {
     <div className="max-w-md">
       <form onSubmit={onSubmit} className="mt-5 space-y-4">
         <div>
-          <label className="text-xs font-black tracking-[0.35em] uppercase text-black/60">
-            Contraseña actual
-          </label>
+          <label className="text-xs font-black tracking-[0.35em] uppercase text-black/60">Contraseña actual</label>
           <input
             name="current_password"
             type="password"
@@ -161,11 +158,7 @@ export default function CambiarClaveApoderado() {
         </button>
 
         {mensaje && (
-          <p
-            className={`text-sm font-extrabold ${
-              mensaje.startsWith("✅") ? "text-green-700" : "text-red-700"
-            }`}
-          >
+          <p className={`text-sm font-extrabold ${mensaje.startsWith("✅") ? "text-green-700" : "text-red-700"}`}>
             {mensaje}
           </p>
         )}

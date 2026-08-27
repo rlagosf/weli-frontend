@@ -30,8 +30,7 @@ function once(key, fn) {
   return p;
 }
 
-const normalizeBase = (u) =>
-  String(u || "").endsWith("/") ? String(u).slice(0, -1) : String(u);
+const normalizeBase = (u) => (String(u || "").endsWith("/") ? String(u).slice(0, -1) : String(u));
 
 const variants = (base) => {
   const b = String(base || "");
@@ -73,9 +72,7 @@ export default function MediosPago() {
   // ✅ Estrategia dorada: árbol actual
   const dashboardBase = useMemo(() => {
     const p = location.pathname || "";
-    return p.startsWith("/super-dashboard/admin/dashboard")
-      ? "/super-dashboard/admin/dashboard"
-      : "/admin";
+    return p.startsWith("/super-dashboard/admin/dashboard") ? "/super-dashboard/admin/dashboard" : "/admin";
   }, [location.pathname]);
 
   const configPath = useMemo(() => `${dashboardBase}/configuracion`, [dashboardBase]);
@@ -469,9 +466,7 @@ export default function MediosPago() {
 
     const danger =
       "rounded-2xl border px-5 py-4 font-semibold " +
-      (darkMode
-        ? "border-red-200/20 bg-red-500/10 text-red-100"
-        : "border-red-200 bg-red-50 text-red-700");
+      (darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
 
     const ok =
       "rounded-2xl border px-5 py-4 font-semibold " +
@@ -485,9 +480,7 @@ export default function MediosPago() {
 
     const pill =
       "inline-flex items-center px-2 py-1 rounded-full text-xs font-bold border " +
-      (darkMode
-        ? "bg-black/20 border-white/15 text-white/75"
-        : "bg-white/60 border-ra-marron/15 text-ra-marron/70");
+      (darkMode ? "bg-black/20 border-white/15 text-white/75" : "bg-white/60 border-ra-marron/15 text-ra-marron/70");
 
     return {
       shell,
@@ -512,9 +505,7 @@ export default function MediosPago() {
     <div className={`${ui.shell} min-h-screen font-sans`}>
       {/* Header tipo SuperDashboard */}
       <header className="px-6 pt-6 text-center">
-        <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>
-          Medios de Pago
-        </h1>
+        <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>Medios de Pago</h1>
         <p className={`text-sm mt-2 ${ui.subText}`}>
           Administra el catálogo de medios de pago (crear, editar, eliminar).
         </p>
@@ -549,9 +540,7 @@ export default function MediosPago() {
                           type="button"
                           className="px-3 py-1 rounded-lg text-xs font-extrabold border transition hover:brightness-110"
                           style={{
-                            borderColor: darkMode
-                              ? "rgba(255,255,255,0.18)"
-                              : "rgba(109,88,41,0.18)",
+                            borderColor: darkMode ? "rgba(255,255,255,0.18)" : "rgba(109,88,41,0.18)",
                             background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.65)",
                           }}
                           onClick={() => {
@@ -698,11 +687,7 @@ export default function MediosPago() {
           {!!error && <div className={ui.danger}>{error}</div>}
         </div>
 
-        <Modal
-          visible={mostrarModal}
-          onConfirm={confirmarEliminacion}
-          onCancel={() => setMostrarModal(false)}
-        />
+        <Modal visible={mostrarModal} onConfirm={confirmarEliminacion} onCancel={() => setMostrarModal(false)} />
       </main>
     </div>
   );

@@ -2,7 +2,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { loginApoderado as loginService } from "../../services/auth";
-import Footer from "../../components/footer";
 import IsLoading from "../../components/isLoading";
 
 import logoOficial from "../../statics/logo/logo-oficial.png"; // ✅ imagen lateral
@@ -43,10 +42,7 @@ export default function LoginApoderado() {
   const location = useLocation();
 
   const rawRedirect = location?.state?.from || "/portal-apoderado";
-  const redirectTo =
-    typeof rawRedirect === "string" && rawRedirect.startsWith("/")
-      ? rawRedirect
-      : "/portal-apoderado";
+  const redirectTo = typeof rawRedirect === "string" && rawRedirect.startsWith("/") ? rawRedirect : "/portal-apoderado";
 
   const abortRef = useRef(null);
   const mountedRef = useRef(true);
@@ -154,10 +150,7 @@ export default function LoginApoderado() {
       // Flag UI (backend igual manda y protege)
       const mustChange = payload?.must_change_password === true;
       try {
-        localStorage.setItem(
-          "apoderado_must_change_password",
-          mustChange ? "1" : "0"
-        );
+        localStorage.setItem("apoderado_must_change_password", mustChange ? "1" : "0");
       } catch {}
 
       if (mustChange) {
@@ -185,9 +178,7 @@ export default function LoginApoderado() {
         setMsgSafe(msg ? `❌ ${msg}` : "❌ Credenciales inválidas");
       } else if (status === 429) {
         const ra = Number(err?.response?.headers?.["retry-after"] ?? 0);
-        setMsgSafe(
-          ra ? `❌ Demasiados intentos. Espera ${ra}s.` : "❌ Demasiados intentos."
-        );
+        setMsgSafe(ra ? `❌ Demasiados intentos. Espera ${ra}s.` : "❌ Demasiados intentos.");
       } else {
         const msg = err?.response?.data?.message || err?.message || "Error de conexión";
         setMsgSafe(`❌ ${msg}`);
@@ -206,15 +197,13 @@ export default function LoginApoderado() {
         <div
           className="absolute -top-44 left-1/2 -translate-x-1/2 w-[920px] h-[920px] rounded-full blur-3xl opacity-35"
           style={{
-            background:
-              "radial-gradient(circle, rgba(170,80,19,0.55), transparent 60%)",
+            background: "radial-gradient(circle, rgba(170,80,19,0.55), transparent 60%)",
           }}
         />
         <div
           className="absolute -bottom-56 -left-40 w-[860px] h-[860px] rounded-full blur-3xl opacity-30"
           style={{
-            background:
-              "radial-gradient(circle, rgba(109,88,41,0.75), transparent 60%)",
+            background: "radial-gradient(circle, rgba(109,88,41,0.75), transparent 60%)",
           }}
         />
       </div>
@@ -233,9 +222,7 @@ export default function LoginApoderado() {
                   decoding="async"
                   draggable={false}
                 />
-                <p className="text-white font-extrabold tracking-widest uppercase text-sm">
-                  Ingresando...
-                </p>
+                <p className="text-white font-extrabold tracking-widest uppercase text-sm">Ingresando...</p>
                 <IsLoading />
               </div>
             </div>
@@ -248,11 +235,7 @@ export default function LoginApoderado() {
         <div className="flex w-full max-w-5xl overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm">
           {/* ✅ Form LEFT (para diferenciar del admin) */}
           <div className="w-full md:w-1/2 flex items-center justify-center py-10">
-            <form
-              onSubmit={handleLogin}
-              className="w-full max-w-md px-6 sm:px-10 flex flex-col"
-              autoComplete="on"
-            >
+            <form onSubmit={handleLogin} className="w-full max-w-md px-6 sm:px-10 flex flex-col" autoComplete="on">
               <div className="flex flex-col items-center">
                 <img
                   src={logoWeli}
@@ -262,9 +245,7 @@ export default function LoginApoderado() {
                   decoding="async"
                   draggable={false}
                 />
-                <h2 className="mt-4 text-3xl text-white font-extrabold tracking-tight">
-                  Portal Apoderados
-                </h2>
+                <h2 className="mt-4 text-3xl text-white font-extrabold tracking-tight">Portal Apoderados</h2>
                 <p className="text-sm text-white/70 mt-2 text-center">
                   Revisa pagos, estados de cuenta y el avance del jugador.
                 </p>
@@ -331,11 +312,7 @@ export default function LoginApoderado() {
                 </div>
 
                 {/* Mensaje error */}
-                {mensaje && (
-                  <div className="text-center text-sm font-bold text-red-300">
-                    {mensaje}
-                  </div>
-                )}
+                {mensaje && <div className="text-center text-sm font-bold text-red-300">{mensaje}</div>}
 
                 {/* Submit */}
                 <button
@@ -347,9 +324,7 @@ export default function LoginApoderado() {
                   {isLoading ? "Ingresando..." : "Ingresar"}
                 </button>
 
-                <p className="text-xs text-white/50 text-center mt-3">
-                  WELI • Portal Apoderados
-                </p>
+                <p className="text-xs text-white/50 text-center mt-3">WELI • Portal Apoderados</p>
               </div>
             </form>
           </div>
@@ -368,9 +343,7 @@ export default function LoginApoderado() {
               {/* overlay para legibilidad/estética */}
               <div className="absolute inset-0 bg-black/25" />
               <div className="absolute bottom-6 left-6 right-6">
-                <p className="text-white/90 text-lg font-extrabold tracking-wide">
-                  Portal de Apoderados
-                </p>
+                <p className="text-white/90 text-lg font-extrabold tracking-wide">Portal de Apoderados</p>
                 <p className="text-white/70 text-sm mt-1 leading-relaxed">
                   Pagos, estado de cuentas y avance del jugador en un solo lugar.
                 </p>

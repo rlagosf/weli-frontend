@@ -60,11 +60,21 @@ const RegistroNoticias = lazy(() => import("../pages/admin/registroNoticias"));
 function Home() {
   return (
     <>
-      <section id="inicio" className="scroll-mt-16"><Landing /></section>
-      <section id="nosotros" className="scroll-mt-16"><Nosotros /></section>
-      <section id="noticias" className="scroll-mt-16"><Noticias /></section>
-      <section id="servicios" className="scroll-mt-16"><Servicios /></section>
-      <section id="contacto" className="scroll-mt-16"><Contacto /></section>
+      <section id="inicio" className="scroll-mt-16">
+        <Landing />
+      </section>
+      <section id="nosotros" className="scroll-mt-16">
+        <Nosotros />
+      </section>
+      <section id="noticias" className="scroll-mt-16">
+        <Noticias />
+      </section>
+      <section id="servicios" className="scroll-mt-16">
+        <Servicios />
+      </section>
+      <section id="contacto" className="scroll-mt-16">
+        <Contacto />
+      </section>
     </>
   );
 }
@@ -73,7 +83,9 @@ function PublicShell() {
   return (
     <div className="scroll-smooth w-full min-h-screen text-white font-sans bg-gradient-to-br from-ra-marron from-[0%] via-ra-terracotta via-[33%] via-ra-fucsia via-[66%] to-ra-sand to-[100%]">
       <Navbar />
-      <main><Home /></main>
+      <main>
+        <Home />
+      </main>
       <Footer />
     </div>
   );
@@ -99,7 +111,9 @@ function PrivateApp({
     if (!requireToken) return;
     const t = getToken?.() || "";
     if (!t) {
-      try { clearToken?.(); } catch {}
+      try {
+        clearToken?.();
+      } catch {}
       navigate(redirectTo, { replace: true });
     }
   }, [navigate, redirectTo, requireToken]);

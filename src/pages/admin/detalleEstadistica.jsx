@@ -22,8 +22,7 @@ const PALETTE = {
 };
 const ACCENT = PALETTE.copper;
 
-const isSuperTreePath = (pathname) =>
-  String(pathname || "").startsWith("/super-dashboard/admin/dashboard");
+const isSuperTreePath = (pathname) => String(pathname || "").startsWith("/super-dashboard/admin/dashboard");
 
 const STORAGE_KEY = ACADEMIA_STORAGE_KEY || "weli_selected_academia";
 
@@ -109,19 +108,12 @@ const ensureScopeOrRedirect = ({ navigate, isSuperTree }) => {
   }
 };
 
-
 /* =======================
    Estadísticas por deporte
    ======================= */
 
 const BASE_GROUP = {
-  "Base / Generales": [
-    "minutos_jugados",
-    "partidos_jugados",
-    "lesiones",
-    "dias_baja",
-    "sanciones_federativas",
-  ],
+  "Base / Generales": ["minutos_jugados", "partidos_jugados", "lesiones", "dias_baja", "sanciones_federativas"],
 };
 
 const SPORT_CONFIG = {
@@ -140,14 +132,7 @@ const SPORT_CONFIG = {
         "centros_acertados",
         "pases_clave",
       ],
-      Defensivas: [
-        "intercepciones",
-        "despejes",
-        "duelos_ganados",
-        "entradas_exitosas",
-        "bloqueos",
-        "recuperaciones",
-      ],
+      Defensivas: ["intercepciones", "despejes", "duelos_ganados", "entradas_exitosas", "bloqueos", "recuperaciones"],
       Técnicas: [
         "pases_completados",
         "pases_errados",
@@ -156,173 +141,65 @@ const SPORT_CONFIG = {
         "faltas_cometidas",
         "faltas_recibidas",
       ],
-      Físicas: [
-        "distancia_recorrida_km",
-        "sprints",
-        "duelos_aereos_ganados",
-      ],
-      Disciplina: [
-        "tarjetas_amarillas",
-        "tarjetas_rojas",
-      ],
+      Físicas: ["distancia_recorrida_km", "sprints", "duelos_aereos_ganados"],
+      Disciplina: ["tarjetas_amarillas", "tarjetas_rojas"],
     },
   },
 
   2: {
     nombre: "Vóleibol",
     grupos: {
-      Ataque: [
-        "ataque_intentos",
-        "ataque_puntos",
-        "ataque_errores",
-      ],
-      Saque: [
-        "saques_total",
-        "saques_aces",
-        "saques_positivos",
-        "saques_errores",
-      ],
-      Bloqueo: [
-        "bloqueos_punto",
-        "bloqueos_toques",
-      ],
-      Recepción: [
-        "recepciones_total",
-        "recepcion_positiva",
-        "recepcion_perfecta",
-      ],
-      Defensa: [
-        "defensas_recuperadas",
-      ],
-      Armado: [
-        "armados_total",
-        "armados_precision",
-      ],
-      Eficiencia: [
-        "sideout_pct",
-        "breakpoints_pct",
-        "errores_totales",
-      ],
+      Ataque: ["ataque_intentos", "ataque_puntos", "ataque_errores"],
+      Saque: ["saques_total", "saques_aces", "saques_positivos", "saques_errores"],
+      Bloqueo: ["bloqueos_punto", "bloqueos_toques"],
+      Recepción: ["recepciones_total", "recepcion_positiva", "recepcion_perfecta"],
+      Defensa: ["defensas_recuperadas"],
+      Armado: ["armados_total", "armados_precision"],
+      Eficiencia: ["sideout_pct", "breakpoints_pct", "errores_totales"],
     },
   },
 
   3: {
     nombre: "Tenis",
     grupos: {
-      Servicio: [
-        "primer_servicio_pct",
-        "puntos_primer_servicio",
-        "puntos_segundo_servicio",
-        "aces",
-        "dobles_faltas",
-      ],
-      "Break Points": [
-        "break_points_oportunidades",
-        "break_points_convertidos",
-      ],
-      Juego: [
-        "winners",
-        "errores_no_forzados",
-        "peloteos_cortos_ganados",
-      ],
-      Totales: [
-        "puntos_ganados_total",
-        "juegos_ganados_total",
-      ],
+      Servicio: ["primer_servicio_pct", "puntos_primer_servicio", "puntos_segundo_servicio", "aces", "dobles_faltas"],
+      "Break Points": ["break_points_oportunidades", "break_points_convertidos"],
+      Juego: ["winners", "errores_no_forzados", "peloteos_cortos_ganados"],
+      Totales: ["puntos_ganados_total", "juegos_ganados_total"],
     },
   },
 
   4: {
     nombre: "Pádel",
     grupos: {
-      Servicio: [
-        "primer_saque_pct",
-        "puntos_primer_saque",
-        "puntos_segundo_saque",
-      ],
-      "Puntos de Oro": [
-        "puntos_oro_jugados",
-        "puntos_oro_ganados",
-        "puntos_oro_ganados_con_saque",
-      ],
-      Precisión: [
-        "errores_no_forzados",
-        "errores_forzados",
-        "winners",
-      ],
-      Posicionamiento: [
-        "tiempo_red_pct",
-        "tiempo_fondo_pct",
-        "puntos_red_ganados",
-      ],
-      Voleas: [
-        "voleas_total",
-        "voleas_ganadoras",
-        "voleas_errores",
-      ],
-      Remates: [
-        "remates_total",
-        "remates_ganadores",
-        "remates_errores",
-      ],
+      Servicio: ["primer_saque_pct", "puntos_primer_saque", "puntos_segundo_saque"],
+      "Puntos de Oro": ["puntos_oro_jugados", "puntos_oro_ganados", "puntos_oro_ganados_con_saque"],
+      Precisión: ["errores_no_forzados", "errores_forzados", "winners"],
+      Posicionamiento: ["tiempo_red_pct", "tiempo_fondo_pct", "puntos_red_ganados"],
+      Voleas: ["voleas_total", "voleas_ganadoras", "voleas_errores"],
+      Remates: ["remates_total", "remates_ganadores", "remates_errores"],
     },
   },
 
   5: {
     nombre: "Tenis de mesa",
     grupos: {
-      "Servicio / Devolución": [
-        "efectividad_servicio_pct",
-        "efectividad_devolucion_pct",
-        "primer_saque_pct",
-      ],
-      Juego: [
-        "errores_no_forzados",
-        "winners",
-      ],
-      Presión: [
-        "puntos_presion_jugados",
-        "puntos_presion_ganados",
-      ],
-      Dobles: [
-        "dobles_puntos_jugados",
-        "dobles_puntos_ganados",
-      ],
-      Fisiología: [
-        "fc_media",
-        "fc_max",
-        "lactato",
-      ],
+      "Servicio / Devolución": ["efectividad_servicio_pct", "efectividad_devolucion_pct", "primer_saque_pct"],
+      Juego: ["errores_no_forzados", "winners"],
+      Presión: ["puntos_presion_jugados", "puntos_presion_ganados"],
+      Dobles: ["dobles_puntos_jugados", "dobles_puntos_ganados"],
+      Fisiología: ["fc_media", "fc_max", "lactato"],
     },
   },
 
   6: {
     nombre: "Básquetbol",
     grupos: {
-      Producción: [
-        "puntos",
-        "asistencias",
-        "plus_minus",
-        "pir",
-        "per",
-      ],
-      Rebotes: [
-        "rebotes_ofensivos",
-        "rebotes_defensivos",
-      ],
-      Defensa: [
-        "robos",
-        "bloqueos",
-      ],
-      Control: [
-        "perdidas",
-        "faltas",
-      ],
-      Eficiencia: [
-        "ts_pct",
-        "efg_pct",
-        "usg_pct",
-      ],
+      Producción: ["puntos", "asistencias", "plus_minus", "pir", "per"],
+      Rebotes: ["rebotes_ofensivos", "rebotes_defensivos"],
+      Defensa: ["robos", "bloqueos"],
+      Control: ["perdidas", "faltas"],
+      Eficiencia: ["ts_pct", "efg_pct", "usg_pct"],
     },
   },
 };
@@ -478,12 +355,7 @@ const getGroupsForSport = (deporteId) => {
   };
 };
 
-const getAllFieldsForSport = (deporteId) =>
-  Array.from(
-    new Set(
-      Object.values(getGroupsForSport(deporteId)).flat()
-    )
-  );
+const getAllFieldsForSport = (deporteId) => Array.from(new Set(Object.values(getGroupsForSport(deporteId)).flat()));
 
 const blankFormForSport = (deporteId, sid = null) => {
   const out = { stats_id: sid };
@@ -544,19 +416,12 @@ export default function DetalleEstadistica() {
 
   const mountedRef = useRef(true);
 
-  const superTree = useMemo(
-    () => isSuperTreePath(location.pathname),
-    [location.pathname]
-  );
+  const superTree = useMemo(() => isSuperTreePath(location.pathname), [location.pathname]);
 
-  const basePath = superTree
-    ? "/super-dashboard/admin/dashboard"
-    : "/admin";
+  const basePath = superTree ? "/super-dashboard/admin/dashboard" : "/admin";
 
   const backTo = useMemo(
-    () =>
-      location.state?.from ||
-      `${basePath}/registrar-estadisticas`,
+    () => location.state?.from || `${basePath}/registrar-estadisticas`,
     [location.state, basePath]
   );
 
@@ -588,30 +453,22 @@ export default function DetalleEstadistica() {
 
   /* ============== Breadcrumb ============== */
   useEffect(() => {
-    const currentPath =
-      location.pathname + location.search;
+    const currentPath = location.pathname + location.search;
 
-    const defaultFrom =
-      `${basePath}/registrar-estadisticas`;
+    const defaultFrom = `${basePath}/registrar-estadisticas`;
 
-    const crumbBase =
-      Array.isArray(location.state?.breadcrumb)
-        ? location.state.breadcrumb
-        : [
-            {
-              label: "Registrar Estadísticas",
-              to:
-                location.state?.from ||
-                defaultFrom,
-            },
-          ];
+    const crumbBase = Array.isArray(location.state?.breadcrumb)
+      ? location.state.breadcrumb
+      : [
+          {
+            label: "Registrar Estadísticas",
+            to: location.state?.from || defaultFrom,
+          },
+        ];
 
-    const last =
-      crumbBase[crumbBase.length - 1];
+    const last = crumbBase[crumbBase.length - 1];
 
-    const needsAppend =
-      !last ||
-      last.label !== "Detalle Estadística";
+    const needsAppend = !last || last.label !== "Detalle Estadística";
 
     if (needsAppend) {
       navigate(currentPath, {
@@ -640,39 +497,23 @@ export default function DetalleEstadistica() {
         ? "bg-[#111827] text-white"
         : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron");
 
-    const titleMain =
-      darkMode
-        ? "text-white"
-        : "text-ra-marron";
+    const titleMain = darkMode ? "text-white" : "text-ra-marron";
 
-    const subText =
-      darkMode
-        ? "text-white/70"
-        : "text-ra-marron/70";
+    const subText = darkMode ? "text-white/70" : "text-ra-marron/70";
 
     const panel =
       "max-w-6xl mx-auto mt-6 rounded-2xl border shadow-lg overflow-hidden " +
-      (darkMode
-        ? "bg-white/10 border-white/15"
-        : "bg-white/60 border-ra-marron/15");
+      (darkMode ? "bg-white/10 border-white/15" : "bg-white/60 border-ra-marron/15");
 
     const card =
-      "rounded-2xl border p-4 " +
-      (darkMode
-        ? "bg-white/8 border-white/15"
-        : "bg-white/55 border-ra-marron/15");
+      "rounded-2xl border p-4 " + (darkMode ? "bg-white/8 border-white/15" : "bg-white/55 border-ra-marron/15");
 
     const baseCard =
       "rounded-2xl border p-4 " +
-      (darkMode
-        ? "bg-amber-500/[0.07] border-amber-300/15"
-        : "bg-amber-50/70 border-amber-700/15");
+      (darkMode ? "bg-amber-500/[0.07] border-amber-300/15" : "bg-amber-50/70 border-amber-700/15");
 
     const pill =
-      "rounded-xl border px-3 py-2 " +
-      (darkMode
-        ? "bg-black/20 border-white/15"
-        : "bg-white/55 border-ra-marron/15");
+      "rounded-xl border px-3 py-2 " + (darkMode ? "bg-black/20 border-white/15" : "bg-white/55 border-ra-marron/15");
 
     const input =
       "w-full p-2 rounded-lg text-sm outline-none border transition " +
@@ -682,9 +523,7 @@ export default function DetalleEstadistica() {
         : "bg-white/70 text-ra-marron border-ra-marron/20 placeholder-ra-marron/50");
 
     const sectionTitleStyle = {
-      color: darkMode
-        ? PALETTE.cream
-        : PALETTE.brown,
+      color: darkMode ? PALETTE.cream : PALETTE.brown,
     };
 
     const btnGhost =
@@ -699,22 +538,16 @@ export default function DetalleEstadistica() {
     const btnPrimaryStyle = {
       background: `linear-gradient(135deg, ${PALETTE.copper}, ${PALETTE.terracotta})`,
       color: "#1a1208",
-      border: darkMode
-        ? "1px solid rgba(255,255,255,0.20)"
-        : "1px solid rgba(109,88,41,0.18)",
+      border: darkMode ? "1px solid rgba(255,255,255,0.20)" : "1px solid rgba(109,88,41,0.18)",
     };
 
     const danger =
       "rounded-2xl border px-5 py-4 font-semibold text-center " +
-      (darkMode
-        ? "border-red-200/20 bg-red-500/10 text-red-100"
-        : "border-red-200 bg-red-50 text-red-800");
+      (darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-800");
 
     const info =
       "rounded-2xl border px-5 py-4 " +
-      (darkMode
-        ? "border-sky-300/15 bg-sky-500/[0.07] text-sky-100"
-        : "border-sky-700/15 bg-sky-50/80 text-sky-900");
+      (darkMode ? "border-sky-300/15 bg-sky-500/[0.07] text-sky-100" : "border-sky-700/15 bg-sky-50/80 text-sky-900");
 
     return {
       shell,
@@ -735,29 +568,18 @@ export default function DetalleEstadistica() {
   }, [darkMode]);
 
   /* ===================== Derivados ===================== */
-  const sportConfig = useMemo(
-    () => getSportConfig(deporteId),
-    [deporteId]
-  );
+  const sportConfig = useMemo(() => getSportConfig(deporteId), [deporteId]);
 
-  const campos = useMemo(
-    () => getGroupsForSport(deporteId),
-    [deporteId]
-  );
+  const campos = useMemo(() => getGroupsForSport(deporteId), [deporteId]);
 
-  const allFields = useMemo(
-    () => getAllFieldsForSport(deporteId),
-    [deporteId]
-  );
+  const allFields = useMemo(() => getAllFieldsForSport(deporteId), [deporteId]);
 
   const pretty = useCallback(
     (campo) =>
       FIELD_LABELS[campo] ||
       String(campo || "")
         .replace(/_/g, " ")
-        .replace(/\b\w/g, (m) =>
-          m.toUpperCase()
-        ),
+        .replace(/\b\w/g, (m) => m.toUpperCase()),
     []
   );
 
@@ -766,9 +588,7 @@ export default function DetalleEstadistica() {
       return formatRutWithDV(rut);
     }
 
-    return formatRutWithDV(
-      jugador.rut_jugador ?? rut
-    );
+    return formatRutWithDV(jugador.rut_jugador ?? rut);
   }, [jugador, rut]);
 
   /* ===================== Auth ===================== */
@@ -797,114 +617,68 @@ export default function DetalleEstadistica() {
       setError("");
 
       try {
-        const stateJugadorId =
-          Number(
-            location.state?.jugador_id ?? 0
-          ) || null;
+        const stateJugadorId = Number(location.state?.jugador_id ?? 0) || null;
 
         let jid = stateJugadorId;
         let jRaw = null;
 
         if (jid) {
           try {
-            const resJ = await api.get(
-              `/jugadores/${encodeURIComponent(
-                String(jid)
-              )}`,
-              {
-                meta: {
-                  isPublic: false,
-                },
-              }
-            );
+            const resJ = await api.get(`/jugadores/${encodeURIComponent(String(jid))}`, {
+              meta: {
+                isPublic: false,
+              },
+            });
 
-            const root =
-              resJ?.data?.data ??
-              resJ?.data;
+            const root = resJ?.data?.data ?? resJ?.data;
 
             jRaw =
-              Array.isArray(root?.items) &&
-              root.items.length > 0
+              Array.isArray(root?.items) && root.items.length > 0
                 ? root.items[0]
-                : root?.item ??
-                  root?.jugador ??
-                  root;
+                : (root?.item ?? root?.jugador ?? root);
           } catch {
             // fallback por RUT
           }
         }
 
         if (!jRaw) {
-          const jugadorRes = await api.get(
-            `/jugadores/rut/${encodeURIComponent(
-              rut
-            )}`,
-            {
-              meta: {
-                isPublic: false,
-              },
-            }
-          );
+          const jugadorRes = await api.get(`/jugadores/rut/${encodeURIComponent(rut)}`, {
+            meta: {
+              isPublic: false,
+            },
+          });
 
-          const root =
-            jugadorRes?.data?.data ??
-            jugadorRes?.data;
+          const root = jugadorRes?.data?.data ?? jugadorRes?.data;
 
           jRaw =
-            Array.isArray(root?.items) &&
-            root.items.length > 0
-              ? root.items[0]
-              : root?.item ??
-                root?.jugador ??
-                root;
+            Array.isArray(root?.items) && root.items.length > 0 ? root.items[0] : (root?.item ?? root?.jugador ?? root);
         }
 
         if (!alive) return;
 
         if (!jRaw) {
-          setError(
-            "El jugador no existe."
-          );
+          setError("El jugador no existe.");
           return;
         }
 
-        const inferredJugadorId =
-          Number(
-            jRaw?.id ??
-              jRaw?.jugador_id ??
-              0
-          ) || null;
+        const inferredJugadorId = Number(jRaw?.id ?? jRaw?.jugador_id ?? 0) || null;
 
-        if (
-          !jid &&
-          inferredJugadorId
-        ) {
-          jid =
-            inferredJugadorId;
+        if (!jid && inferredJugadorId) {
+          jid = inferredJugadorId;
         }
 
         if (!jid) {
-          setError(
-            "No se pudo resolver jugador_id."
-          );
+          setError("No se pudo resolver jugador_id.");
           return;
         }
 
-        const depId =
-          Number(
-            jRaw?.deporte_id ??
-              location.state?.scope
-                ?.deporte_id ??
-              0
-          ) || null;
+        const depId = Number(jRaw?.deporte_id ?? location.state?.scope?.deporte_id ?? 0) || null;
 
         if (!depId) {
           setJugador(jRaw);
           setJugadorId(jid);
           setDeporteId(null);
-          setError(
-            "No se pudo determinar el deporte del jugador."
-          );
+          setError("No se pudo determinar el deporte del jugador.");
           return;
         }
 
@@ -912,9 +686,7 @@ export default function DetalleEstadistica() {
           setJugador(jRaw);
           setJugadorId(jid);
           setDeporteId(depId);
-          setError(
-            `El deporte_id ${depId} todavía no tiene formulario de estadísticas configurado.`
-          );
+          setError(`El deporte_id ${depId} todavía no tiene formulario de estadísticas configurado.`);
           return;
         }
 
@@ -922,89 +694,52 @@ export default function DetalleEstadistica() {
         setJugadorId(jid);
         setDeporteId(depId);
 
-        const joinedRes =
-          await api.get(
-            `/estadisticas/by-jugador/${encodeURIComponent(
-              String(jid)
-            )}`,
-            {
-              meta: {
-                isPublic: false,
-              },
-            }
-          );
+        const joinedRes = await api.get(`/estadisticas/by-jugador/${encodeURIComponent(String(jid))}`, {
+          meta: {
+            isPublic: false,
+          },
+        });
 
         if (!alive) return;
 
-        const joined =
-          joinedRes?.data?.item ??
-          joinedRes?.data?.data?.item ??
-          null;
+        const joined = joinedRes?.data?.item ?? joinedRes?.data?.data?.item ?? null;
 
         if (!joined) {
           setStatsExistentes({});
           setStatsId(null);
-          setFormData(
-            blankFormForSport(
-              depId,
-              null
-            )
-          );
+          setFormData(blankFormForSport(depId, null));
           return;
         }
 
-        const flat =
-          flattenJoinedForSport(
-            joined,
-            depId
-          );
+        const flat = flattenJoinedForSport(joined, depId);
 
-        const sid =
-          Number(
-            flat?.stats_id ??
-              flat?.id ??
-              0
-          ) || null;
+        const sid = Number(flat?.stats_id ?? flat?.id ?? 0) || null;
 
         setStatsId(sid);
         setStatsExistentes(flat);
 
         // Modo acumulativo:
         // el formulario parte en 0 y lo ingresado se suma.
-        setFormData(
-          blankFormForSport(
-            depId,
-            sid
-          )
-        );
+        setFormData(blankFormForSport(depId, sid));
       } catch (err) {
-        const st =
-          getErrStatus(err);
+        const st = getErrStatus(err);
 
         if (st === 401) {
           clearToken?.();
-          navigate(
-            "/login",
-            {
-              replace: true,
-            }
-          );
+          navigate("/login", {
+            replace: true,
+          });
           return;
         }
 
         if (st === 403) {
-          setError(
-            "No tienes permisos para ver/editar estadísticas en esta academia."
-          );
+          setError("No tienes permisos para ver/editar estadísticas en esta academia.");
 
           setTimeout(
             () =>
-              navigate(
-                backTo,
-                {
-                  replace: true,
-                }
-              ),
+              navigate(backTo, {
+                replace: true,
+              }),
             900
           );
 
@@ -1012,16 +747,9 @@ export default function DetalleEstadistica() {
         }
 
         if (st === 404) {
-          setError(
-            "El jugador o sus estadísticas no existen."
-          );
+          setError("El jugador o sus estadísticas no existen.");
         } else {
-          setError(
-            err?.response?.data
-              ?.message ||
-              err?.message ||
-              "Error al cargar los datos."
-          );
+          setError(err?.response?.data?.message || err?.message || "Error al cargar los datos.");
         }
       } finally {
         if (alive) {
@@ -1033,70 +761,42 @@ export default function DetalleEstadistica() {
     return () => {
       alive = false;
     };
-  }, [
-    rol,
-    rut,
-    navigate,
-    location.state,
-    backTo,
-  ]);
+  }, [rol, rut, navigate, location.state, backTo]);
 
   /* ===================== Handlers ===================== */
-  const handleChange = (
-    campo,
-    value
-  ) => {
+  const handleChange = (campo, value) => {
     setFormData((prev) => ({
       ...prev,
-      [campo]:
-        normalizeNumeric(
-          campo,
-          value
-        ),
+      [campo]: normalizeNumeric(campo, value),
     }));
   };
 
   const handleResetLocal = () => {
-    setFormData(
-      blankFormForSport(
-        deporteId,
-        statsId
-      )
-    );
+    setFormData(blankFormForSport(deporteId, statsId));
   };
 
   const handleSubmit = async () => {
     if (submitting) return;
 
-    const g =
-      ensureScopeOrRedirect({
-        navigate,
-        isSuperTree: superTree,
-      });
+    const g = ensureScopeOrRedirect({
+      navigate,
+      isSuperTree: superTree,
+    });
 
     if (!g.ok) return;
 
     if (!canWrite) {
-      setError(
-        "No tienes permisos para guardar (solo roles 1 y 3)."
-      );
+      setError("No tienes permisos para guardar (solo roles 1 y 3).");
       return;
     }
 
     if (!jugadorId) {
-      setError(
-        "Falta jugador_id."
-      );
+      setError("Falta jugador_id.");
       return;
     }
 
-    if (
-      !deporteId ||
-      !SPORT_CONFIG[deporteId]
-    ) {
-      setError(
-        "No existe una configuración estadística válida para el deporte del jugador."
-      );
+    if (!deporteId || !SPORT_CONFIG[deporteId]) {
+      setError("No existe una configuración estadística válida para el deporte del jugador.");
       return;
     }
 
@@ -1104,115 +804,40 @@ export default function DetalleEstadistica() {
     setError("");
 
     try {
-      const currentStats =
-        statsExistentes &&
-        typeof statsExistentes ===
-          "object"
-          ? statsExistentes
-          : {};
+      const currentStats = statsExistentes && typeof statsExistentes === "object" ? statsExistentes : {};
 
-      const incStats =
-        formData &&
-        typeof formData ===
-          "object"
-          ? formData
-          : {};
+      const incStats = formData && typeof formData === "object" ? formData : {};
 
       const sumado = {};
 
-      allFields.forEach(
-        (campo) => {
-          const antiguo =
-            Number(
-              currentStats?.[
-                campo
-              ] ?? 0
-            );
+      allFields.forEach((campo) => {
+        const antiguo = Number(currentStats?.[campo] ?? 0);
 
-          const nuevo =
-            Number(
-              incStats?.[
-                campo
-              ] ?? 0
-            );
+        const nuevo = Number(incStats?.[campo] ?? 0);
 
-          const a =
-            Number.isFinite(
-              antiguo
-            )
-              ? antiguo
-              : 0;
+        const a = Number.isFinite(antiguo) ? antiguo : 0;
 
-          const b =
-            Number.isFinite(
-              nuevo
-            )
-              ? nuevo
-              : 0;
+        const b = Number.isFinite(nuevo) ? nuevo : 0;
 
-          sumado[campo] =
-            DECIMAL_FIELDS.has(
-              campo
-            )
-              ? Number(
-                  (a + b).toFixed(
-                    3
-                  )
-                )
-              : a + b;
-        }
-      );
+        sumado[campo] = DECIMAL_FIELDS.has(campo) ? Number((a + b).toFixed(3)) : a + b;
+      });
 
-      const payload =
-        pickEditablePayloadForSport(
-          sumado,
-          deporteId
-        );
+      const payload = pickEditablePayloadForSport(sumado, deporteId);
 
       if (statsId) {
-        await api.put(
-          `/estadisticas/${encodeURIComponent(
-            String(statsId)
-          )}`,
-          payload,
-          {
-            meta: {
-              isPublic: false,
-            },
-          }
-        );
+        await api.put(`/estadisticas/${encodeURIComponent(String(statsId))}`, payload, {
+          meta: {
+            isPublic: false,
+          },
+        });
       } else {
         const academia_id =
-          Number(
-            jugador?.academia_id ??
-              0
-          ) ||
-          Number(
-            location.state?.scope
-              ?.academia_id ??
-              0
-          ) ||
-          null;
+          Number(jugador?.academia_id ?? 0) || Number(location.state?.scope?.academia_id ?? 0) || null;
 
-        const deporte_id =
-          Number(
-            jugador?.deporte_id ??
-              0
-          ) ||
-          Number(
-            location.state?.scope
-              ?.deporte_id ??
-              0
-          ) ||
-          null;
+        const deporte_id = Number(jugador?.deporte_id ?? 0) || Number(location.state?.scope?.deporte_id ?? 0) || null;
 
-        if (
-          !academia_id ||
-          !deporte_id
-        ) {
-          throw new Error(
-            "Falta academia_id/deporte_id para crear stats."
-          );
+        if (!academia_id || !deporte_id) {
+          throw new Error("Falta academia_id/deporte_id para crear stats.");
         }
 
         await api.post(
@@ -1220,8 +845,7 @@ export default function DetalleEstadistica() {
           {
             academia_id,
             deporte_id,
-            jugador_id:
-              jugadorId,
+            jugador_id: jugadorId,
             ...payload,
           },
           {
@@ -1232,49 +856,30 @@ export default function DetalleEstadistica() {
         );
       }
 
-      alert(
-        `✅ Estadísticas de ${sportConfig.nombre} acumuladas y guardadas correctamente`
-      );
+      alert(`✅ Estadísticas de ${sportConfig.nombre} acumuladas y guardadas correctamente`);
 
-      navigate(
-        backTo,
-        {
-          replace: true,
-        }
-      );
+      navigate(backTo, {
+        replace: true,
+      });
     } catch (err) {
-      const st =
-        getErrStatus(err);
+      const st = getErrStatus(err);
 
       if (st === 401) {
         clearToken?.();
-        navigate(
-          "/login",
-          {
-            replace: true,
-          }
-        );
+        navigate("/login", {
+          replace: true,
+        });
         return;
       }
 
       if (st === 403) {
-        setError(
-          "No tienes permisos para guardar estadísticas en esta academia."
-        );
+        setError("No tienes permisos para guardar estadísticas en esta academia.");
         return;
       }
 
-      const detail =
-        err?.response?.data
-          ?.error ||
-        err?.response?.data
-          ?.message ||
-        err?.message;
+      const detail = err?.response?.data?.error || err?.response?.data?.message || err?.message;
 
-      setError(
-        detail ||
-          "❌ Error al guardar estadísticas"
-      );
+      setError(detail || "❌ Error al guardar estadísticas");
     } finally {
       setSubmitting(false);
     }
@@ -1283,9 +888,7 @@ export default function DetalleEstadistica() {
   /* ===================== Render ===================== */
   if (loading) {
     return (
-      <div
-        className={`${ui.shell} flex justify-center items-center`}
-      >
+      <div className={`${ui.shell} flex justify-center items-center`}>
         <LoaderCircle
           className="animate-spin w-12 h-12"
           style={{
@@ -1296,58 +899,25 @@ export default function DetalleEstadistica() {
     );
   }
 
-  const nombreJugador =
-    jugador?.nombre_jugador ??
-    jugador?.nombre ??
-    "Jugador";
+  const nombreJugador = jugador?.nombre_jugador ?? jugador?.nombre ?? "Jugador";
 
-  const renderField = (
-    campo
-  ) => {
-    const isDecimal =
-      DECIMAL_FIELDS.has(campo);
+  const renderField = (campo) => {
+    const isDecimal = DECIMAL_FIELDS.has(campo);
 
-    const isSigned =
-      SIGNED_FIELDS.has(campo);
+    const isSigned = SIGNED_FIELDS.has(campo);
 
     return (
-      <div
-        key={campo}
-        className="space-y-1"
-      >
-        <label
-          className={`block text-xs sm:text-sm font-semibold ${
-            darkMode
-              ? "text-white/85"
-              : "text-ra-marron/85"
-          }`}
-        >
+      <div key={campo} className="space-y-1">
+        <label className={`block text-xs sm:text-sm font-semibold ${darkMode ? "text-white/85" : "text-ra-marron/85"}`}>
           {pretty(campo)}
         </label>
 
         <input
           type="number"
-          min={
-            isSigned
-              ? undefined
-              : "0"
-          }
-          step={
-            isDecimal
-              ? "0.01"
-              : "1"
-          }
-          value={
-            formData?.[
-              campo
-            ] ?? 0
-          }
-          onChange={(e) =>
-            handleChange(
-              campo,
-              e.target.value
-            )
-          }
+          min={isSigned ? undefined : "0"}
+          step={isDecimal ? "0.01" : "1"}
+          value={formData?.[campo] ?? 0}
+          onChange={(e) => handleChange(campo, e.target.value)}
           className={ui.input}
           disabled={!canWrite}
         />
@@ -1358,72 +928,37 @@ export default function DetalleEstadistica() {
   return (
     <div className={ui.shell}>
       <header className="px-6 pt-6 text-center">
-        <h1
-          className={`text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}
-        >
-          Registrar Estadísticas
-        </h1>
+        <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>Registrar Estadísticas</h1>
 
-        <p
-          className={`text-xl sm:text-2xl mt-2 ${ui.subText}`}
-        >
-          {nombreJugador} · RUT:{" "}
-          <span className="font-semibold">
-            {rutConDV}
-          </span>
+        <p className={`text-xl sm:text-2xl mt-2 ${ui.subText}`}>
+          {nombreJugador} · RUT: <span className="font-semibold">{rutConDV}</span>
         </p>
 
-        <div
-          className={`mt-2 text-sm sm:text-base ${ui.subText}`}
-        >
-          <span className="font-extrabold">
-            {sportConfig.nombre}
-          </span>
+        <div className={`mt-2 text-sm sm:text-base ${ui.subText}`}>
+          <span className="font-extrabold">{sportConfig.nombre}</span>
 
-          {jugadorId
-            ? ` · Jugador ID: ${jugadorId}`
-            : ""}
+          {jugadorId ? ` · Jugador ID: ${jugadorId}` : ""}
 
-          {statsId
-            ? ` · Stats ID: ${statsId}`
-            : " · Stats: nuevo"}
+          {statsId ? ` · Stats ID: ${statsId}` : " · Stats: nuevo"}
 
-          {!canWrite
-            ? " · Solo lectura"
-            : ""}
+          {!canWrite ? " · Solo lectura" : ""}
         </div>
       </header>
 
       <main className="px-6 pb-20">
         {error && (
           <div className="max-w-6xl mx-auto mt-6">
-            <div
-              className={ui.danger}
-            >
-              {error}
-            </div>
+            <div className={ui.danger}>{error}</div>
           </div>
         )}
 
         <div className="max-w-6xl mx-auto mt-6">
           <div className={ui.info}>
-            <div className="font-extrabold">
-              Estadísticas de{" "}
-              {sportConfig.nombre}
-            </div>
+            <div className="font-extrabold">Estadísticas de {sportConfig.nombre}</div>
 
             <div className="text-sm mt-1 opacity-80">
-              Las métricas de{" "}
-              <b>
-                Base / Generales
-              </b>{" "}
-              pertenecen a{" "}
-              <code>
-                stats_base
-              </code>
-              . Las demás corresponden
-              al bloque específico de{" "}
-              {sportConfig.nombre}.
+              Las métricas de <b>Base / Generales</b> pertenecen a <code>stats_base</code>. Las demás corresponden al
+              bloque específico de {sportConfig.nombre}.
             </div>
           </div>
         </div>
@@ -1431,242 +966,106 @@ export default function DetalleEstadistica() {
         <div className={ui.panel}>
           <div className="p-4 md:p-6">
             {/* Valores actuales */}
-            {statsExistentes &&
-              typeof statsExistentes ===
-                "object" &&
-              Object.keys(
-                statsExistentes
-              ).length > 0 && (
-                <div
-                  className={`${ui.card} mb-5`}
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div>
-                      <h2
-                        className="text-lg font-extrabold"
-                        style={
-                          ui.sectionTitleStyle
-                        }
-                      >
-                        Valores actuales
-                        (acumulados)
-                      </h2>
+            {statsExistentes && typeof statsExistentes === "object" && Object.keys(statsExistentes).length > 0 && (
+              <div className={`${ui.card} mb-5`}>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-extrabold" style={ui.sectionTitleStyle}>
+                      Valores actuales (acumulados)
+                    </h2>
 
-                      <p
-                        className={`text-xs mt-1 ${ui.subText}`}
-                      >
-                        Solo se muestran
-                        métricas pertinentes a{" "}
-                        {sportConfig.nombre}.
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        navigate(
-                          backTo,
-                          {
-                            replace: true,
-                          }
-                        )
-                      }
-                      className={
-                        ui.btnGhost
-                      }
-                    >
-                      Volver
-                    </button>
+                    <p className={`text-xs mt-1 ${ui.subText}`}>
+                      Solo se muestran métricas pertinentes a {sportConfig.nombre}.
+                    </p>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 text-xs">
-                    {allFields.map(
-                      (campo) => (
-                        <div
-                          key={campo}
-                          className={`flex items-center justify-between gap-2 ${ui.pill}`}
-                        >
-                          <span
-                            className={
-                              darkMode
-                                ? "text-white/80"
-                                : "text-ra-marron/80"
-                            }
-                          >
-                            {pretty(
-                              campo
-                            )}
-                          </span>
-
-                          <span
-                            className={
-                              darkMode
-                                ? "text-white font-extrabold"
-                                : "text-ra-marron font-extrabold"
-                            }
-                          >
-                            {DECIMAL_FIELDS.has(
-                              campo
-                            )
-                              ? Number(
-                                  statsExistentes?.[
-                                    campo
-                                  ] ?? 0
-                                ).toFixed(
-                                  2
-                                )
-                              : Number(
-                                  statsExistentes?.[
-                                    campo
-                                  ] ?? 0
-                                )}
-                          </span>
-                        </div>
-                      )
-                    )}
-                  </div>
-
-                  <p
-                    className={`mt-3 text-[12px] ${ui.subText}`}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(backTo, {
+                        replace: true,
+                      })
+                    }
+                    className={ui.btnGhost}
                   >
-                    Lo que ingreses abajo
-                    se{" "}
-                    <b>suma</b> a estos
-                    valores.
-                  </p>
+                    Volver
+                  </button>
                 </div>
-              )}
+
+                <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 text-xs">
+                  {allFields.map((campo) => (
+                    <div key={campo} className={`flex items-center justify-between gap-2 ${ui.pill}`}>
+                      <span className={darkMode ? "text-white/80" : "text-ra-marron/80"}>{pretty(campo)}</span>
+
+                      <span className={darkMode ? "text-white font-extrabold" : "text-ra-marron font-extrabold"}>
+                        {DECIMAL_FIELDS.has(campo)
+                          ? Number(statsExistentes?.[campo] ?? 0).toFixed(2)
+                          : Number(statsExistentes?.[campo] ?? 0)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <p className={`mt-3 text-[12px] ${ui.subText}`}>
+                  Lo que ingreses abajo se <b>suma</b> a estos valores.
+                </p>
+              </div>
+            )}
 
             {/* Form dinámico */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-              {Object.entries(
-                campos
-              ).map(
-                ([
-                  categoria,
-                  listaCampos,
-                ]) => {
-                  const isBase =
-                    categoria ===
-                    "Base / Generales";
+              {Object.entries(campos).map(([categoria, listaCampos]) => {
+                const isBase = categoria === "Base / Generales";
 
-                  return (
-                    <section
-                      key={
-                        categoria
-                      }
-                      className={
-                        isBase
-                          ? ui.baseCard
-                          : ui.card
-                      }
-                    >
-                      <div className="mb-3">
-                        <h3
-                          className="text-base font-extrabold"
-                          style={
-                            ui.sectionTitleStyle
-                          }
-                        >
-                          {
-                            categoria
-                          }
-                        </h3>
+                return (
+                  <section key={categoria} className={isBase ? ui.baseCard : ui.card}>
+                    <div className="mb-3">
+                      <h3 className="text-base font-extrabold" style={ui.sectionTitleStyle}>
+                        {categoria}
+                      </h3>
 
-                        {isBase && (
-                          <p
-                            className={`text-[11px] mt-1 ${ui.subText}`}
-                          >
-                            Común a
-                            todos los
-                            deportes
-                          </p>
-                        )}
-                      </div>
+                      {isBase && <p className={`text-[11px] mt-1 ${ui.subText}`}>Común a todos los deportes</p>}
+                    </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {listaCampos.map(
-                          renderField
-                        )}
-                      </div>
-                    </section>
-                  );
-                }
-              )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{listaCampos.map(renderField)}</div>
+                  </section>
+                );
+              })}
             </div>
 
             {/* Acciones */}
             <div className="flex flex-wrap justify-center gap-3 mt-7">
               <button
                 type="button"
-                onClick={
-                  handleResetLocal
-                }
-                className={
-                  ui.btnGhost
-                }
-                disabled={
-                  !canWrite
-                }
-                title={
-                  !canWrite
-                    ? "Solo lectura"
-                    : "Limpiar"
-                }
+                onClick={handleResetLocal}
+                className={ui.btnGhost}
+                disabled={!canWrite}
+                title={!canWrite ? "Solo lectura" : "Limpiar"}
               >
                 Limpiar a 0
               </button>
 
               <button
-                onClick={
-                  handleSubmit
-                }
-                disabled={
-                  submitting ||
-                  !canWrite ||
-                  !deporteId ||
-                  !SPORT_CONFIG[
-                    deporteId
-                  ]
-                }
-                className={
-                  ui.btnPrimary
-                }
+                onClick={handleSubmit}
+                disabled={submitting || !canWrite || !deporteId || !SPORT_CONFIG[deporteId]}
+                className={ui.btnPrimary}
                 style={{
-                  ...(
-                    ui.btnPrimaryStyle ||
-                    {}
-                  ),
-                  opacity:
-                    submitting ||
-                    !canWrite
-                      ? 0.6
-                      : 1,
+                  ...(ui.btnPrimaryStyle || {}),
+                  opacity: submitting || !canWrite ? 0.6 : 1,
                 }}
-                title={
-                  !canWrite
-                    ? "Solo roles 1 y 3 pueden guardar"
-                    : `Guardar estadísticas de ${sportConfig.nombre}`
-                }
+                title={!canWrite ? "Solo roles 1 y 3 pueden guardar" : `Guardar estadísticas de ${sportConfig.nombre}`}
               >
-                {submitting
-                  ? "Guardando..."
-                  : "Acumular y Guardar"}
+                {submitting ? "Guardando..." : "Acumular y Guardar"}
               </button>
 
               <button
                 type="button"
                 onClick={() =>
-                  navigate(
-                    backTo,
-                    {
-                      replace: true,
-                    }
-                  )
+                  navigate(backTo, {
+                    replace: true,
+                  })
                 }
-                className={
-                  ui.btnGhost
-                }
+                className={ui.btnGhost}
               >
                 Volver
               </button>

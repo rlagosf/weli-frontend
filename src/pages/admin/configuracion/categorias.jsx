@@ -42,9 +42,7 @@ export default function Categorias() {
   // ✅ Estrategia dorada: detecta árbol actual (admin vs super-admin canal)
   const dashboardBase = useMemo(() => {
     const p = location.pathname || "";
-    return p.startsWith("/super-dashboard/admin/dashboard")
-      ? "/super-dashboard/admin/dashboard"
-      : "/admin";
+    return p.startsWith("/super-dashboard/admin/dashboard") ? "/super-dashboard/admin/dashboard" : "/admin";
   }, [location.pathname]);
 
   const configPath = useMemo(() => `${dashboardBase}/configuracion`, [dashboardBase]);
@@ -160,21 +158,22 @@ export default function Categorias() {
 
   // ───────── Helpers endpoints tolerantes (slash final) ─────────
   const withVariants = useCallback(
-    (fn) => async (base, ...args) => {
-      const urls = base.endsWith("/") ? [base, base.slice(0, -1)] : [base, `${base}/`];
-      let lastErr = null;
+    (fn) =>
+      async (base, ...args) => {
+        const urls = base.endsWith("/") ? [base, base.slice(0, -1)] : [base, `${base}/`];
+        let lastErr = null;
 
-      for (const u of urls) {
-        try {
-          return await fn(u, ...args);
-        } catch (e) {
-          lastErr = e;
-          const st = getErrStatus(e);
-          if (st === 401 || st === 403) throw e;
+        for (const u of urls) {
+          try {
+            return await fn(u, ...args);
+          } catch (e) {
+            lastErr = e;
+            const st = getErrStatus(e);
+            if (st === 401 || st === 403) throw e;
+          }
         }
-      }
-      throw lastErr || new Error("ENDPOINT_VARIANTS_FAILED");
-    },
+        throw lastErr || new Error("ENDPOINT_VARIANTS_FAILED");
+      },
     [getErrStatus]
   );
 
@@ -377,9 +376,7 @@ export default function Categorias() {
       {/* Header centrado tipo SuperDashboard */}
       <header className="px-6 pt-6 text-center">
         <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>Categorías</h1>
-        <p className={`text-sm mt-2 ${ui.subText}`}>
-          Administra el catálogo de categorías (crear, editar, eliminar).
-        </p>
+        <p className={`text-sm mt-2 ${ui.subText}`}>Administra el catálogo de categorías (crear, editar, eliminar).</p>
       </header>
 
       <main className="px-6 pb-20">

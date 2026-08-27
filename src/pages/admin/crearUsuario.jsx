@@ -56,9 +56,7 @@ const getAcademiaIdFromStorage = () => {
     if (Number.isFinite(direct) && direct > 0) return direct;
 
     const parsed = JSON.parse(raw);
-    const id = Number(
-      parsed?.id ?? parsed?.academia_id ?? parsed?.academy_id ?? parsed?.academiaId ?? 0
-    );
+    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academy_id ?? parsed?.academiaId ?? 0);
     return Number.isFinite(id) && id > 0 ? id : 0;
   } catch {
     return 0;
@@ -158,12 +156,7 @@ const postWithFallback = async (path, body) => {
 const pickBackendMessage = (err) => {
   const data = err?.response?.data ?? err?.data ?? null;
 
-  const detail =
-    data?.detail ??
-    data?.message ??
-    data?.error ??
-    data?.msg ??
-    (typeof data === "string" ? data : null);
+  const detail = data?.detail ?? data?.message ?? data?.error ?? data?.msg ?? (typeof data === "string" ? data : null);
 
   if (typeof detail === "string" && detail.trim()) return detail.trim();
 
@@ -236,32 +229,19 @@ export default function CrearUsuario() {
         const listaNormalizada = (Array.isArray(listaRaw) ? listaRaw : [])
           .map((r) => {
             const id = r?.id ?? r?.rol_id ?? r?.role_id ?? r?.ID ?? null;
-            const nombre =
-              r?.nombre ??
-              r?.descripcion ??
-              r?.name ??
-              r?.desc ??
-              (id != null ? String(id) : "");
+            const nombre = r?.nombre ?? r?.descripcion ?? r?.name ?? r?.desc ?? (id != null ? String(id) : "");
 
             return {
               id: Number(id),
               nombre: String(nombre).trim(),
             };
           })
-          .filter(
-            (r) =>
-              Number.isFinite(r.id) &&
-              r.id > 0 &&
-              r.nombre.length > 0
-          );
+          .filter((r) => Number.isFinite(r.id) && r.id > 0 && r.nombre.length > 0);
 
         // Seguridad de UI:
         // - rol 1 (admin) NO puede ver/seleccionar rol 3 (superadmin).
         // - rol 3 (superadmin) sí puede crear cualquier rol permitido por backend.
-        const lista =
-          g.rol === 3
-            ? listaNormalizada
-            : listaNormalizada.filter((r) => r.id !== 3);
+        const lista = g.rol === 3 ? listaNormalizada : listaNormalizada.filter((r) => r.id !== 3);
 
         setRoles(lista);
 
@@ -310,7 +290,9 @@ export default function CrearUsuario() {
     const { name, value } = e.target;
 
     if (name === "rut_usuario") {
-      const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
+      const digits = String(value || "")
+        .replace(/\D/g, "")
+        .slice(0, 8);
       setFormData((prev) => ({ ...prev, rut_usuario: digits }));
       return;
     }
@@ -504,13 +486,7 @@ export default function CrearUsuario() {
                 minLength={6}
               />
 
-              <select
-                name="rol_id"
-                value={formData.rol_id}
-                onChange={handleChange}
-                className={ui.select}
-                required
-              >
+              <select name="rol_id" value={formData.rol_id} onChange={handleChange} className={ui.select} required>
                 <option value="">Selecciona un Rol</option>
                 {roles.map((rol) => (
                   <option key={rol.id} value={String(rol.id)}>
@@ -519,12 +495,7 @@ export default function CrearUsuario() {
                 ))}
               </select>
 
-              <button
-                type="submit"
-                disabled={submitting}
-                className={ui.btn}
-                style={{ backgroundColor: ACCENT }}
-              >
+              <button type="submit" disabled={submitting} className={ui.btn} style={{ backgroundColor: ACCENT }}>
                 {submitting ? "Guardando…" : "Guardar"}
               </button>
             </form>

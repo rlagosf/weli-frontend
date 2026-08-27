@@ -37,11 +37,12 @@ const toArray = (resp) => {
 const isCanceled = (e) =>
   e?.name === "CanceledError" ||
   e?.code === "ERR_CANCELED" ||
-  String(e?.message || "").toLowerCase().includes("canceled");
+  String(e?.message || "")
+    .toLowerCase()
+    .includes("canceled");
 
 const getStatus = (e) => e?.status ?? e?.response?.status;
-const getMessage = (e, fallback = "Error") =>
-  e?.message || e?.data?.message || e?.response?.data?.message || fallback;
+const getMessage = (e, fallback = "Error") => e?.message || e?.data?.message || e?.response?.data?.message || fallback;
 
 const FUCHSIA = [232, 45, 137]; // PDF
 
@@ -71,8 +72,7 @@ const nombreDesdeJugador = (j) =>
     j?.nombre
   );
 
-const nombreDesdeConvocado = (c) =>
-  coalesceStr(c?.nombre_jugador, c?.jugador_nombre, c?.nombre, c?.nombre_completo);
+const nombreDesdeConvocado = (c) => coalesceStr(c?.nombre_jugador, c?.jugador_nombre, c?.nombre, c?.nombre_completo);
 
 /* ================= Auth / Headers (WELI) ================= */
 
@@ -323,10 +323,10 @@ export default function VerConvocacionHistorica() {
             typeof edadRaw === "number"
               ? edadRaw
               : typeof edadRaw === "string" && edadRaw.trim()
-              ? Number(edadRaw)
-              : fnac
-              ? calcEdad(fnac)
-              : "";
+                ? Number(edadRaw)
+                : fnac
+                  ? calcEdad(fnac)
+                  : "";
 
           const estadoIdRaw = j?.estado_id ?? j?.estadoId ?? j?.estado ?? null;
           const estadoId = estadoIdRaw == null ? null : Number(estadoIdRaw);
@@ -408,8 +408,7 @@ export default function VerConvocacionHistorica() {
     let nombre = nombreDesdeConvocado(c);
     if (!isNonEmptyStr(nombre) && fromMap?.nombre) nombre = fromMap.nombre;
 
-    const fnac =
-      fromMap?.fnac ?? c?.fecha_nacimiento ?? c?.fechaNacimiento ?? c?.fnac ?? c?.fecha_nac ?? null;
+    const fnac = fromMap?.fnac ?? c?.fecha_nacimiento ?? c?.fechaNacimiento ?? c?.fnac ?? c?.fecha_nac ?? null;
 
     const edad = fromMap?.edad ?? (fnac ? calcEdad(fnac) : "");
 
@@ -627,19 +626,17 @@ export default function VerConvocacionHistorica() {
                   return (
                     <tr key={h.id} className={filaHover}>
                       {/* ✅ ELIMINADA: Celda ID */}
-                      <td className="p-2 border text-center break-words">
-                        {evento ? nombreEvento(evento) : "—"}
-                      </td>
+                      <td className="p-2 border text-center break-words">{evento ? nombreEvento(evento) : "—"}</td>
                       <td className="p-2 border text-center">#{h.convocatoria_id}</td>
                       <td className="p-2 border text-center">
-                        {String(h.fecha_generacion ?? "").replace("T", " ").slice(0, 19)}
+                        {String(h.fecha_generacion ?? "")
+                          .replace("T", " ")
+                          .slice(0, 19)}
                       </td>
                       <td className="p-2 border text-center">
                         <button
                           onClick={() => verPDFDeHistorico(h)}
-                          className={`hover:opacity-80 ${
-                            generatingRef.current ? "opacity-60 cursor-not-allowed" : ""
-                          }`}
+                          className={`hover:opacity-80 ${generatingRef.current ? "opacity-60 cursor-not-allowed" : ""}`}
                           title="Exportar listado (PDF)"
                           aria-label={`Exportar listado histórico ${h.id}`}
                           disabled={generatingRef.current}
@@ -648,11 +645,7 @@ export default function VerConvocacionHistorica() {
                         </button>
                       </td>
                       <td className="p-2 border text-center">
-                        <button
-                          onClick={() => verConvocadosDeHistorico(h)}
-                          className={btnVerClass}
-                          style={btnVerStyle}
-                        >
+                        <button onClick={() => verConvocadosDeHistorico(h)} className={btnVerClass} style={btnVerStyle}>
                           Ver
                         </button>
                       </td>
@@ -708,16 +701,12 @@ export default function VerConvocacionHistorica() {
                       const keyBase = normalizeRutKey(c?.jugador_rut ?? c?.rut ?? c?.rut_jugador);
                       return (
                         <tr key={c.id ?? `${keyBase}-${info.fnac || ""}`} className={filaHover}>
-                          <td className="px-2 py-1 border text-center">
-                            {info.rut ? formatRutWithDV(info.rut) : ""}
-                          </td>
+                          <td className="px-2 py-1 border text-center">{info.rut ? formatRutWithDV(info.rut) : ""}</td>
                           <td className="px-2 py-1 border text-center">{info.nombre}</td>
                           <td className="px-2 py-1 border text-center">
                             {info.fnac ? String(info.fnac).slice(0, 10) : ""}
                           </td>
-                          <td className="px-2 py-1 border text-center">
-                            {info.edad !== "" ? info.edad : ""}
-                          </td>
+                          <td className="px-2 py-1 border text-center">{info.edad !== "" ? info.edad : ""}</td>
                         </tr>
                       );
                     })}

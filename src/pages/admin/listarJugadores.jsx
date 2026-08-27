@@ -178,28 +178,19 @@ export default function ListarJugadores() {
 
         const posMap = new Map(
           (posList ?? [])
-            .map((p) => [
-              Number(p?.id ?? p?.posicion_id),
-              String(p?.nombre ?? p?.descripcion ?? "").trim(),
-            ])
+            .map((p) => [Number(p?.id ?? p?.posicion_id), String(p?.nombre ?? p?.descripcion ?? "").trim()])
             .filter(([id, nombre]) => Number.isFinite(id) && id > 0 && !!nombre)
         );
 
         const catMap = new Map(
           (catList ?? [])
-            .map((c) => [
-              Number(c?.id ?? c?.categoria_id),
-              String(c?.nombre ?? c?.descripcion ?? "").trim(),
-            ])
+            .map((c) => [Number(c?.id ?? c?.categoria_id), String(c?.nombre ?? c?.descripcion ?? "").trim()])
             .filter(([id, nombre]) => Number.isFinite(id) && id > 0 && !!nombre)
         );
 
         const estMap = new Map(
           (estList ?? [])
-            .map((e) => [
-              Number(e?.id ?? e?.estado_id),
-              String(e?.nombre ?? e?.descripcion ?? "").trim(),
-            ])
+            .map((e) => [Number(e?.id ?? e?.estado_id), String(e?.nombre ?? e?.descripcion ?? "").trim()])
             .filter(([id, nombre]) => Number.isFinite(id) && id > 0 && !!nombre)
         );
 
@@ -211,16 +202,13 @@ export default function ListarJugadores() {
           const estId = Number(j?.estado_id ?? j?.estado?.id ?? NaN);
 
           const posicion =
-            j?.posicion ??
-            (Number.isFinite(posId) && posMap.has(posId) ? { nombre: posMap.get(posId) } : null);
+            j?.posicion ?? (Number.isFinite(posId) && posMap.has(posId) ? { nombre: posMap.get(posId) } : null);
 
           const categoria =
-            j?.categoria ??
-            (Number.isFinite(catId) && catMap.has(catId) ? { nombre: catMap.get(catId) } : null);
+            j?.categoria ?? (Number.isFinite(catId) && catMap.has(catId) ? { nombre: catMap.get(catId) } : null);
 
           const estado =
-            j?.estado ??
-            (Number.isFinite(estId) && estMap.has(estId) ? { nombre: estMap.get(estId) } : null);
+            j?.estado ?? (Number.isFinite(estId) && estMap.has(estId) ? { nombre: estMap.get(estId) } : null);
 
           return { ...j, posicion, categoria, estado };
         });
@@ -289,25 +277,18 @@ export default function ListarJugadores() {
     const table = "w-full text-xs sm:text-sm min-w-[900px] border-separate border-spacing-0";
 
     // encabezado marrón
-    const thead =
-      "text-[10px] sm:text-xs " +
-      (darkMode ? "bg-black/20" : "bg-ra-cream/90");
+    const thead = "text-[10px] sm:text-xs " + (darkMode ? "bg-black/20" : "bg-ra-cream/90");
 
     const thBase =
-      "p-2 text-center whitespace-nowrap font-extrabold " +
-      (darkMode ? "text-[#ffdda1]" : "text-[#6d5829]"); // sand en dark, brown en light
+      "p-2 text-center whitespace-nowrap font-extrabold " + (darkMode ? "text-[#ffdda1]" : "text-[#6d5829]"); // sand en dark, brown en light
 
     // bordes en th/td más notorios
     const cellBorderStyle = { borderRight: border, borderBottom: border };
     const headBorderStyle = { borderRight: border, borderBottom: border, borderTop: border };
 
-    const tr =
-      "cursor-pointer transition " +
-      (darkMode ? "hover:bg-white/10" : "hover:bg-white/70");
+    const tr = "cursor-pointer transition " + (darkMode ? "hover:bg-white/10" : "hover:bg-white/70");
 
-    const tdBase =
-      "p-2 text-center " +
-      (darkMode ? "text-white/90" : "text-ra-marron");
+    const tdBase = "p-2 text-center " + (darkMode ? "text-white/90" : "text-ra-marron");
 
     const badge =
       "text-xs inline-flex items-center gap-2 rounded-full px-3 py-1 border " +
@@ -379,12 +360,8 @@ export default function ListarJugadores() {
       {/* Header estilo SuperDashboard */}
       <header className="max-w-6xl mx-auto">
         <div className="text-center">
-          <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.title}`}>
-            Lista de Jugadores
-          </h1>
-          <p className={`text-sm mt-2 ${ui.subtitle}`}>
-            Selecciona un jugador para ver su detalle.
-          </p>
+          <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.title}`}>Lista de Jugadores</h1>
+          <p className={`text-sm mt-2 ${ui.subtitle}`}>Selecciona un jugador para ver su detalle.</p>
         </div>
       </header>
 

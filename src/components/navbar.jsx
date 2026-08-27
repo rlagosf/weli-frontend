@@ -139,13 +139,11 @@ export default function Navbar() {
   }, [isMenuOpen, tocaDifuminado]);
 
   // ✅ clases “económicas” reutilizables
-  const navItemClass =
-    "cursor-pointer text-white/90 hover:text-ra-sand transition-colors duration-150";
+  const navItemClass = "cursor-pointer text-white/90 hover:text-ra-sand transition-colors duration-150";
   const navUnderlineClass =
     "relative after:content-[''] after:absolute after:left-0 after:-bottom-1 after:h-[2px] after:w-0 after:bg-ra-sand after:transition-all after:duration-200 hover:after:w-full";
 
-  const socialBase =
-    "text-white/90 transition-transform duration-150 hover:-translate-y-[1px] active:translate-y-0";
+  const socialBase = "text-white/90 transition-transform duration-150 hover:-translate-y-[1px] active:translate-y-0";
 
   return (
     <nav
@@ -157,14 +155,7 @@ export default function Navbar() {
     >
       <div className={`w-full px-8 lg:px-40 py-4 flex justify-between items-center ${topBarBackground}`}>
         <div className="flex items-center gap-6">
-          <ScrollLink
-            to="inicio"
-            smooth
-            duration={500}
-            offset={-64}
-            className="cursor-pointer"
-            onClick={closeAll}
-          >
+          <ScrollLink to="inicio" smooth duration={500} offset={-64} className="cursor-pointer" onClick={closeAll}>
             <img src={logoWeli} alt="WELI" className="h-6 md:h-7 w-auto" draggable={false} />
           </ScrollLink>
 
@@ -181,30 +172,15 @@ export default function Navbar() {
               <i className="fab fa-whatsapp" />
             </a>
 
-            <a
-              href="#"
-              className={`${socialBase} hover:text-blue-500`}
-              aria-label="Facebook"
-              title="Facebook"
-            >
+            <a href="#" className={`${socialBase} hover:text-blue-500`} aria-label="Facebook" title="Facebook">
               <i className="fab fa-facebook-f" />
             </a>
 
-            <a
-              href="#"
-              className={`${socialBase} hover:text-pink-400`}
-              aria-label="Instagram"
-              title="Instagram"
-            >
+            <a href="#" className={`${socialBase} hover:text-pink-400`} aria-label="Instagram" title="Instagram">
               <i className="fab fa-instagram" />
             </a>
 
-            <a
-              href="#"
-              className={`${socialBase} hover:text-blue-300`}
-              aria-label="LinkedIn"
-              title="LinkedIn"
-            >
+            <a href="#" className={`${socialBase} hover:text-blue-300`} aria-label="LinkedIn" title="LinkedIn">
               <i className="fab fa-linkedin-in" />
             </a>
           </div>

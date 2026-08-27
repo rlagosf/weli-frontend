@@ -47,12 +47,7 @@ const monthLabelEs = (year, month) => {
 
 const ymKey = (y, m) => `${y}-${String(m).padStart(2, "0")}`;
 
-const buildMesesExigibles = (
-  now,
-  diaCorte = 5,
-  startYear = START_DEUDA_YEAR,
-  startMonth = START_DEUDA_MONTH
-) => {
+const buildMesesExigibles = (now, diaCorte = 5, startYear = START_DEUDA_YEAR, startMonth = START_DEUDA_MONTH) => {
   const yNow = now.getFullYear();
   const mNow = now.getMonth() + 1;
   const dNow = now.getDate();
@@ -274,20 +269,13 @@ const normalizePagos = (arr, { tipoPagoMap, medioPagoMap, situacionPagoMap, juga
   return list.map((p) => {
     const tipoIdRaw = p?.tipo_pago_id ?? p?.tipo_id ?? p?.tipoPagoId ?? p?.tipo_pago?.id ?? null;
     const medioIdRaw = p?.medio_pago_id ?? p?.medio_id ?? p?.medioPagoId ?? p?.medio_pago?.id ?? null;
-    const situIdRaw =
-      p?.situacion_pago_id ?? p?.estado_pago_id ?? p?.estado_id ?? p?.situacion_pago?.id ?? null;
+    const situIdRaw = p?.situacion_pago_id ?? p?.estado_pago_id ?? p?.estado_id ?? p?.situacion_pago?.id ?? null;
 
     const tipoId = safeInt(tipoIdRaw);
     const medioId = safeInt(medioIdRaw);
     const situId = safeInt(situIdRaw);
 
-    const rutPlano =
-      p?.jugador_rut ??
-      p?.rut_jugador ??
-      p?.rut ??
-      p?.jugador?.rut_jugador ??
-      p?.jugador?.rut ??
-      null;
+    const rutPlano = p?.jugador_rut ?? p?.rut_jugador ?? p?.rut ?? p?.jugador?.rut_jugador ?? p?.jugador?.rut ?? null;
 
     const jAnidado = p?.jugador ?? {};
     const jFromMap = rutPlano != null ? jugadoresMap.get(String(rutPlano)) : null;
@@ -301,8 +289,7 @@ const normalizePagos = (arr, { tipoPagoMap, medioPagoMap, situacionPagoMap, juga
       p?.nombre_jugador ??
       "—";
 
-    const catIdRaw =
-      jAnidado?.categoria?.id ?? jAnidado?.categoria_id ?? jFromMap?.categoria?.id ?? null;
+    const catIdRaw = jAnidado?.categoria?.id ?? jAnidado?.categoria_id ?? jFromMap?.categoria?.id ?? null;
     const catId = safeInt(catIdRaw);
 
     const catNombre =
@@ -318,7 +305,7 @@ const normalizePagos = (arr, { tipoPagoMap, medioPagoMap, situacionPagoMap, juga
     let tipoNombreBase =
       p?.tipo_pago?.nombre ??
       p?.tipo_pago_nombre ??
-      (tipoId != null ? tipoPagoMap.get(String(tipoId)) ?? String(tipoId) : "—");
+      (tipoId != null ? (tipoPagoMap.get(String(tipoId)) ?? String(tipoId)) : "—");
 
     if (tipoId === TIPO_PAGO_MENSUALIDAD && d) {
       const labelMes = monthLabelEs(d.getFullYear(), d.getMonth() + 1);
@@ -330,20 +317,15 @@ const normalizePagos = (arr, { tipoPagoMap, medioPagoMap, situacionPagoMap, juga
     const medioNombre =
       p?.medio_pago?.nombre ??
       p?.medio_pago_nombre ??
-      (medioId != null ? medioPagoMap.get(String(medioId)) ?? String(medioId) : "—");
+      (medioId != null ? (medioPagoMap.get(String(medioId)) ?? String(medioId)) : "—");
 
     const situNombre =
       p?.situacion_pago?.nombre ??
       p?.estado_pago_nombre ??
       p?.estado_nombre ??
-      (situId != null ? situacionPagoMap.get(String(situId)) ?? String(situId) : "—");
+      (situId != null ? (situacionPagoMap.get(String(situId)) ?? String(situId)) : "—");
 
-    const idRaw =
-      p?.id ??
-      p?.ID ??
-      p?.pago_id ??
-      p?.pagoId ??
-      (typeof p?.id_pago !== "undefined" ? p.id_pago : null);
+    const idRaw = p?.id ?? p?.ID ?? p?.pago_id ?? p?.pagoId ?? (typeof p?.id_pago !== "undefined" ? p.id_pago : null);
     const id = safeIdPos(idRaw);
 
     return {
@@ -560,7 +542,7 @@ export default function ListarPagos() {
           const categoriaNombre =
             j?.categoria?.nombre ??
             j?.categoria_nombre ??
-            (categoriaId != null ? catMap.get(Number(categoriaId)) ?? String(categoriaId) : null) ??
+            (categoriaId != null ? (catMap.get(Number(categoriaId)) ?? String(categoriaId)) : null) ??
             (typeof j?.categoria === "string" ? j.categoria : null) ??
             "Sin categoría";
 
@@ -592,8 +574,7 @@ export default function ListarPagos() {
         // Filtrar pagos solo de activos
         const rutsActivos = new Set(Array.from(jm.keys()));
         const rawPagosActivos = rawPagos.filter((p) => {
-          const rut =
-            p?.jugador_rut ?? p?.rut_jugador ?? p?.rut ?? p?.jugador?.rut_jugador ?? p?.jugador?.rut;
+          const rut = p?.jugador_rut ?? p?.rut_jugador ?? p?.rut ?? p?.jugador?.rut_jugador ?? p?.jugador?.rut;
           return rut != null && rutsActivos.has(String(rut));
         });
 
@@ -669,8 +650,7 @@ export default function ListarPagos() {
     const thead = "text-[10px] sm:text-[11px] " + (darkMode ? "bg-black/20" : "bg-ra-cream/90");
 
     const thBase =
-      "py-1.5 px-2 text-center whitespace-nowrap font-extrabold " +
-      (darkMode ? "text-[#ffdda1]" : "text-[#6d5829]");
+      "py-1.5 px-2 text-center whitespace-nowrap font-extrabold " + (darkMode ? "text-[#ffdda1]" : "text-[#6d5829]");
 
     const tdBase = "py-1.5 px-2 text-center " + (darkMode ? "text-white/90" : "text-ra-marron");
 
@@ -704,7 +684,9 @@ export default function ListarPagos() {
 
     const btnSecondary =
       "px-2.5 py-1 rounded-md border transition font-semibold text-[12px] " +
-      (darkMode ? "border-white/18 hover:bg-white/8 text-white" : "border-ra-marron/18 hover:bg-white/70 text-ra-marron") +
+      (darkMode
+        ? "border-white/18 hover:bg-white/8 text-white"
+        : "border-ra-marron/18 hover:bg-white/70 text-ra-marron") +
       " disabled:opacity-50 disabled:cursor-not-allowed";
 
     const badge =
@@ -712,7 +694,9 @@ export default function ListarPagos() {
       (darkMode ? "bg-white/8 border-white/10 text-white/80" : "bg-white/60 border-ra-marron/10 text-ra-marron/80");
 
     const pill = (estadoRaw) => {
-      const e = String(estadoRaw ?? "").trim().toUpperCase();
+      const e = String(estadoRaw ?? "")
+        .trim()
+        .toUpperCase();
       if (e === "PAGADO") return "bg-emerald-500/15 text-emerald-100 border border-emerald-300/20";
       if (e === "VENCIDO") return "bg-red-500/15 text-red-100 border border-red-300/20";
       return "bg-white/10 text-white/90 border border-white/12";
@@ -758,9 +742,16 @@ export default function ListarPagos() {
     );
 
   const findIdByName = (map, wantedName) => {
-    const target = String(wantedName || "").trim().toUpperCase();
+    const target = String(wantedName || "")
+      .trim()
+      .toUpperCase();
     for (const [id, name] of map.entries()) {
-      if (String(name || "").trim().toUpperCase() === target) return Number(id);
+      if (
+        String(name || "")
+          .trim()
+          .toUpperCase() === target
+      )
+        return Number(id);
     }
     return null;
   };
@@ -1048,8 +1039,7 @@ export default function ListarPagos() {
     const deudaYear = pago?.deuda_year ?? null;
     const deudaMonth = pago?.deuda_month ?? null;
 
-    const defaultFechaDeuda =
-      deudaYear && deudaMonth ? `${deudaYear}-${String(deudaMonth).padStart(2, "0")}-01` : "";
+    const defaultFechaDeuda = deudaYear && deudaMonth ? `${deudaYear}-${String(deudaMonth).padStart(2, "0")}-01` : "";
 
     const idRaw = pago?.id ?? row?.id ?? null;
     const idNum = idRaw == null ? null : Number(idRaw);
@@ -1066,11 +1056,7 @@ export default function ListarPagos() {
 
       jugador_rut: row.rut,
       monto: pago?.monto ?? "",
-      fecha_pago: isVirtual
-        ? defaultFechaDeuda
-        : pago?.fecha_pago
-          ? String(pago.fecha_pago).slice(0, 10)
-          : "",
+      fecha_pago: isVirtual ? defaultFechaDeuda : pago?.fecha_pago ? String(pago.fecha_pago).slice(0, 10) : "",
       tipo_pago_id: isVirtual
         ? String(TIPO_PAGO_MENSUALIDAD)
         : pago?.tipo_pago?.id != null
@@ -1078,7 +1064,9 @@ export default function ListarPagos() {
           : "",
       medio_pago_id: pago?.medio_pago?.id != null ? String(pago.medio_pago.id) : "",
       situacion_pago_id: isVirtual
-        ? (situacionVencidoId != null ? String(situacionVencidoId) : "")
+        ? situacionVencidoId != null
+          ? String(situacionVencidoId)
+          : ""
         : pago?.situacion_pago?.id != null
           ? String(pago.situacion_pago.id)
           : "",
@@ -1292,12 +1280,10 @@ export default function ListarPagos() {
       {/* Header */}
       <header className="max-w-6xl mx-auto">
         <div className="text-center">
-          <h1 className={`text-xl sm:text-2xl font-extrabold tracking-tightish ${ui.title}`}>
-            Pagos Centralizados
-          </h1>
+          <h1 className={`text-xl sm:text-2xl font-extrabold tracking-tightish ${ui.title}`}>Pagos Centralizados</h1>
           <p className={`text-[11px] sm:text-xs mt-1 ${ui.subtitle}`}>
-            Vista consolidada de pagos de jugadores <span className="font-semibold">ACTIVOS</span>. Se agregan filas virtuales de{" "}
-            <span className="font-semibold">Mensualidad VENCIDA</span> cuando falta el registro.
+            Vista consolidada de pagos de jugadores <span className="font-semibold">ACTIVOS</span>. Se agregan filas
+            virtuales de <span className="font-semibold">Mensualidad VENCIDA</span> cuando falta el registro.
           </p>
         </div>
       </header>
@@ -1335,7 +1321,11 @@ export default function ListarPagos() {
               <option value="VENCIDO">VENCIDO</option>
             </select>
 
-            <select value={filtroTipoPago} onChange={(e) => setFiltroTipoPago(e.target.value)} className={ui.controlBase}>
+            <select
+              value={filtroTipoPago}
+              onChange={(e) => setFiltroTipoPago(e.target.value)}
+              className={ui.controlBase}
+            >
               <option value="">Tipo de pago (todos)</option>
               {opcionesTipoPago.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -1344,7 +1334,11 @@ export default function ListarPagos() {
               ))}
             </select>
 
-            <select value={filtroMedioPago} onChange={(e) => setFiltroMedioPago(e.target.value)} className={ui.controlBase}>
+            <select
+              value={filtroMedioPago}
+              onChange={(e) => setFiltroMedioPago(e.target.value)}
+              className={ui.controlBase}
+            >
               <option value="">Medio de pago (todos)</option>
               {opcionesMedioPago.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -1489,8 +1483,11 @@ export default function ListarPagos() {
               </button>
 
               <span className={ui.badge}>
-                Página <span style={{ color: PALETTE.sand }} className="font-extrabold">{page}</span> de{" "}
-                <span className="font-extrabold">{totalPages}</span>
+                Página{" "}
+                <span style={{ color: PALETTE.sand }} className="font-extrabold">
+                  {page}
+                </span>{" "}
+                de <span className="font-extrabold">{totalPages}</span>
               </span>
 
               <button
@@ -1557,7 +1554,10 @@ export default function ListarPagos() {
                   <th className={`${ui.thBase} min-w-[150px]`} style={ui.headBorderStyle}>
                     Sucursal
                   </th>
-                  <th className={`${ui.thBase} min-w-[150px]`} style={{ ...ui.headBorderStyle, borderRight: ui.border }}>
+                  <th
+                    className={`${ui.thBase} min-w-[150px]`}
+                    style={{ ...ui.headBorderStyle, borderRight: ui.border }}
+                  >
                     Acción
                   </th>
                 </tr>
@@ -1620,8 +1620,11 @@ export default function ListarPagos() {
               </button>
 
               <span className={ui.badge}>
-                Página <span style={{ color: PALETTE.sand }} className="font-extrabold">{manualPage}</span> de{" "}
-                <span className="font-extrabold">{manualTotalPages}</span>
+                Página{" "}
+                <span style={{ color: PALETTE.sand }} className="font-extrabold">
+                  {manualPage}
+                </span>{" "}
+                de <span className="font-extrabold">{manualTotalPages}</span>
               </span>
 
               <button
@@ -1676,7 +1679,12 @@ export default function ListarPagos() {
               <form onSubmit={submitEdit} className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                 <div>
                   <label className={`block text-[11px] mb-1 ${ui.subtitle}`}>RUT Jugador</label>
-                  <input type="text" value={formatRutWithDV(editForm.jugador_rut)} className={ui.controlBase} disabled />
+                  <input
+                    type="text"
+                    value={formatRutWithDV(editForm.jugador_rut)}
+                    className={ui.controlBase}
+                    disabled
+                  />
                 </div>
 
                 <div>
@@ -1780,10 +1788,20 @@ export default function ListarPagos() {
                 </div>
 
                 <div className="md:col-span-2 flex justify-end gap-2 mt-1.5">
-                  <button type="button" onClick={closeEdit} disabled={editBusy || reloadBusy} className={ui.btnSecondary}>
+                  <button
+                    type="button"
+                    onClick={closeEdit}
+                    disabled={editBusy || reloadBusy}
+                    className={ui.btnSecondary}
+                  >
                     Cancelar
                   </button>
-                  <button type="submit" disabled={editBusy || reloadBusy} className={ui.btnPrimary} style={ui.btnPrimaryStyle}>
+                  <button
+                    type="submit"
+                    disabled={editBusy || reloadBusy}
+                    className={ui.btnPrimary}
+                    style={ui.btnPrimaryStyle}
+                  >
                     {editBusy ? "Guardando…" : "Guardar"}
                   </button>
                 </div>

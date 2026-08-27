@@ -7,9 +7,7 @@ const NUMERO_WHATSAPP = "56958066120";
 const MENSAJE_WHATSAPP =
   "Hola, me gustaría solicitar una DEMO de WELI. Me interesa gestionar jugadores, pagos/estados de cuenta, asistencia, agenda y estadísticas. ¿Podemos coordinar una breve reunión y ver planes?";
 
-const WHATSAPP_LINK = `https://wa.me/${NUMERO_WHATSAPP}?text=${encodeURIComponent(
-  MENSAJE_WHATSAPP
-)}`;
+const WHATSAPP_LINK = `https://wa.me/${NUMERO_WHATSAPP}?text=${encodeURIComponent(MENSAJE_WHATSAPP)}`;
 
 export default function Contacto() {
   const rootRef = useRef(null);
@@ -73,14 +71,12 @@ export default function Contacto() {
           <div className="relative flex items-center justify-center">
             <div className="w-full text-center px-7 sm:px-10 md:px-12 py-14 md:py-16">
               <h2 className="text-3xl md:text-4xl font-bold leading-tight">
-                Lleva tu academia a otro nivel con{" "}
-                <span className="text-ra-fucsia">WELI</span>
+                Lleva tu academia a otro nivel con <span className="text-ra-fucsia">WELI</span>
               </h2>
 
               <p className="mt-4 text-gray-200/90 text-sm md:text-base leading-relaxed max-w-md mx-auto">
-                Gestiona jugadores, pagos y estados de cuenta, asistencia, agenda
-                y estadísticas en un solo lugar. Orden para el staff, claridad
-                para administración y continuidad para el proceso del jugador.
+                Gestiona jugadores, pagos y estados de cuenta, asistencia, agenda y estadísticas en un solo lugar. Orden
+                para el staff, claridad para administración y continuidad para el proceso del jugador.
               </p>
 
               {/* CTAs (sin hover/transition/shadow extra) */}
@@ -114,8 +110,8 @@ export default function Contacto() {
                 </a>
 
                 <p className="text-xs text-white/60 mt-2 max-w-md">
-                  Te responderemos con opciones de implementación y un recorrido
-                  por módulos: administración, portal apoderados, pagos y métricas.
+                  Te responderemos con opciones de implementación y un recorrido por módulos: administración, portal
+                  apoderados, pagos y métricas.
                 </p>
               </div>
 

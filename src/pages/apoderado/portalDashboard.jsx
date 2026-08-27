@@ -29,11 +29,7 @@ const ACCENT = "#2563EB"; // ✅ azul confianza
    Utils
 ======================= */
 const getErrStatus = (err) => err?.status ?? err?.response?.status ?? 0;
-const getErrMsg = (err) =>
-  err?.data?.message ??
-  err?.response?.data?.message ??
-  err?.message ??
-  "Error";
+const getErrMsg = (err) => err?.data?.message ?? err?.response?.data?.message ?? err?.message ?? "Error";
 
 const clearSession = () => {
   try {
@@ -268,11 +264,7 @@ export default function PortalDashboard() {
 
   const handleLogout = useCallback(async () => {
     try {
-      await api.post(
-        "/auth-apoderado/logout",
-        { reason: "user_click" },
-        { headers: authHeaders() }
-      );
+      await api.post("/auth-apoderado/logout", { reason: "user_click" }, { headers: authHeaders() });
     } catch {
       // si falla auditoría, igual cerramos sesión
     } finally {
@@ -309,10 +301,7 @@ export default function PortalDashboard() {
           try {
             const prev = localStorage.getItem("user_info");
             const parsed = prev ? JSON.parse(prev) : {};
-            localStorage.setItem(
-              "user_info",
-              JSON.stringify({ ...parsed, nombre_apoderado: nombre })
-            );
+            localStorage.setItem("user_info", JSON.stringify({ ...parsed, nombre_apoderado: nombre }));
           } catch {}
         }
       } catch (err) {
@@ -377,10 +366,10 @@ export default function PortalDashboard() {
       setError("");
 
       try {
-        const { data } = await api.get(
-          `/portal-apoderado/jugadores/${encodeURIComponent(selectedRut)}/resumen`,
-          { signal: abort.signal, headers: authHeaders() }
-        );
+        const { data } = await api.get(`/portal-apoderado/jugadores/${encodeURIComponent(selectedRut)}/resumen`, {
+          signal: abort.signal,
+          headers: authHeaders(),
+        });
 
         setDetalle(data?.ok ? data : null);
       } catch (err) {
@@ -493,10 +482,10 @@ export default function PortalDashboard() {
     setContratoLoading(true);
 
     try {
-      const res = await api.get(
-        `/portal-apoderado/jugadores/${encodeURIComponent(selectedRut)}/contrato`,
-        { responseType: "blob", headers: authHeaders() }
-      );
+      const res = await api.get(`/portal-apoderado/jugadores/${encodeURIComponent(selectedRut)}/contrato`, {
+        responseType: "blob",
+        headers: authHeaders(),
+      });
 
       const ct = res?.headers?.["content-type"] || res?.headers?.["Content-Type"] || "";
       if (ct && !String(ct).toLowerCase().includes("application/pdf")) {
@@ -525,28 +514,19 @@ export default function PortalDashboard() {
      Derived data
   ======================== */
   const jugadorSel = useMemo(() => {
-    return (
-      jugadores.find((x) => String(x?.rut_jugador) === String(selectedRut)) ||
-      jugadores[0] ||
-      null
-    );
+    return jugadores.find((x) => String(x?.rut_jugador) === String(selectedRut)) || jugadores[0] || null;
   }, [jugadores, selectedRut]);
 
   const jugador = detalle?.jugador || null;
   const estadisticas = detalle?.estadisticas || null;
   const pagos = Array.isArray(detalle?.pagos) ? detalle.pagos : [];
 
-  const totalPagado = useMemo(
-    () => pagos.reduce((acc, p) => acc + Number(p?.monto || 0), 0),
-    [pagos]
-  );
+  const totalPagado = useMemo(() => pagos.reduce((acc, p) => acc + Number(p?.monto || 0), 0), [pagos]);
 
   const lastPago = useMemo(() => {
     const arr = pagos.filter((p) => p?.fecha_pago);
     if (!arr.length) return null;
-    const sorted = [...arr].sort(
-      (a, b) => new Date(b.fecha_pago).getTime() - new Date(a.fecha_pago).getTime()
-    );
+    const sorted = [...arr].sort((a, b) => new Date(b.fecha_pago).getTime() - new Date(a.fecha_pago).getTime());
     return sorted[0] || null;
   }, [pagos]);
 
@@ -598,9 +578,7 @@ export default function PortalDashboard() {
 
   const statsEntries = useMemo(() => {
     if (!estadisticas) return [];
-    return Object.entries(estadisticas).filter(
-      ([k]) => !["id", "created_at", "updated_at"].includes(k)
-    );
+    return Object.entries(estadisticas).filter(([k]) => !["id", "created_at", "updated_at"].includes(k));
   }, [estadisticas]);
 
   const tieneContratoFlag = Boolean(jugador?.tiene_contrato) || Boolean(jugadorSel?.tiene_contrato);
@@ -626,9 +604,7 @@ export default function PortalDashboard() {
 
   if (bootLoading) return <IsLoading />;
 
-  const tituloBienvenida = apoderadoNombre
-    ? `Bienvenido ${apoderadoNombre}`
-    : "Bienvenido Apoderado";
+  const tituloBienvenida = apoderadoNombre ? `Bienvenido ${apoderadoNombre}` : "Bienvenido Apoderado";
 
   return (
     <div className={["min-h-screen font-sans antialiased", pageClass].join(" ")}>
@@ -695,16 +671,13 @@ export default function PortalDashboard() {
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-5">
           {/* Sidebar jugadores */}
           <aside
-            className={[
-              "rounded-[26px] border shadow-[0_20px_70px_rgba(0,0,0,0.08)] p-4 sm:p-5",
-              surfaceClass,
-            ].join(" ")}
+            className={["rounded-[26px] border shadow-[0_20px_70px_rgba(0,0,0,0.08)] p-4 sm:p-5", surfaceClass].join(
+              " "
+            )}
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className={["text-xs font-black tracking-[0.35em] uppercase", labelFaint].join(" ")}>
-                  Jugadores
-                </p>
+                <p className={["text-xs font-black tracking-[0.35em] uppercase", labelFaint].join(" ")}>Jugadores</p>
                 <p className={["mt-1 text-sm font-extrabold", darkMode ? "text-white/85" : "text-slate-800"].join(" ")}>
                   Selecciona a quién ver
                 </p>
@@ -716,9 +689,7 @@ export default function PortalDashboard() {
               <div
                 className={[
                   "mt-4 rounded-2xl border font-extrabold p-4",
-                  darkMode
-                    ? "border-red-500/30 bg-red-500/10 text-red-200"
-                    : "border-red-200 bg-red-50 text-red-700",
+                  darkMode ? "border-red-500/30 bg-red-500/10 text-red-200" : "border-red-200 bg-red-50 text-red-700",
                 ].join(" ")}
               >
                 ❌ {error}
@@ -753,8 +724,8 @@ export default function PortalDashboard() {
                             ? "bg-white/10"
                             : "bg-white shadow-sm"
                           : darkMode
-                          ? "border-white/10 bg-white/5 hover:bg-white/10"
-                          : "border-black/10 bg-white/60 hover:bg-white",
+                            ? "border-white/10 bg-white/5 hover:bg-white/10"
+                            : "border-black/10 bg-white/60 hover:bg-white",
                       ].join(" ")}
                       style={{
                         borderColor: active ? (darkMode ? "rgba(37,99,235,0.55)" : "rgba(37,99,235,0.35)") : "",
@@ -763,7 +734,11 @@ export default function PortalDashboard() {
                       <p className={["text-xs font-black tracking-[0.35em] uppercase", labelFaint].join(" ")}>
                         Jugador
                       </p>
-                      <p className={["mt-1 text-sm font-extrabold", darkMode ? "text-white" : "text-slate-900"].join(" ")}>
+                      <p
+                        className={["mt-1 text-sm font-extrabold", darkMode ? "text-white" : "text-slate-900"].join(
+                          " "
+                        )}
+                      >
                         {j?.nombre_jugador || "Sin nombre"}
                       </p>
                       <p className={["mt-1 text-xs font-semibold", mutedText].join(" ")}>
@@ -788,10 +763,9 @@ export default function PortalDashboard() {
 
           {/* Main */}
           <main
-            className={[
-              "rounded-[26px] border shadow-[0_20px_70px_rgba(0,0,0,0.08)] p-5 sm:p-7",
-              surfaceClass,
-            ].join(" ")}
+            className={["rounded-[26px] border shadow-[0_20px_70px_rgba(0,0,0,0.08)] p-5 sm:p-7", surfaceClass].join(
+              " "
+            )}
           >
             {/* Header jugador */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -799,7 +773,12 @@ export default function PortalDashboard() {
                 <p className={["text-xs font-black tracking-[0.35em] uppercase", labelFaint].join(" ")}>
                   Jugador seleccionado
                 </p>
-                <h2 className={["mt-2 text-2xl sm:text-3xl font-extrabold", darkMode ? "text-white" : "text-slate-900"].join(" ")}>
+                <h2
+                  className={[
+                    "mt-2 text-2xl sm:text-3xl font-extrabold",
+                    darkMode ? "text-white" : "text-slate-900",
+                  ].join(" ")}
+                >
                   {jugadorSel?.nombre_jugador || "—"}
                 </h2>
                 <p className={["mt-1 text-sm font-semibold", mutedText].join(" ")}>
@@ -926,10 +905,9 @@ export default function PortalDashboard() {
                                 {r.monto}
                               </td>
                               <td
-                                className={[
-                                  "py-2 font-extrabold truncate",
-                                  situacionClass(r.situacion, darkMode),
-                                ].join(" ")}
+                                className={["py-2 font-extrabold truncate", situacionClass(r.situacion, darkMode)].join(
+                                  " "
+                                )}
                                 title={r.situacion}
                               >
                                 {r.situacion}
@@ -976,8 +954,8 @@ export default function PortalDashboard() {
                               ? "bg-white/5 border-white/10 text-white/35 cursor-not-allowed"
                               : "bg-black/5 border-black/10 text-black/30 cursor-not-allowed"
                             : darkMode
-                            ? "bg-white/10 border-white/10 text-white hover:bg-white/15"
-                            : "bg-white border-black/10 text-black hover:bg-white/70",
+                              ? "bg-white/10 border-white/10 text-white hover:bg-white/15"
+                              : "bg-white border-black/10 text-black hover:bg-white/70",
                         ].join(" ")}
                         title={contratoLoading ? "Cargando…" : !tieneContratoFlag ? "Sin contrato" : "Ver contrato"}
                       >
@@ -993,9 +971,7 @@ export default function PortalDashboard() {
               <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {/* Pie disciplina */}
                 <div className={["rounded-2xl border p-4", panelBg].join(" ")}>
-                  <p className={["text-xs font-black tracking-[0.35em] uppercase", labelFaint].join(" ")}>
-                    Disciplina
-                  </p>
+                  <p className={["text-xs font-black tracking-[0.35em] uppercase", labelFaint].join(" ")}>Disciplina</p>
 
                   {!estadisticas ? (
                     <p className={["mt-3 text-sm font-semibold", mutedText].join(" ")}>
@@ -1051,15 +1027,11 @@ export default function PortalDashboard() {
                   </p>
 
                   {agendaLoading ? (
-                    <p className={["mt-3 text-sm font-semibold", mutedText].join(" ")}>
-                      Cargando agenda…
-                    </p>
+                    <p className={["mt-3 text-sm font-semibold", mutedText].join(" ")}>Cargando agenda…</p>
                   ) : agendaError ? (
                     <p className="mt-3 text-sm font-extrabold text-red-500">{agendaError}</p>
                   ) : agendaItems.length === 0 ? (
-                    <p className={["mt-3 text-sm font-semibold", mutedText].join(" ")}>
-                      No hay eventos próximos.
-                    </p>
+                    <p className={["mt-3 text-sm font-semibold", mutedText].join(" ")}>No hay eventos próximos.</p>
                   ) : (
                     <div className="mt-3 space-y-2">
                       {agendaItems.slice(0, 6).map((ev) => (
@@ -1082,7 +1054,10 @@ export default function PortalDashboard() {
                                 {ev.titulo}
                               </p>
                               {ev.descripcion ? (
-                                <p className={["text-xs font-semibold truncate", mutedText].join(" ")} title={ev.descripcion}>
+                                <p
+                                  className={["text-xs font-semibold truncate", mutedText].join(" ")}
+                                  title={ev.descripcion}
+                                >
                                   {ev.descripcion}
                                 </p>
                               ) : null}
@@ -1167,9 +1142,7 @@ export default function PortalDashboard() {
                   </p>
 
                   {!estadisticas ? (
-                    <p className={["mt-3 text-sm font-semibold", mutedText].join(" ")}>
-                      Sin estadísticas registradas.
-                    </p>
+                    <p className={["mt-3 text-sm font-semibold", mutedText].join(" ")}>Sin estadísticas registradas.</p>
                   ) : (
                     <div className="mt-3 space-y-2">
                       {statsEntries.map(([k, v]) => {
@@ -1192,8 +1165,16 @@ export default function PortalDashboard() {
                               </span>
                             </div>
 
-                            <div className={["text-[12px] sm:text-sm font-extrabold", darkMode ? "text-white" : "text-slate-900"].join(" ")}>
-                              <span className="block max-w-[42vw] sm:max-w-[260px] truncate text-right" title={valLabel}>
+                            <div
+                              className={[
+                                "text-[12px] sm:text-sm font-extrabold",
+                                darkMode ? "text-white" : "text-slate-900",
+                              ].join(" ")}
+                            >
+                              <span
+                                className="block max-w-[42vw] sm:max-w-[260px] truncate text-right"
+                                title={valLabel}
+                              >
                                 {valLabel}
                               </span>
                             </div>

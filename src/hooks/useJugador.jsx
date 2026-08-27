@@ -66,24 +66,15 @@ export default function useJugador(rut) {
 
         setJugador(j);
 
-        const contexto =
-          await obtenerContextoEstadisticoJugador(j);
+        const contexto = await obtenerContextoEstadisticoJugador(j);
 
         if (!activo) return;
 
-        setStats(
-          contexto?.stats || generarStatsBaseVacias()
-        );
+        setStats(contexto?.stats || generarStatsBaseVacias());
 
-        setConvocatorias(
-          contexto?.convocatorias || {}
-        );
+        setConvocatorias(contexto?.convocatorias || {});
 
-        setDeporteId(
-          contexto?.deporte_id ??
-            Number(j?.deporte_id ?? 0) ??
-            null
-        );
+        setDeporteId(contexto?.deporte_id ?? Number(j?.deporte_id ?? 0) ?? null);
       } catch (e) {
         if (!activo) return;
 

@@ -38,9 +38,7 @@ export default function PortalHome() {
             <div className="px-6 sm:px-10 py-6 border-b border-black/10">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs font-black tracking-[0.35em] uppercase text-black/60">
-                    Seguridad
-                  </p>
+                  <p className="text-xs font-black tracking-[0.35em] uppercase text-black/60">Seguridad</p>
                   <h2 className="mt-1 text-xl sm:text-2xl font-extrabold uppercase tracking-widest text-black">
                     Cambiar contraseña
                   </h2>
@@ -49,15 +47,10 @@ export default function PortalHome() {
                 {/* Leyenda + logo (esquina derecha) */}
                 <div className="hidden sm:flex items-center gap-3">
                   <div className="text-right leading-tight">
-                    <p
-                      className="text-xs font-black tracking-[0.35em] uppercase"
-                      style={{ color: ACCENT }}
-                    >
+                    <p className="text-xs font-black tracking-[0.35em] uppercase" style={{ color: ACCENT }}>
                       Portal
                     </p>
-                    <p className="text-xs font-semibold text-black/60">
-                      Acceso apoderados
-                    </p>
+                    <p className="text-xs font-semibold text-black/60">Acceso apoderados</p>
                   </div>
 
                   <img
@@ -73,10 +66,7 @@ export default function PortalHome() {
             <div className="px-6 sm:px-10 py-10">
               {/* Título + subtítulo centrados (dentro de la tarjeta) */}
               <div className="text-center mb-8">
-                <h1
-                  className="text-4xl sm:text-5xl font-extrabold tracking-widest uppercase"
-                  style={{ color: ACCENT }}
-                >
+                <h1 className="text-4xl sm:text-5xl font-extrabold tracking-widest uppercase" style={{ color: ACCENT }}>
                   Portal Apoderados
                 </h1>
                 <p className="mt-1 text-sm sm:text-base font-semibold text-black/70">

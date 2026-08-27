@@ -24,15 +24,9 @@ class RouteErrorBoundary extends React.Component {
       return (
         <div className="min-h-screen flex items-center justify-center p-6">
           <div className="max-w-md w-full rounded-2xl border border-black/10 bg-white p-6 text-center">
-            <p className="text-sm font-black tracking-widest uppercase text-black/50">
-              Algo falló
-            </p>
-            <h2 className="mt-2 text-xl font-extrabold text-black">
-              No pudimos cargar esta vista
-            </h2>
-            <p className="mt-2 text-sm font-semibold text-black/70">
-              Reintenta recargando la página.
-            </p>
+            <p className="text-sm font-black tracking-widest uppercase text-black/50">Algo falló</p>
+            <h2 className="mt-2 text-xl font-extrabold text-black">No pudimos cargar esta vista</h2>
+            <p className="mt-2 text-sm font-semibold text-black/70">Reintenta recargando la página.</p>
 
             <button
               type="button"

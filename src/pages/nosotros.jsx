@@ -71,15 +71,8 @@ export default function Nosotros() {
       {/* Contenedor: “tarjetas invisibles” (solo layout) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-6xl w-full items-stretch">
         {TARJETAS.map((t) => (
-          <article
-            key={t.titulo}
-            className="p-0 md:p-2 bg-transparent border-0 shadow-none rounded-none"
-          >
-            <h3
-              className={`text-2xl font-bold mb-4 uppercase tracking-wide text-ra-sand ${t.align}`}
-            >
-              {t.titulo}
-            </h3>
+          <article key={t.titulo} className="p-0 md:p-2 bg-transparent border-0 shadow-none rounded-none">
+            <h3 className={`text-2xl font-bold mb-4 uppercase tracking-wide text-ra-sand ${t.align}`}>{t.titulo}</h3>
 
             <p className="text-white/75 text-sm md:text-base leading-relaxed text-justify whitespace-pre-line">
               {t.texto}

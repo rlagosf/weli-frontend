@@ -1,16 +1,7 @@
 // src/pages/apoderado/configuracionApoderado.jsx
 import { useEffect, useRef, useState } from "react";
 import Cropper from "react-easy-crop";
-import {
-  FiArrowLeft,
-  FiCamera,
-  FiLock,
-  FiLogOut,
-  FiMoon,
-  FiSave,
-  FiShield,
-  FiSun,
-} from "react-icons/fi";
+import { FiArrowLeft, FiCamera, FiLock, FiLogOut, FiMoon, FiSave, FiShield, FiSun } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import IsLoading from "../../components/isLoading";
 import { useTheme } from "../../context/ThemeContext";
@@ -36,9 +27,7 @@ const Pill = ({ children, darkMode }) => (
    Foto helpers (browser-only)
 ─────────────────────────────── */
 function isValidMime(m) {
-  return ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(
-    String(m || "").toLowerCase()
-  );
+  return ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(String(m || "").toLowerCase());
 }
 
 function approxBytesFromBase64(b64) {
@@ -79,17 +68,7 @@ async function getCroppedCompressedBase64(imageSrc, cropPixels, outSize, quality
   canvas.height = outSize;
   const ctx = canvas.getContext("2d");
 
-  ctx.drawImage(
-    img,
-    cropPixels.x,
-    cropPixels.y,
-    cropPixels.width,
-    cropPixels.height,
-    0,
-    0,
-    outSize,
-    outSize
-  );
+  ctx.drawImage(img, cropPixels.x, cropPixels.y, cropPixels.width, cropPixels.height, 0, 0, outSize, outSize);
 
   const { dataUrl, base64 } = canvasToBase64(canvas, "image/jpeg", quality);
   const approxBytes = approxBytesFromBase64(base64);
@@ -106,10 +85,7 @@ function clean(v) {
 
 function pickBest(items, key) {
   for (const it of items || []) {
-    const val =
-      clean(it?.[key]) ??
-      clean(it?.jugador?.[key]) ??
-      clean(it?.apoderado?.[key]);
+    const val = clean(it?.[key]) ?? clean(it?.jugador?.[key]) ?? clean(it?.apoderado?.[key]);
     if (val) return val;
   }
   return null;
@@ -177,15 +153,9 @@ export default function ConfiguracionApoderado() {
   const FOTO_MAX_STORED_KB = 350; // tope aproximado de guardado
 
   // estilos base (✅ sin “font-realacademy”)
-  const pageClass = darkMode
-    ? "text-white bg-[#0B1220]"
-    : "text-[#0f172a] bg-[#eef2f7]";
-  const surfaceClass = darkMode
-    ? "border-white/10 bg-[#0F1A2B]"
-    : "border-black/10 bg-[#ffffffcc]";
-  const cardClass = darkMode
-    ? "border-white/10 bg-[#0C1626]"
-    : "border-black/10 bg-white";
+  const pageClass = darkMode ? "text-white bg-[#0B1220]" : "text-[#0f172a] bg-[#eef2f7]";
+  const surfaceClass = darkMode ? "border-white/10 bg-[#0F1A2B]" : "border-black/10 bg-[#ffffffcc]";
+  const cardClass = darkMode ? "border-white/10 bg-[#0C1626]" : "border-black/10 bg-white";
   const mutedText = darkMode ? "text-white/65" : "text-slate-600";
   const softText = darkMode ? "text-white/80" : "text-slate-700";
 
@@ -244,19 +214,11 @@ export default function ConfiguracionApoderado() {
         });
         if (abort.signal.aborted) return;
 
-        const arr = Array.isArray(data?.jugadores)
-          ? data.jugadores
-          : Array.isArray(data?.items)
-          ? data.items
-          : [];
+        const arr = Array.isArray(data?.jugadores) ? data.jugadores : Array.isArray(data?.items) ? data.items : [];
 
         setJugadores(arr);
 
-        const firstRut =
-          pickBest(arr, "rut_jugador") ||
-          pickBest(arr, "rut") ||
-          pickBest(arr, "rutJugador") ||
-          "";
+        const firstRut = pickBest(arr, "rut_jugador") || pickBest(arr, "rut") || pickBest(arr, "rutJugador") || "";
 
         if (firstRut) setSelectedRutJugador(String(firstRut));
       } catch (err) {
@@ -304,10 +266,10 @@ export default function ConfiguracionApoderado() {
       }
 
       try {
-        const { data } = await api.get(
-          `/portal-apoderado/jugadores/${selectedRutJugador}/foto`,
-          { signal: abort.signal, headers: authHeaders() }
-        );
+        const { data } = await api.get(`/portal-apoderado/jugadores/${selectedRutJugador}/foto`, {
+          signal: abort.signal,
+          headers: authHeaders(),
+        });
         if (abort.signal.aborted) return;
 
         if (data?.foto_base64 && data?.foto_mime) {
@@ -341,11 +303,7 @@ export default function ConfiguracionApoderado() {
     }
 
     try {
-      await api.post(
-        "/auth-apoderado/logout",
-        { reason: "user_click" },
-        { headers: authHeaders() }
-      );
+      await api.post("/auth-apoderado/logout", { reason: "user_click" }, { headers: authHeaders() });
     } catch {
       // igual cerramos sesión
     } finally {
@@ -571,16 +529,9 @@ export default function ConfiguracionApoderado() {
 
   const jugadorOptions = (jugadores || [])
     .map((it) => {
-      const rutJ =
-        pickBest([it], "rut_jugador") ||
-        pickBest([it], "rut") ||
-        pickBest([it], "rutJugador") ||
-        "";
+      const rutJ = pickBest([it], "rut_jugador") || pickBest([it], "rut") || pickBest([it], "rutJugador") || "";
       const nombreJ =
-        pickBest([it], "nombre_jugador") ||
-        pickBest([it], "nombre") ||
-        pickBest([it], "jugador_nombre") ||
-        "Jugador";
+        pickBest([it], "nombre_jugador") || pickBest([it], "nombre") || pickBest([it], "jugador_nombre") || "Jugador";
       return { rut: String(rutJ || ""), nombre: String(nombreJ || "Jugador") };
     })
     .filter((x) => x.rut);
@@ -702,9 +653,7 @@ export default function ConfiguracionApoderado() {
             <div
               className={[
                 "rounded-2xl border font-extrabold p-4",
-                darkMode
-                  ? "border-red-500/30 bg-red-500/10 text-red-200"
-                  : "border-red-200 bg-red-50 text-red-700",
+                darkMode ? "border-red-500/30 bg-red-500/10 text-red-200" : "border-red-200 bg-red-50 text-red-700",
               ].join(" ")}
             >
               {String(error).startsWith("❌") ? error : `❌ ${error}`}
@@ -740,10 +689,9 @@ export default function ConfiguracionApoderado() {
 
         {/* ✅ Seguridad */}
         <section
-          className={[
-            "mt-6 rounded-[26px] border shadow-[0_20px_70px_rgba(0,0,0,0.08)] p-5 sm:p-6",
-            surfaceClass,
-          ].join(" ")}
+          className={["mt-6 rounded-[26px] border shadow-[0_20px_70px_rgba(0,0,0,0.08)] p-5 sm:p-6", surfaceClass].join(
+            " "
+          )}
         >
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -881,10 +829,9 @@ export default function ConfiguracionApoderado() {
 
         {/* ======== FOTO ======== */}
         <section
-          className={[
-            "mt-6 rounded-[26px] border shadow-[0_20px_70px_rgba(0,0,0,0.08)] p-5 sm:p-6",
-            surfaceClass,
-          ].join(" ")}
+          className={["mt-6 rounded-[26px] border shadow-[0_20px_70px_rgba(0,0,0,0.08)] p-5 sm:p-6", surfaceClass].join(
+            " "
+          )}
         >
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -906,7 +853,8 @@ export default function ConfiguracionApoderado() {
                 Fotografía del jugador
               </h2>
               <p className={["mt-1 text-sm font-semibold", mutedText].join(" ")}>
-                Selecciona el jugador, sube una foto, ajusta el encuadre y listo. Optimizada para no “comerse” tu MySQL 😄
+                Selecciona el jugador, sube una foto, ajusta el encuadre y listo. Optimizada para no “comerse” tu MySQL
+                😄
               </p>
             </div>
 
@@ -930,9 +878,7 @@ export default function ConfiguracionApoderado() {
               onChange={(e) => setSelectedRutJugador(e.target.value)}
               className={[
                 "mt-1 w-full rounded-xl border px-4 py-3 text-sm font-semibold outline-none transition",
-                darkMode
-                  ? "border-white/10 bg-white/5 text-white"
-                  : "border-black/10 bg-white text-slate-900",
+                darkMode ? "border-white/10 bg-white/5 text-white" : "border-black/10 bg-white text-slate-900",
               ].join(" ")}
               disabled={pwdRequired || !jugadorOptions.length || savingFoto}
               title={pwdRequired ? "Primero cambia tu contraseña" : undefined}
@@ -955,11 +901,7 @@ export default function ConfiguracionApoderado() {
                 ].join(" ")}
               >
                 {fotoPreviewUrl ? (
-                  <img
-                    src={fotoPreviewUrl}
-                    alt="Foto del jugador"
-                    className="w-full h-full object-cover"
-                  />
+                  <img src={fotoPreviewUrl} alt="Foto del jugador" className="w-full h-full object-cover" />
                 ) : (
                   <div
                     className={[
@@ -984,8 +926,8 @@ export default function ConfiguracionApoderado() {
                   pwdRequired
                     ? "Primero cambia tu contraseña"
                     : !selectedRutJugador
-                    ? "Selecciona un jugador"
-                    : "Subir foto"
+                      ? "Selecciona un jugador"
+                      : "Subir foto"
                 }
               >
                 <input
@@ -1025,9 +967,7 @@ export default function ConfiguracionApoderado() {
                 <div
                   className={[
                     "mt-3 rounded-xl border p-3 font-extrabold",
-                    darkMode
-                      ? "border-red-500/30 bg-red-500/10 text-red-200"
-                      : "border-red-200 bg-red-50 text-red-700",
+                    darkMode ? "border-red-500/30 bg-red-500/10 text-red-200" : "border-red-200 bg-red-50 text-red-700",
                   ].join(" ")}
                 >
                   ❌ {fotoError}
@@ -1050,10 +990,7 @@ export default function ConfiguracionApoderado() {
               {/* Modal crop */}
               {cropOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                  <div
-                    className="absolute inset-0 bg-black/60"
-                    onClick={() => !savingFoto && setCropOpen(false)}
-                  />
+                  <div className="absolute inset-0 bg-black/60" onClick={() => !savingFoto && setCropOpen(false)} />
 
                   <div
                     className={[

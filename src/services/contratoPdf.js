@@ -33,12 +33,12 @@ export async function buildContratoPdfBlob({
 
   // ✅ 2cm exactos
   const marginX = cmToPt(2);
-  const topY = cmToPt(3.2);          // inicio cuerpo (bajo el header)
-  const bottomMargin = cmToPt(3);   // pie + aire
+  const topY = cmToPt(3.2); // inicio cuerpo (bajo el header)
+  const bottomMargin = cmToPt(3); // pie + aire
   const maxWidth = pageW - marginX * 2;
 
   const fontSizeBody = 12;
-  const lineHeight = 18;     // ~1.5
+  const lineHeight = 18; // ~1.5
   const paraGap = 6;
 
   /* =========================
@@ -60,7 +60,7 @@ export async function buildContratoPdfBlob({
     if (!logo) return;
     const size = 320;
     try {
-      const gState = doc.GState ? doc.GState({ opacity: 0.10 }) : null;
+      const gState = doc.GState ? doc.GState({ opacity: 0.1 }) : null;
       if (gState) doc.setGState(gState);
       doc.addImage(logo, "PNG", (pageW - size) / 2, (pageH - size) / 2, size, size);
       if (gState && doc.GState) doc.setGState(doc.GState({ opacity: 1 }));
@@ -83,8 +83,7 @@ export async function buildContratoPdfBlob({
   /* =========================
      Título principal centrado
   ========================= */
-  const MAIN_TITLE =
-    "CONTRATO DE PRESTACIÓN DE SERVICIOS DE ENSEÑANZA DEPORTIVA ESPECIALIZADA EN FÚTBOL";
+  const MAIN_TITLE = "CONTRATO DE PRESTACIÓN DE SERVICIOS DE ENSEÑANZA DEPORTIVA ESPECIALIZADA EN FÚTBOL";
 
   const header = () => {
     drawWatermark();
@@ -121,7 +120,10 @@ export async function buildContratoPdfBlob({
       .replace(/[ ]{2,}/g, " ")
       .trimEnd();
 
-  const normalizeSpaces = (s) => String(s || "").replace(/\s+/g, " ").trim();
+  const normalizeSpaces = (s) =>
+    String(s || "")
+      .replace(/\s+/g, " ")
+      .trim();
 
   /* =========================
      Detectar subtítulos (izquierda)
@@ -220,7 +222,11 @@ export async function buildContratoPdfBlob({
   const first = cleanLine(content.split("\n")[0] || "").trim();
 
   if (first && first.toUpperCase() === MAIN_TITLE.toUpperCase()) {
-    content = content.split("\n").slice(1).join("\n").replace(/^\s*\n+/, "");
+    content = content
+      .split("\n")
+      .slice(1)
+      .join("\n")
+      .replace(/^\s*\n+/, "");
   }
 
   const lines = content.split("\n");

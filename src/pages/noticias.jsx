@@ -31,7 +31,9 @@ const CARD_VARIANTS = {
 const isCanceled = (e) =>
   e?.name === "CanceledError" ||
   e?.code === "ERR_CANCELED" ||
-  String(e?.message || "").toLowerCase().includes("canceled");
+  String(e?.message || "")
+    .toLowerCase()
+    .includes("canceled");
 
 const fromAnyToHuman = (value) => {
   if (!value) return "";
@@ -50,9 +52,7 @@ const fromAnyToHuman = (value) => {
 };
 
 function FloatingTooltipCard({ item, imgSrc, onOpen, dark = true, index = 0 }) {
-  const surface = dark
-    ? "bg-white/[0.06] border-white/15 hover:border-white/25"
-    : "bg-white border-gray-200";
+  const surface = dark ? "bg-white/[0.06] border-white/15 hover:border-white/25" : "bg-white border-gray-200";
 
   return (
     <motion.div
@@ -110,9 +110,7 @@ function FloatingTooltipCard({ item, imgSrc, onOpen, dark = true, index = 0 }) {
 function ModalNoticia({ open, onClose, item, imgSrc, dark = true, loadingDetail = false }) {
   if (!open) return null;
 
-  const shell = dark
-    ? "bg-[#0b1220] text-white border-white/10"
-    : "bg-white text-black border-black/10";
+  const shell = dark ? "bg-[#0b1220] text-white border-white/10" : "bg-white text-black border-black/10";
 
   const isPopup = Number(item?.is_popup ?? 0) === 1;
 
@@ -131,9 +129,7 @@ function ModalNoticia({ open, onClose, item, imgSrc, dark = true, loadingDetail 
             <div className="p-4 sm:p-5 flex items-center justify-between">
               <div className="font-extrabold text-base sm:text-lg tracking-tight">
                 {item?.titulo || "Noticia"}
-                {loadingDetail && (
-                  <span className="ml-2 text-xs font-semibold text-white/60">· cargando…</span>
-                )}
+                {loadingDetail && <span className="ml-2 text-xs font-semibold text-white/60">· cargando…</span>}
               </div>
 
               <button
@@ -168,9 +164,7 @@ function ModalNoticia({ open, onClose, item, imgSrc, dark = true, loadingDetail 
               </div>
 
               {item?.resumen ? (
-                <div className="mt-3 text-gray-100 font-semibold leading-relaxed">
-                  {item.resumen}
-                </div>
+                <div className="mt-3 text-gray-100 font-semibold leading-relaxed">{item.resumen}</div>
               ) : null}
 
               <div className="mt-4 text-gray-200 leading-relaxed">
@@ -279,8 +273,7 @@ export default function Noticias() {
         const popupFromApi = data?.popup ?? null;
         const cardsFromApi = Array.isArray(data?.cards) ? data.cards : [];
 
-        const popupFallback =
-          popupFromApi || cardsFromApi.find((x) => Number(x?.is_popup ?? 0) === 1) || null;
+        const popupFallback = popupFromApi || cardsFromApi.find((x) => Number(x?.is_popup ?? 0) === 1) || null;
 
         const gridOnly = cardsFromApi.filter((x) => Number(x?.is_popup ?? 0) !== 1);
 
@@ -343,17 +336,12 @@ export default function Noticias() {
           <div className="flex items-end justify-between gap-3 mb-8">
             <div className="max-w-3xl">
               <div className="inline-flex items-center gap-2">
-                <span className="text-xs tracking-[0.35em] font-extrabold text-white/70 uppercase">
-                  Novedades
-                </span>
+                <span className="text-xs tracking-[0.35em] font-extrabold text-white/70 uppercase">Novedades</span>
                 <span className="h-[2px] w-12 bg-[#e82d89] shadow-[0_0_16px_#e82d89aa]" />
               </div>
 
               <h2 className="mt-2 text-4xl sm:text-5xl font-extrabold text-white leading-tight">
-                Noticias{" "}
-                <span className="text-[#e82d89] italic drop-shadow-[0_0_18px_#e82d8980]">
-                  que rugen
-                </span>
+                Noticias <span className="text-[#e82d89] italic drop-shadow-[0_0_18px_#e82d8980]">que rugen</span>
               </h2>
 
               <p className="mt-3 text-gray-200 font-medium text-sm sm:text-base leading-relaxed">
@@ -385,7 +373,7 @@ export default function Noticias() {
         open={open}
         onClose={() => setOpen(false)}
         item={active}
-        imgSrc={active?.id ? thumbs[active.id] ?? null : null}
+        imgSrc={active?.id ? (thumbs[active.id] ?? null) : null}
         dark={dark}
         loadingDetail={loadingDetail}
       />

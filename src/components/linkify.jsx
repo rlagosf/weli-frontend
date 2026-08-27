@@ -45,9 +45,7 @@ export function linkifyText(text) {
   // mantener saltos de línea sin whitespace-pre-wrap
   return parts.flatMap((p, i) =>
     typeof p === "string"
-      ? p.split("\n").flatMap((line, j, arr) =>
-          j < arr.length - 1 ? [line, <br key={`br-${i}-${j}`} />] : [line]
-        )
+      ? p.split("\n").flatMap((line, j, arr) => (j < arr.length - 1 ? [line, <br key={`br-${i}-${j}`} />] : [line]))
       : [p]
   );
 }

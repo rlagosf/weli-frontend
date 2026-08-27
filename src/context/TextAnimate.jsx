@@ -75,10 +75,7 @@ export function TextAnimate({
         const chars = [...seg];
 
         return (
-          <span
-            key={`word-${si}`}
-            className="inline-flex whitespace-nowrap align-baseline"
-          >
+          <span key={`word-${si}`} className="inline-flex whitespace-nowrap align-baseline">
             {chars.map((ch, ci) => {
               const d = delay + globalCharIndex * stagger;
               globalCharIndex += 1;

@@ -25,18 +25,17 @@ export default function Footer() {
     const el = rootRef.current;
     if (!el) return;
 
-    const obs = new IntersectionObserver(
-      ([entry]) => setInView(entry.isIntersecting),
-      { threshold: 0.12, rootMargin: "-8% 0px -8% 0px" }
-    );
+    const obs = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), {
+      threshold: 0.12,
+      rootMargin: "-8% 0px -8% 0px",
+    });
 
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
 
   // ✅ mismo “socialBase” del Navbar
-  const socialBase =
-    "text-white/90 transition-transform duration-150 hover:-translate-y-[1px] active:translate-y-0";
+  const socialBase = "text-white/90 transition-transform duration-150 hover:-translate-y-[1px] active:translate-y-0";
 
   return (
     <footer
@@ -53,13 +52,7 @@ export default function Footer() {
           {/* Marca */}
           <div className="flex flex-col items-start">
             <div className="flex items-center gap-4">
-              <ScrollLink
-                to="inicio"
-                smooth
-                duration={600}
-                offset={-64}
-                className="cursor-pointer"
-              >
+              <ScrollLink to="inicio" smooth duration={600} offset={-64} className="cursor-pointer">
                 <img
                   src={logoWeli}
                   alt="Logo WELI"
@@ -71,8 +64,8 @@ export default function Footer() {
               </ScrollLink>
 
               <p className="text-sm text-white/70 leading-relaxed max-w-xs">
-                Gestión deportiva inteligente: centraliza jugadores, pagos,
-                comunicación y estadísticas en una sola plataforma.
+                Gestión deportiva inteligente: centraliza jugadores, pagos, comunicación y estadísticas en una sola
+                plataforma.
               </p>
             </div>
 
@@ -119,9 +112,7 @@ export default function Footer() {
           {/* Accesos */}
           <div className="flex flex-col items-start w-full md:w-auto">
             <div className="w-full md:w-64">
-              <p className="text-sm font-semibold tracking-wide text-center">
-                Accesos
-              </p>
+              <p className="text-sm font-semibold tracking-wide text-center">Accesos</p>
 
               <div className="mt-3 space-y-3">
                 <RouterLink

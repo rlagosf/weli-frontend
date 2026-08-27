@@ -40,9 +40,7 @@ export default function EstablecimientosEducacionales() {
   // ✅ Estrategia dorada: detecta árbol actual
   const dashboardBase = useMemo(() => {
     const p = location.pathname || "";
-    return p.startsWith("/super-dashboard/admin/dashboard")
-      ? "/super-dashboard/admin/dashboard"
-      : "/admin";
+    return p.startsWith("/super-dashboard/admin/dashboard") ? "/super-dashboard/admin/dashboard" : "/admin";
   }, [location.pathname]);
 
   const configPath = useMemo(() => `${dashboardBase}/configuracion`, [dashboardBase]);
@@ -176,21 +174,23 @@ export default function EstablecimientosEducacionales() {
 
   // ✅ apiOps estable (NO cambia por render)
   const apiOps = useMemo(() => {
-    const withVariants = (fn) => async (base, ...args) => {
-      const urls = base.endsWith("/") ? [base, base.slice(0, -1)] : [base, `${base}/`];
-      let lastErr = null;
+    const withVariants =
+      (fn) =>
+      async (base, ...args) => {
+        const urls = base.endsWith("/") ? [base, base.slice(0, -1)] : [base, `${base}/`];
+        let lastErr = null;
 
-      for (const u of urls) {
-        try {
-          return await fn(u, ...args);
-        } catch (e) {
-          lastErr = e;
-          const st = getErrStatus(e);
-          if (st === 401 || st === 403) throw e;
+        for (const u of urls) {
+          try {
+            return await fn(u, ...args);
+          } catch (e) {
+            lastErr = e;
+            const st = getErrStatus(e);
+            if (st === 401 || st === 403) throw e;
+          }
         }
-      }
-      throw lastErr || new Error("ENDPOINT_VARIANTS_FAILED");
-    };
+        throw lastErr || new Error("ENDPOINT_VARIANTS_FAILED");
+      };
 
     return {
       getVar: withVariants((u, c) => api.get(u, c)),
@@ -333,9 +333,7 @@ export default function EstablecimientosEducacionales() {
 
     const danger =
       "rounded-2xl border px-5 py-4 font-semibold " +
-      (darkMode
-        ? "border-red-200/20 bg-red-500/10 text-red-100"
-        : "border-red-200 bg-red-50 text-red-700");
+      (darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
 
     const ok =
       "rounded-2xl border px-5 py-4 font-semibold " +
@@ -349,9 +347,7 @@ export default function EstablecimientosEducacionales() {
 
     const pill =
       "inline-flex items-center px-2 py-1 rounded-full text-xs font-bold border " +
-      (darkMode
-        ? "bg-black/20 border-white/15 text-white/75"
-        : "bg-white/60 border-ra-marron/15 text-ra-marron/70");
+      (darkMode ? "bg-black/20 border-white/15 text-white/75" : "bg-white/60 border-ra-marron/15 text-ra-marron/70");
 
     return {
       shell,
@@ -376,12 +372,8 @@ export default function EstablecimientosEducacionales() {
     <div className={`${ui.shell} min-h-screen font-sans`}>
       {/* Header centrado tipo SuperDashboard */}
       <header className="px-6 pt-6 text-center">
-        <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>
-          Establecimientos Educacionales
-        </h1>
-        <p className={`text-sm mt-2 ${ui.subText}`}>
-          Administra el catálogo de colegios (crear, editar, eliminar).
-        </p>
+        <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>Establecimientos Educacionales</h1>
+        <p className={`text-sm mt-2 ${ui.subText}`}>Administra el catálogo de colegios (crear, editar, eliminar).</p>
       </header>
 
       <main className="px-6 pb-20">

@@ -26,10 +26,8 @@ const LEYENDAS = [
 ];
 
 const MASK_STYLE = {
-  WebkitMaskImage:
-    "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 70%, rgba(0,0,0,0) 100%)",
-  maskImage:
-    "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 70%, rgba(0,0,0,0) 100%)",
+  WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 70%, rgba(0,0,0,0) 100%)",
+  maskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 70%, rgba(0,0,0,0) 100%)",
 };
 
 function precargarImagenes(srcs) {
@@ -88,9 +86,7 @@ export default function Landing() {
                 className="absolute inset-0 w-full h-full object-cover object-[center_35%] scale-105"
                 loading="eager"
                 decoding="async"
-                onError={() =>
-                  setFallidas((prev) => new Set([...prev, current.src]))
-                }
+                onError={() => setFallidas((prev) => new Set([...prev, current.src]))}
               />
             ) : (
               <div className="absolute inset-0 bg-black" />
@@ -119,16 +115,10 @@ export default function Landing() {
                   className="h-20 md:h-28 lg:h-32 w-auto max-w-[85vw] object-contain drop-shadow-lg"
                   draggable={false}
                 />
-
               </div>
 
               <h2 className="text-3xl md:text-5xl font-bold mb-2 leading-tight">
-                <TextAnimate
-                  animation="blurInUp"
-                  by="character"
-                  once
-                  className="inline-block"
-                >
+                <TextAnimate animation="blurInUp" by="character" once className="inline-block">
                   {current.caption}
                 </TextAnimate>
               </h2>

@@ -103,9 +103,7 @@ function Modal({ open, title, children, onClose, darkMode }) {
       <div className="absolute inset-0 bg-black/70" onClick={onClose} />
       <div className={card}>
         <h3 className={`text-lg font-extrabold mb-2 ${titleColor}`}>{title}</h3>
-        <div className={darkMode ? "text-sm mb-4 text-white/85" : "text-sm mb-4 text-ra-marron/80"}>
-          {children}
-        </div>
+        <div className={darkMode ? "text-sm mb-4 text-white/85" : "text-sm mb-4 text-ra-marron/80"}>{children}</div>
         <div className="flex justify-end">
           <button
             onClick={onClose}
@@ -412,9 +410,7 @@ export default function FormJugador() {
         setSucursales(sucN);
         setComunas(comN);
 
-        const allEmpty = [posN, catN, estN, eduN, prevN, sucN, comN].every(
-          (arr) => arr.length === 0
-        );
+        const allEmpty = [posN, catN, estN, eduN, prevN, sucN, comN].every((arr) => arr.length === 0);
 
         if (allEmpty) {
           setError("❌ No se pudieron cargar los datos de selección para esta academia.");
@@ -432,8 +428,8 @@ export default function FormJugador() {
           if (prev.prevision_medica_id && !exists(prevN, prev.prevision_medica_id)) next.prevision_medica_id = "";
           if (prev.comuna_id && !exists(comN, prev.comuna_id)) next.comuna_id = "";
 
-          next.sucursal_ids = (Array.isArray(prev.sucursal_ids) ? prev.sucursal_ids : []).filter(
-            (id) => exists(sucN, id)
+          next.sucursal_ids = (Array.isArray(prev.sucursal_ids) ? prev.sucursal_ids : []).filter((id) =>
+            exists(sucN, id)
           );
 
           return next;
@@ -471,33 +467,18 @@ export default function FormJugador() {
   useEffect(() => {
     setFormData((prev) => ({
       ...prev,
-      posicion_id:
-        !prev.posicion_id && posiciones.length === 1
-          ? String(posiciones[0].id)
-          : prev.posicion_id,
-      categoria_id:
-        !prev.categoria_id && categorias.length === 1
-          ? String(categorias[0].id)
-          : prev.categoria_id,
-      estado_id:
-        !prev.estado_id && estados.length === 1
-          ? String(estados[0].id)
-          : prev.estado_id,
+      posicion_id: !prev.posicion_id && posiciones.length === 1 ? String(posiciones[0].id) : prev.posicion_id,
+      categoria_id: !prev.categoria_id && categorias.length === 1 ? String(categorias[0].id) : prev.categoria_id,
+      estado_id: !prev.estado_id && estados.length === 1 ? String(estados[0].id) : prev.estado_id,
       establec_educ_id:
         !prev.establec_educ_id && establecimientos.length === 1
           ? String(establecimientos[0].id)
           : prev.establec_educ_id,
       prevision_medica_id:
-        !prev.prevision_medica_id && previsiones.length === 1
-          ? String(previsiones[0].id)
-          : prev.prevision_medica_id,
-      comuna_id:
-        !prev.comuna_id && comunas.length === 1
-          ? String(comunas[0].id)
-          : prev.comuna_id,
+        !prev.prevision_medica_id && previsiones.length === 1 ? String(previsiones[0].id) : prev.prevision_medica_id,
+      comuna_id: !prev.comuna_id && comunas.length === 1 ? String(comunas[0].id) : prev.comuna_id,
       sucursal_ids:
-        (!Array.isArray(prev.sucursal_ids) || prev.sucursal_ids.length === 0) &&
-        sucursales.length === 1
+        (!Array.isArray(prev.sucursal_ids) || prev.sucursal_ids.length === 0) && sucursales.length === 1
           ? [String(sucursales[0].id)]
           : prev.sucursal_ids,
     }));
@@ -543,9 +524,7 @@ export default function FormJugador() {
           rut_apoderado: value,
 
           // Solo limpiamos el nombre si venía autocompletado desde backend.
-          nombre_apoderado: apoderadoEncontrado
-            ? ""
-            : prev.nombre_apoderado,
+          nombre_apoderado: apoderadoEncontrado ? "" : prev.nombre_apoderado,
         }));
 
         return;
@@ -602,13 +581,10 @@ export default function FormJugador() {
       try {
         const headers = buildHeaders(rolActual);
 
-        const res = await api.get(
-          `/jugadores/apoderado/rut/${rut}`,
-          {
-            signal: ctrl.signal,
-            headers,
-          }
-        );
+        const res = await api.get(`/jugadores/apoderado/rut/${rut}`, {
+          signal: ctrl.signal,
+          headers,
+        });
 
         const body = res?.data ?? {};
         const item = body?.item ?? body?.data ?? body;
@@ -631,10 +607,7 @@ export default function FormJugador() {
       } catch (err) {
         if (ctrl.signal.aborted) return;
 
-        const status =
-          err?.status ??
-          err?.response?.status ??
-          0;
+        const status = err?.status ?? err?.response?.status ?? 0;
 
         if (status === 404) {
           setApoderadoEncontrado(false);
@@ -654,9 +627,7 @@ export default function FormJugador() {
 
         if (status === 403) {
           if (rolActual === 3) {
-            setError(
-              "⚠️ Superadmin: falta x-academia-id o academia no autorizada."
-            );
+            setError("⚠️ Superadmin: falta x-academia-id o academia no autorizada.");
             return;
           }
 
@@ -666,9 +637,7 @@ export default function FormJugador() {
         }
 
         setApoderadoEncontrado(false);
-        setApoderadoLookupMsg(
-          "No fue posible verificar el RUT del apoderado."
-        );
+        setApoderadoLookupMsg("No fue posible verificar el RUT del apoderado.");
       } finally {
         if (!ctrl.signal.aborted) {
           setBuscandoApoderado(false);
@@ -680,12 +649,7 @@ export default function FormJugador() {
       clearTimeout(timer);
       ctrl.abort();
     };
-  }, [
-    paso,
-    formData.rut_apoderado,
-    rolActual,
-    navigate,
-  ]);
+  }, [paso, formData.rut_apoderado, rolActual, navigate]);
 
   const toggleSucursal = (id) => {
     const sid = String(id);
@@ -696,9 +660,7 @@ export default function FormJugador() {
 
       return {
         ...prev,
-        sucursal_ids: existe
-          ? actuales.filter((x) => String(x) !== sid)
-          : [...actuales, sid],
+        sucursal_ids: existe ? actuales.filter((x) => String(x) !== sid) : [...actuales, sid],
       };
     });
   };
@@ -727,9 +689,7 @@ export default function FormJugador() {
     }
 
     if (formData.telefono) {
-      const okTel =
-        /^\+\d{9,15}$/.test(formData.telefono) ||
-        /^\d{9,11}$/.test(formData.telefono);
+      const okTel = /^\+\d{9,15}$/.test(formData.telefono) || /^\d{9,11}$/.test(formData.telefono);
 
       if (!okTel) {
         setError("Teléfono inválido: usa +569... o 9–11 dígitos.");
@@ -771,12 +731,7 @@ export default function FormJugador() {
 
   /* ───────── Generar contrato (PDF->base64) ───────── */
   const generarContratoBase64 = useCallback(async () => {
-    const required = [
-      "nombre_apoderado",
-      "rut_apoderado",
-      "nombre_jugador",
-      "rut_jugador",
-    ];
+    const required = ["nombre_apoderado", "rut_apoderado", "nombre_jugador", "rut_jugador"];
 
     for (const k of required) {
       if (!String(formData[k] ?? "").trim()) {
@@ -795,8 +750,7 @@ export default function FormJugador() {
       throw new Error("El RUT del jugador debe ser de 7 u 8 dígitos (sin DV).");
     }
 
-    const comunaNombre =
-      comunas.find((c) => String(c.id) === String(formData.comuna_id))?.nombre || "";
+    const comunaNombre = comunas.find((c) => String(c.id) === String(formData.comuna_id))?.nombre || "";
 
     const data = {
       fecha_contrato: fechaEsLarga(new Date()),
@@ -856,9 +810,7 @@ export default function FormJugador() {
     }
 
     if (formData.telefono_apoderado) {
-      const okTel =
-        /^\+\d{9,15}$/.test(formData.telefono_apoderado) ||
-        /^\d{9,11}$/.test(formData.telefono_apoderado);
+      const okTel = /^\+\d{9,15}$/.test(formData.telefono_apoderado) || /^\d{9,11}$/.test(formData.telefono_apoderado);
 
       if (!okTel) {
         return setError("Teléfono del apoderado inválido: usa +569... o 9–11 dígitos.");
@@ -898,9 +850,7 @@ export default function FormJugador() {
         categoria_id: cleaned.categoria_id ? Number(cleaned.categoria_id) : undefined,
         estado_id: cleaned.estado_id ? Number(cleaned.estado_id) : undefined,
         establec_educ_id: cleaned.establec_educ_id ? Number(cleaned.establec_educ_id) : undefined,
-        prevision_medica_id: cleaned.prevision_medica_id
-          ? Number(cleaned.prevision_medica_id)
-          : undefined,
+        prevision_medica_id: cleaned.prevision_medica_id ? Number(cleaned.prevision_medica_id) : undefined,
 
         // Compatibilidad con la columna legacy.
         sucursal_id: sucursalPrincipal,
@@ -909,10 +859,7 @@ export default function FormJugador() {
         sucursales: sucursalIds,
 
         direccion: cleaned.direccion ? String(cleaned.direccion) : undefined,
-        comuna_id:
-          Number.isFinite(comunaId) && comunaId > 0
-            ? comunaId
-            : undefined,
+        comuna_id: Number.isFinite(comunaId) && comunaId > 0 ? comunaId : undefined,
 
         contrato_prestacion: contratoBase64,
         contrato_prestacion_mime: "application/pdf",
@@ -976,10 +923,7 @@ export default function FormJugador() {
       const st = err?.status ?? err?.response?.status ?? 0;
       const data = err?.data ?? err?.response?.data ?? null;
       const text = err?.request?.responseText;
-      const msg =
-        data?.message ??
-        err?.message ??
-        (text ? String(text).slice(0, 300) : "Error");
+      const msg = data?.message ?? err?.message ?? (text ? String(text).slice(0, 300) : "Error");
 
       if (st === 401) {
         clearToken();
@@ -1012,15 +956,11 @@ export default function FormJugador() {
 
     const card =
       "w-full max-w-5xl mx-auto rounded-3xl border shadow-xl backdrop-blur-md " +
-      (darkMode
-        ? "bg-white/[0.07] border-white/15"
-        : "bg-white/70 border-ra-marron/15");
+      (darkMode ? "bg-white/[0.07] border-white/15" : "bg-white/70 border-ra-marron/15");
 
     const section =
       "rounded-2xl border p-4 sm:p-5 " +
-      (darkMode
-        ? "bg-white/[0.05] border-white/10"
-        : "bg-white/55 border-ra-marron/10");
+      (darkMode ? "bg-white/[0.05] border-white/10" : "bg-white/55 border-ra-marron/10");
 
     const input =
       "w-full box-border rounded-xl px-3.5 py-2.5 border outline-none transition " +
@@ -1031,19 +971,13 @@ export default function FormJugador() {
     const select = input;
     const textarea = input + " min-h-28 resize-y";
 
-    const label =
-      "block text-xs sm:text-sm font-bold mb-1.5 " +
-      (darkMode ? "text-white/75" : "text-ra-marron/75");
+    const label = "block text-xs sm:text-sm font-bold mb-1.5 " + (darkMode ? "text-white/75" : "text-ra-marron/75");
 
-    const helper =
-      "text-xs " +
-      (darkMode ? "text-white/50" : "text-ra-marron/55");
+    const helper = "text-xs " + (darkMode ? "text-white/50" : "text-ra-marron/55");
 
     const bannerErr =
       "mb-4 p-3 rounded-2xl border " +
-      (darkMode
-        ? "bg-red-500/10 border-red-300/20 text-red-100"
-        : "bg-red-500/10 border-red-600/25 text-red-800");
+      (darkMode ? "bg-red-500/10 border-red-300/20 text-red-100" : "bg-red-500/10 border-red-600/25 text-red-800");
 
     const bannerWarn =
       "mb-4 p-3 rounded-2xl border " +
@@ -1113,9 +1047,7 @@ export default function FormJugador() {
 
           <div className="min-w-0">
             <div className={ui.helper}>Paso 1 de 2</div>
-            <div className="font-extrabold text-sm sm:text-base truncate">
-              Datos del jugador
-            </div>
+            <div className="font-extrabold text-sm sm:text-base truncate">Datos del jugador</div>
           </div>
         </div>
       </div>
@@ -1136,11 +1068,7 @@ export default function FormJugador() {
           <div
             className={[
               "w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0",
-              paso === 2
-                ? "text-white"
-                : darkMode
-                  ? "bg-white/10 text-white/50"
-                  : "bg-ra-marron/10 text-ra-marron/50",
+              paso === 2 ? "text-white" : darkMode ? "bg-white/10 text-white/50" : "bg-ra-marron/10 text-ra-marron/50",
             ].join(" ")}
             style={
               paso === 2
@@ -1155,9 +1083,7 @@ export default function FormJugador() {
 
           <div className="min-w-0">
             <div className={ui.helper}>Paso 2 de 2</div>
-            <div className="font-extrabold text-sm sm:text-base truncate">
-              Datos del apoderado
-            </div>
+            <div className="font-extrabold text-sm sm:text-base truncate">Datos del apoderado</div>
           </div>
         </div>
       </div>
@@ -1167,9 +1093,7 @@ export default function FormJugador() {
   return (
     <div className={ui.page}>
       <div className="w-full max-w-5xl mx-auto mb-4 sm:mb-6 text-center">
-        <h2 className={`text-2xl sm:text-3xl font-extrabold ${ui.titleColor}`}>
-          Registrar jugador
-        </h2>
+        <h2 className={`text-2xl sm:text-3xl font-extrabold ${ui.titleColor}`}>Registrar jugador</h2>
 
         <p className={`mt-1 ${ui.helper}`}>
           Completa primero la información del jugador y luego los datos de su apoderado.
@@ -1293,12 +1217,7 @@ export default function FormJugador() {
 
                   <div>
                     <label className={ui.label}>Comuna</label>
-                    <select
-                      name="comuna_id"
-                      value={formData.comuna_id}
-                      onChange={handleChange}
-                      className={ui.select}
-                    >
+                    <select name="comuna_id" value={formData.comuna_id} onChange={handleChange} className={ui.select}>
                       <option value="">Selecciona comuna</option>
                       {comunas.map((co) => (
                         <option key={co.id} value={co.id}>
@@ -1324,9 +1243,7 @@ export default function FormJugador() {
 
                   <div>
                     <h3 className="font-extrabold text-lg">Información deportiva</h3>
-                    <p className={ui.helper}>
-                      Categoría, posición, estado y sucursales en las que participará.
-                    </p>
+                    <p className={ui.helper}>Categoría, posición, estado y sucursales en las que participará.</p>
                   </div>
                 </div>
 
@@ -1390,9 +1307,7 @@ export default function FormJugador() {
                   <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-3">
                     <div>
                       <label className={ui.label}>Sucursales *</label>
-                      <p className={ui.helper}>
-                        Puedes seleccionar una o varias sucursales de esta academia.
-                      </p>
+                      <p className={ui.helper}>Puedes seleccionar una o varias sucursales de esta academia.</p>
                     </div>
 
                     <div className={ui.helper}>
@@ -1415,9 +1330,7 @@ export default function FormJugador() {
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       {sucursales.map((s) => {
-                        const selected = formData.sucursal_ids.some(
-                          (id) => String(id) === String(s.id)
-                        );
+                        const selected = formData.sucursal_ids.some((id) => String(id) === String(s.id));
 
                         return (
                           <button
@@ -1468,9 +1381,7 @@ export default function FormJugador() {
               {/* Complementarios */}
               <section className={ui.section}>
                 <h3 className="font-extrabold text-lg mb-1">Información complementaria</h3>
-                <p className={`${ui.helper} mb-4`}>
-                  Datos físicos, educacionales y médicos del jugador.
-                </p>
+                <p className={`${ui.helper} mb-4`}>Datos físicos, educacionales y médicos del jugador.</p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div>
@@ -1603,21 +1514,15 @@ export default function FormJugador() {
                 <div
                   className={[
                     "mb-5 rounded-2xl border p-4",
-                    darkMode
-                      ? "bg-white/[0.04] border-white/10"
-                      : "bg-white/50 border-ra-marron/10",
+                    darkMode ? "bg-white/[0.04] border-white/10" : "bg-white/50 border-ra-marron/10",
                   ].join(" ")}
                 >
-                  <div className="font-bold text-sm">
-                    Jugador: {formData.nombre_jugador || "—"}
-                  </div>
+                  <div className="font-bold text-sm">Jugador: {formData.nombre_jugador || "—"}</div>
 
                   <div className={`${ui.helper} mt-1`}>
                     Sucursales seleccionadas:{" "}
                     {sucursales
-                      .filter((s) =>
-                        formData.sucursal_ids.some((id) => String(id) === String(s.id))
-                      )
+                      .filter((s) => formData.sucursal_ids.some((id) => String(id) === String(s.id)))
                       .map((s) => s.nombre)
                       .join(", ") || "—"}
                   </div>
@@ -1639,9 +1544,7 @@ export default function FormJugador() {
 
                     <div className="mt-1.5 min-h-[18px]">
                       {buscandoApoderado ? (
-                        <p className={ui.helper}>
-                          Buscando apoderado…
-                        </p>
+                        <p className={ui.helper}>Buscando apoderado…</p>
                       ) : apoderadoLookupMsg ? (
                         <p
                           className={
@@ -1655,9 +1558,7 @@ export default function FormJugador() {
                           {apoderadoLookupMsg}
                         </p>
                       ) : (
-                        <p className={ui.helper}>
-                          Al completar el RUT, WELI verificará si el apoderado ya existe.
-                        </p>
+                        <p className={ui.helper}>Al completar el RUT, WELI verificará si el apoderado ya existe.</p>
                       )}
                     </div>
                   </div>
@@ -1689,13 +1590,7 @@ export default function FormJugador() {
                     />
 
                     {apoderadoEncontrado && (
-                      <p
-                        className={
-                          darkMode
-                            ? "text-xs text-emerald-200 mt-1.5"
-                            : "text-xs text-emerald-700 mt-1.5"
-                        }
-                      >
+                      <p className={darkMode ? "text-xs text-emerald-200 mt-1.5" : "text-xs text-emerald-700 mt-1.5"}>
                         Este nombre proviene del registro maestro de apoderados.
                       </p>
                     )}
@@ -1721,19 +1616,13 @@ export default function FormJugador() {
                       : "border-ra-marron/10 bg-white/45 text-ra-marron/70",
                   ].join(" ")}
                 >
-                  Si el RUT ya está registrado, WELI reutiliza automáticamente el nombre
-                  canónico del apoderado. Si es un RUT nuevo, podrás ingresar su nombre
-                  y quedará asociado a esa identidad al crear el jugador.
+                  Si el RUT ya está registrado, WELI reutiliza automáticamente el nombre canónico del apoderado. Si es
+                  un RUT nuevo, podrás ingresar su nombre y quedará asociado a esa identidad al crear el jugador.
                 </div>
               </section>
 
               <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={volverPasoJugador}
-                  disabled={isSubmitting}
-                  className={ui.btnSecondary}
-                >
+                <button type="button" onClick={volverPasoJugador} disabled={isSubmitting} className={ui.btnSecondary}>
                   <ChevronLeft size={18} />
                   Volver
                 </button>
@@ -1767,9 +1656,7 @@ export default function FormJugador() {
         {mensaje && (
           <p
             className={
-              darkMode
-                ? "text-emerald-200 mt-5 text-center font-bold"
-                : "text-emerald-700 mt-5 text-center font-bold"
+              darkMode ? "text-emerald-200 mt-5 text-center font-bold" : "text-emerald-700 mt-5 text-center font-bold"
             }
           >
             {mensaje}
@@ -1777,12 +1664,7 @@ export default function FormJugador() {
         )}
       </div>
 
-      <Modal
-        open={createdOpen}
-        onClose={() => setCreatedOpen(false)}
-        title="✅ Jugador creado"
-        darkMode={darkMode}
-      >
+      <Modal open={createdOpen} onClose={() => setCreatedOpen(false)} title="✅ Jugador creado" darkMode={darkMode}>
         <div>
           <div>
             <b>Nombre:</b> {createdInfo.nombre}

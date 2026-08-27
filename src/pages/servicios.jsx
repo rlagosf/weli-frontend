@@ -1,13 +1,6 @@
 // src/pages/Servicios.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  LayoutDashboard,
-  Users,
-  CreditCard,
-  BarChart3,
-  CalendarDays,
-  ShieldCheck,
-} from "lucide-react";
+import { LayoutDashboard, Users, CreditCard, BarChart3, CalendarDays, ShieldCheck } from "lucide-react";
 
 const FEATURES = [
   {
@@ -86,12 +79,9 @@ export default function Servicios() {
     >
       {/* Header (plano) */}
       <div className="max-w-4xl text-center mb-10">
-        <h2 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight text-ra-sand">
-          ¿Qué ofrece WELI?
-        </h2>
+        <h2 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight text-ra-sand">¿Qué ofrece WELI?</h2>
         <p className="text-white/70 text-lg">
-          Gestión deportiva inteligente: orden, trazabilidad y rendimiento para
-          elevar el estándar del fútbol amateur.
+          Gestión deportiva inteligente: orden, trazabilidad y rendimiento para elevar el estándar del fútbol amateur.
         </p>
       </div>
 
@@ -125,13 +115,9 @@ export default function Servicios() {
                 </div>
 
                 <div className="flex-1">
-                  <h3 className="text-xl font-bold text-ra-sand mb-2">
-                    {f.titulo}
-                  </h3>
+                  <h3 className="text-xl font-bold text-ra-sand mb-2">{f.titulo}</h3>
 
-                  <p className="text-white/75 text-sm md:text-base leading-relaxed text-justify">
-                    {f.descripcion}
-                  </p>
+                  <p className="text-white/75 text-sm md:text-base leading-relaxed text-justify">{f.descripcion}</p>
                 </div>
               </div>
             </div>

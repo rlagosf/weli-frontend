@@ -79,9 +79,7 @@ export default function PowerbiFinanzas() {
   // ✅ Estrategia dorada: detecta árbol actual
   const dashboardBase = useMemo(() => {
     const p = location.pathname || "";
-    return p.startsWith("/super-dashboard/admin/dashboard")
-      ? "/super-dashboard/admin/dashboard"
-      : "/admin";
+    return p.startsWith("/super-dashboard/admin/dashboard") ? "/super-dashboard/admin/dashboard" : "/admin";
   }, [location.pathname]);
 
   // ─────────────────────────────
@@ -186,21 +184,23 @@ export default function PowerbiFinanzas() {
   const getErrStatus = (e) => e?.status ?? e?.response?.status ?? 0;
 
   const apiOps = useMemo(() => {
-    const withVariants = (fn) => async (base, ...args) => {
-      const urls = base.endsWith("/") ? [base, base.slice(0, -1)] : [base, `${base}/`];
-      let lastErr = null;
+    const withVariants =
+      (fn) =>
+      async (base, ...args) => {
+        const urls = base.endsWith("/") ? [base, base.slice(0, -1)] : [base, `${base}/`];
+        let lastErr = null;
 
-      for (const u of urls) {
-        try {
-          return await fn(u, ...args);
-        } catch (err) {
-          lastErr = err;
-          const st = getErrStatus(err);
-          if (st === 401 || st === 403) throw err;
+        for (const u of urls) {
+          try {
+            return await fn(u, ...args);
+          } catch (err) {
+            lastErr = err;
+            const st = getErrStatus(err);
+            if (st === 401 || st === 403) throw err;
+          }
         }
-      }
-      throw lastErr || new Error("ENDPOINT_VARIANTS_FAILED");
-    };
+        throw lastErr || new Error("ENDPOINT_VARIANTS_FAILED");
+      };
 
     return { getVar: withVariants((u, cfg) => api.get(u, cfg)) };
   }, []);
@@ -249,8 +249,7 @@ export default function PowerbiFinanzas() {
     return list.map((p) => {
       const tipoId = p?.tipo_pago_id ?? p?.tipo_id ?? p?.tipoPagoId ?? p?.tipo_pago?.id ?? null;
       const medioId = p?.medio_pago_id ?? p?.medio_id ?? p?.medioPagoId ?? p?.medio_pago?.id ?? null;
-      const situId =
-        p?.situacion_pago_id ?? p?.estado_pago_id ?? p?.estado_id ?? p?.situacion_pago?.id ?? null;
+      const situId = p?.situacion_pago_id ?? p?.estado_pago_id ?? p?.estado_id ?? p?.situacion_pago?.id ?? null;
 
       const rutPlano = p?.jugador_rut ?? p?.rut_jugador ?? p?.rut ?? p?.jugador?.rut_jugador ?? null;
       const jAnidado = p?.jugador ?? {};
@@ -277,18 +276,18 @@ export default function PowerbiFinanzas() {
       const tipoNombre =
         p?.tipo_pago?.nombre ??
         p?.tipo_pago_nombre ??
-        (tipoId != null ? tipoPagoMap.get(String(tipoId)) ?? String(tipoId) : "—");
+        (tipoId != null ? (tipoPagoMap.get(String(tipoId)) ?? String(tipoId)) : "—");
 
       const medioNombre =
         p?.medio_pago?.nombre ??
         p?.medio_pago_nombre ??
-        (medioId != null ? medioPagoMap.get(String(medioId)) ?? String(medioId) : "—");
+        (medioId != null ? (medioPagoMap.get(String(medioId)) ?? String(medioId)) : "—");
 
       const situNombre =
         p?.situacion_pago?.nombre ??
         p?.estado_pago_nombre ??
         p?.estado_nombre ??
-        (situId != null ? situacionPagoMap.get(String(situId)) ?? String(situId) : "—");
+        (situId != null ? (situacionPagoMap.get(String(situId)) ?? String(situId)) : "—");
 
       const fecha = p?.fecha_pago ?? p?.fecha ?? null;
 
@@ -361,7 +360,7 @@ export default function PowerbiFinanzas() {
           const categoriaNombre =
             j?.categoria?.nombre ??
             j?.categoria_nombre ??
-            (categoriaId != null ? categoriasMap.get(String(categoriaId)) ?? String(categoriaId) : null) ??
+            (categoriaId != null ? (categoriasMap.get(String(categoriaId)) ?? String(categoriaId)) : null) ??
             j?.categoria ??
             "Sin categoría";
 
@@ -420,13 +419,9 @@ export default function PowerbiFinanzas() {
 
     const headerSub = darkMode ? "text-white/70" : "text-ra-marron/70";
 
-    const msgBox = darkMode
-      ? "border-red-200/20 bg-red-500/10 text-red-100"
-      : "border-red-200 bg-red-50 text-red-700";
+    const msgBox = darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700";
 
-    const card = darkMode
-      ? "bg-white/10 border-white/15"
-      : "bg-white/60 border-ra-marron/15";
+    const card = darkMode ? "bg-white/10 border-white/15" : "bg-white/60 border-ra-marron/15";
 
     // Color “título de panel” (igual que el admin)
     const titleMain = darkMode ? "text-white" : "text-ra-marron";

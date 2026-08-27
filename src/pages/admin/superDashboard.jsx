@@ -2,11 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import api, {
-  getToken,
-  clearToken,
-  ACADEMIA_STORAGE_KEY,
-} from "../../services/api";
+import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
 import { useTheme } from "../../context/ThemeContext";
 import { LogOut, Plus, Building2, Sun, Moon } from "lucide-react";
 import { jwtDecode } from "jwt-decode";
@@ -45,11 +41,7 @@ const isExpired = (decoded) => {
 };
 
 const extractRol = (decoded) => {
-  const raw =
-    decoded?.rol_id ??
-    decoded?.role_id ??
-    decoded?.role ??
-    decoded?.rol;
+  const raw = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
 
   const n = Number(raw);
 
@@ -68,14 +60,7 @@ const buildAuthHeaders = () => {
 
 /* ───────────── Modal ───────────── */
 
-const Modal = ({
-  open,
-  onClose,
-  title,
-  subtitle,
-  darkMode,
-  children,
-}) => {
+const Modal = ({ open, onClose, title, subtitle, darkMode, children }) => {
   useEffect(() => {
     if (!open) return;
 
@@ -92,11 +77,7 @@ const Modal = ({
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
-      role="dialog"
-      aria-modal="true"
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4" role="dialog" aria-modal="true">
       {/*
         Fondo completamente bloqueado.
 
@@ -104,36 +85,21 @@ const Modal = ({
         No contiene onClick, por lo que presionarlo no cierra el modal
         y tampoco permite interactuar con el Dashboard posterior.
       */}
-      <div
-        className="absolute inset-0 bg-black/60"
-        aria-hidden="true"
-      />
+      <div className="absolute inset-0 bg-black/60" aria-hidden="true" />
 
       <div
         className={[
           "relative z-10 w-full max-w-xl rounded-2xl shadow-2xl border p-6",
           "max-h-[90vh] overflow-y-auto",
-          darkMode
-            ? "bg-ra-marron/95 border-white/10 text-white"
-            : "bg-ra-cream border-ra-marron/15 text-ra-marron",
+          darkMode ? "bg-ra-marron/95 border-white/10 text-white" : "bg-ra-cream border-ra-marron/15 text-ra-marron",
         ].join(" ")}
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-extrabold tracking-tightish">
-              {title}
-            </h2>
+            <h2 className="text-2xl font-extrabold tracking-tightish">{title}</h2>
 
             {subtitle ? (
-              <p
-                className={
-                  darkMode
-                    ? "text-white/70 text-sm mt-1"
-                    : "text-ra-marron/70 text-sm mt-1"
-                }
-              >
-                {subtitle}
-              </p>
+              <p className={darkMode ? "text-white/70 text-sm mt-1" : "text-ra-marron/70 text-sm mt-1"}>{subtitle}</p>
             ) : null}
           </div>
 
@@ -237,31 +203,18 @@ export default function SuperDashboard() {
         },
       });
 
-      setAcademias(
-        pickAcademias(res?.data ?? {})
-      );
+      setAcademias(pickAcademias(res?.data ?? {}));
     } catch (err) {
       if (signal?.aborted) return;
 
-      const status =
-        err?.status ??
-        err?.response?.status ??
-        0;
+      const status = err?.status ?? err?.response?.status ?? 0;
 
-      const message =
-        err?.data?.message ||
-        err?.response?.data?.message ||
-        err?.message ||
-        "Error cargando academias";
+      const message = err?.data?.message || err?.response?.data?.message || err?.message || "Error cargando academias";
 
       if (status === 401) {
-        setMsg(
-          "No autorizado (token ausente/expirado)."
-        );
+        setMsg("No autorizado (token ausente/expirado).");
       } else if (status === 403) {
-        setMsg(
-          "Acceso denegado: requiere rol superadmin."
-        );
+        setMsg("Acceso denegado: requiere rol superadmin.");
       } else if (status === 404) {
         setMsg("Endpoint no encontrado.");
       } else {
@@ -294,30 +247,15 @@ export default function SuperDashboard() {
         },
       });
 
-      const raw = pickDeportes(
-        res?.data ?? {}
-      );
+      const raw = pickDeportes(res?.data ?? {});
 
       const normalized = (raw || [])
         .map((d) => ({
-          id: Number(
-            d?.id ??
-              d?.deporte_id ??
-              0
-          ),
+          id: Number(d?.id ?? d?.deporte_id ?? 0),
 
-          nombre: String(
-            d?.nombre ??
-              d?.name ??
-              ""
-          ).trim(),
+          nombre: String(d?.nombre ?? d?.name ?? "").trim(),
         }))
-        .filter(
-          (d) =>
-            Number.isFinite(d.id) &&
-            d.id > 0 &&
-            d.nombre.length > 0
-        );
+        .filter((d) => Number.isFinite(d.id) && d.id > 0 && d.nombre.length > 0);
 
       setDeportes(normalized);
 
@@ -338,131 +276,86 @@ export default function SuperDashboard() {
     loadDeportes(ctrl.signal);
 
     return () => ctrl.abort();
-  }, [
-    loadAcademias,
-    loadDeportes,
-  ]);
+  }, [loadAcademias, loadDeportes]);
 
   /* ───────── Filtrado ───────── */
 
   const filtered = useMemo(() => {
-    const needle = q
-      .trim()
-      .toLowerCase();
+    const needle = q.trim().toLowerCase();
 
     if (!needle) {
       return academias;
     }
 
     return academias.filter((a) => {
-      const name = String(
-        a?.nombre ?? ""
-      ).toLowerCase();
+      const name = String(a?.nombre ?? "").toLowerCase();
 
-      const sportName = String(
-        a?.deporte_nombre ?? ""
-      ).toLowerCase();
+      const sportName = String(a?.deporte_nombre ?? "").toLowerCase();
 
-      const estadoName = String(
-        a?.estado_nombre ?? ""
-      ).toLowerCase();
+      const estadoName = String(a?.estado_nombre ?? "").toLowerCase();
 
-      return (
-        name.includes(needle) ||
-        sportName.includes(needle) ||
-        estadoName.includes(needle)
-      );
+      return name.includes(needle) || sportName.includes(needle) || estadoName.includes(needle);
     });
-  }, [
-    academias,
-    q,
-  ]);
+  }, [academias, q]);
 
   /* ───────── Entrar academia ───────── */
 
   const enterAcademia = (a) => {
-    const id = Number(
-      a?.id ?? 0
-    );
+    const id = Number(a?.id ?? 0);
 
-    if (
-      !Number.isFinite(id) ||
-      id <= 0
-    ) {
+    if (!Number.isFinite(id) || id <= 0) {
       return;
     }
 
     const snapshot = {
       id,
 
-      nombre:
-        a?.nombre ?? null,
+      nombre: a?.nombre ?? null,
 
-      deporte_id:
-        a?.deporte_id ?? null,
+      deporte_id: a?.deporte_id ?? null,
 
-      deporte_nombre:
-        a?.deporte_nombre ?? null,
+      deporte_nombre: a?.deporte_nombre ?? null,
 
-      estado_id:
-        a?.estado_id ?? null,
+      estado_id: a?.estado_id ?? null,
 
-      estado_nombre:
-        a?.estado_nombre ?? null,
+      estado_nombre: a?.estado_nombre ?? null,
 
       ts: Date.now(),
     };
 
     try {
       // Key unificada para los módulos scoping.
-      localStorage.setItem(
-        ACADEMIA_STORAGE_KEY,
-        JSON.stringify(snapshot)
-      );
+      localStorage.setItem(ACADEMIA_STORAGE_KEY, JSON.stringify(snapshot));
 
       // Evento para módulos que escuchan selector super.
-      window.dispatchEvent(
-        new Event(
-          "weli:selectedAcademiaChanged"
-        )
-      );
+      window.dispatchEvent(new Event("weli:selectedAcademiaChanged"));
     } catch {}
 
     // Salto real.
-    window.location.assign(
-      "/super-dashboard/admin/dashboard"
-    );
+    window.location.assign("/super-dashboard/admin/dashboard");
   };
 
   /* ───────── Cerrar sesión ───────── */
 
-  const handleCerrarSesion =
-    useCallback(async () => {
-      const headers =
-        buildAuthHeaders();
+  const handleCerrarSesion = useCallback(async () => {
+    const headers = buildAuthHeaders();
+
+    try {
+      await api.post("/auth/logout", null, {
+        headers,
+      });
+    } catch {
+      // idempotente
+    } finally {
+      clearToken();
 
       try {
-        await api.post(
-          "/auth/logout",
-          null,
-          {
-            headers,
-          }
-        );
-      } catch {
-        // idempotente
-      } finally {
-        clearToken();
+        localStorage.removeItem(ACADEMIA_STORAGE_KEY);
+      } catch {}
 
-        try {
-          localStorage.removeItem(
-            ACADEMIA_STORAGE_KEY
-          );
-        } catch {}
-
-        window.location.replace("/");
-      }
-    }, []);
+      window.location.replace("/");
+    }
+  }, []);
 
   /* ========================================================
      MODAL NUEVA ACADEMIA
@@ -495,40 +388,25 @@ export default function SuperDashboard() {
 
   const addSucursal = () => {
     setForm((current) => {
-      if (
-        current.sucursales.length >=
-        MAX_SUCURSALES
-      ) {
+      if (current.sucursales.length >= MAX_SUCURSALES) {
         return current;
       }
 
       return {
         ...current,
 
-        sucursales: [
-          ...current.sucursales,
-          "",
-        ],
+        sucursales: [...current.sucursales, ""],
       };
     });
   };
 
   /* ───────── Actualizar sucursal ───────── */
 
-  const updateSucursal = (
-    index,
-    value
-  ) => {
+  const updateSucursal = (index, value) => {
     setForm((current) => ({
       ...current,
 
-      sucursales:
-        current.sucursales.map(
-          (sucursal, i) =>
-            i === index
-              ? value
-              : sucursal
-        ),
+      sucursales: current.sucursales.map((sucursal, i) => (i === index ? value : sucursal)),
     }));
   };
 
@@ -538,19 +416,14 @@ export default function SuperDashboard() {
     setForm((current) => {
       // Siempre debe permanecer
       // al menos una sucursal.
-      if (
-        current.sucursales.length <= 1
-      ) {
+      if (current.sucursales.length <= 1) {
         return current;
       }
 
       return {
         ...current,
 
-        sucursales:
-          current.sucursales.filter(
-            (_, i) => i !== index
-          ),
+        sucursales: current.sucursales.filter((_, i) => i !== index),
       };
     });
   };
@@ -564,110 +437,52 @@ export default function SuperDashboard() {
 
     setMsg("");
 
-    const nombre = String(
-      form.nombre || ""
-    ).trim();
+    const nombre = String(form.nombre || "").trim();
 
-    const deporte_id = Number(
-      form.deporte_id
-    );
+    const deporte_id = Number(form.deporte_id);
 
-    const estado_id = Number(
-      form.estado_id
-    );
+    const estado_id = Number(form.estado_id);
 
-    const sucursales =
-      form.sucursales.map(
-        (sucursal) =>
-          String(
-            sucursal || ""
-          ).trim()
-      );
+    const sucursales = form.sucursales.map((sucursal) => String(sucursal || "").trim());
 
     /* ───────── Validaciones generales ───────── */
 
     if (nombre.length < 2) {
-      return setMsg(
-        "El nombre debe tener al menos 2 caracteres."
-      );
+      return setMsg("El nombre debe tener al menos 2 caracteres.");
     }
 
-    if (
-      !Number.isFinite(deporte_id) ||
-      deporte_id <= 0
-    ) {
-      return setMsg(
-        "Debes seleccionar un deporte válido."
-      );
+    if (!Number.isFinite(deporte_id) || deporte_id <= 0) {
+      return setMsg("Debes seleccionar un deporte válido.");
     }
 
-    if (
-      !Number.isFinite(estado_id) ||
-      estado_id <= 0
-    ) {
-      return setMsg(
-        "Debes indicar un estado válido."
-      );
+    if (!Number.isFinite(estado_id) || estado_id <= 0) {
+      return setMsg("Debes indicar un estado válido.");
     }
 
     /* ───────── Validaciones sucursales ───────── */
 
     if (sucursales.length === 0) {
-      return setMsg(
-        "Debes registrar al menos una sucursal."
-      );
+      return setMsg("Debes registrar al menos una sucursal.");
     }
 
-    if (
-      sucursales.length >
-      MAX_SUCURSALES
-    ) {
-      return setMsg(
-        `No puedes registrar más de ${MAX_SUCURSALES} sucursales.`
-      );
+    if (sucursales.length > MAX_SUCURSALES) {
+      return setMsg(`No puedes registrar más de ${MAX_SUCURSALES} sucursales.`);
     }
 
-    if (
-      sucursales.some(
-        (sucursal) =>
-          sucursal.length < 2
-      )
-    ) {
-      return setMsg(
-        "Todas las sucursales deben tener un nombre de al menos 2 caracteres."
-      );
+    if (sucursales.some((sucursal) => sucursal.length < 2)) {
+      return setMsg("Todas las sucursales deben tener un nombre de al menos 2 caracteres.");
     }
 
-    if (
-      sucursales.some(
-        (sucursal) =>
-          sucursal.length > 100
-      )
-    ) {
-      return setMsg(
-        "El nombre de una sucursal no puede superar los 100 caracteres."
-      );
+    if (sucursales.some((sucursal) => sucursal.length > 100)) {
+      return setMsg("El nombre de una sucursal no puede superar los 100 caracteres.");
     }
 
     /* ───────── Evitar duplicados ───────── */
 
-    const sucursalesNormalizadas =
-      sucursales.map(
-        (sucursal) =>
-          sucursal.toLocaleLowerCase(
-            "es"
-          )
-      );
+    const sucursalesNormalizadas = sucursales.map((sucursal) => sucursal.toLocaleLowerCase("es"));
 
-    if (
-      new Set(
-        sucursalesNormalizadas
-      ).size !==
-      sucursalesNormalizadas.length
-    ) {
-      return setMsg(
-        "No puedes registrar sucursales duplicadas."
-      );
+    if (new Set(sucursalesNormalizadas).size !== sucursalesNormalizadas.length) {
+      return setMsg("No puedes registrar sucursales duplicadas.");
     }
 
     /* ───────── Enviar al backend ───────── */
@@ -686,8 +501,7 @@ export default function SuperDashboard() {
           sucursales,
         },
         {
-          headers:
-            buildAuthHeaders(),
+          headers: buildAuthHeaders(),
         }
       );
 
@@ -700,59 +514,30 @@ export default function SuperDashboard() {
         sucursales: [""],
       });
 
-      const ctrl =
-        new AbortController();
+      const ctrl = new AbortController();
 
-      await loadAcademias(
-        ctrl.signal
-      );
+      await loadAcademias(ctrl.signal);
     } catch (err) {
-      const status =
-        err?.status ??
-        err?.response?.status ??
-        0;
+      const status = err?.status ?? err?.response?.status ?? 0;
 
-      const message =
-        err?.data?.message ||
-        err?.response?.data
-          ?.message ||
-        err?.message ||
-        "Error creando academia";
+      const message = err?.data?.message || err?.response?.data?.message || err?.message || "Error creando academia";
 
       if (status === 409) {
-        setMsg(
-          String(message)
-        );
-      } else if (
-        status === 401
-      ) {
-        setMsg(
-          "No autorizado. Inicia sesión nuevamente."
-        );
-      } else if (
-        status === 403
-      ) {
-        setMsg(
-          "Acceso denegado: requiere rol superadmin."
-        );
+        setMsg(String(message));
+      } else if (status === 401) {
+        setMsg("No autorizado. Inicia sesión nuevamente.");
+      } else if (status === 403) {
+        setMsg("Acceso denegado: requiere rol superadmin.");
       } else {
-        setMsg(
-          String(message)
-        );
+        setMsg(String(message));
       }
 
-      if (
-        status === 401 ||
-        status === 403
-      ) {
+      if (status === 401 || status === 403) {
         clearToken();
 
-        navigate(
-          "/login",
-          {
-            replace: true,
-          }
-        );
+        navigate("/login", {
+          replace: true,
+        });
       }
     } finally {
       setCreating(false);
@@ -765,21 +550,15 @@ export default function SuperDashboard() {
     ? "bg-[#111827] text-white"
     : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
 
-  const headerSub = darkMode
-    ? "text-white/70"
-    : "text-ra-marron/70";
+  const headerSub = darkMode ? "text-white/70" : "text-ra-marron/70";
 
-  const buttonIcon = darkMode
-    ? "hover:bg-white/10"
-    : "hover:bg-white/30";
+  const buttonIcon = darkMode ? "hover:bg-white/10" : "hover:bg-white/30";
 
   const searchInput = darkMode
     ? "bg-white/10 border-white/15 text-white placeholder-white/40 focus:border-white/30"
     : "bg-white/60 border-ra-marron/15 text-ra-marron placeholder-ra-marron/40 focus:border-ra-terracotta";
 
-  const msgBox = darkMode
-    ? "border-red-200/20 bg-red-500/10 text-red-100"
-    : "border-red-200 bg-red-50 text-red-700";
+  const msgBox = darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700";
 
   const card = darkMode
     ? "bg-white/10 border-white/15 hover:bg-white/15 hover:border-white/25"
@@ -801,36 +580,19 @@ export default function SuperDashboard() {
   ======================================================== */
 
   return (
-    <div
-      className={`${shell} min-h-screen font-sans`}
-    >
+    <div className={`${shell} min-h-screen font-sans`}>
       {/* ───────── Header ───────── */}
 
       <header className="flex items-center justify-between px-6 pt-6">
         <div>
-          <h1 className="text-4xl font-extrabold tracking-tightish">
-            Panel de Academias
-          </h1>
+          <h1 className="text-4xl font-extrabold tracking-tightish">Panel de Academias</h1>
 
-          <p
-            className={`text-sm mt-1 ${headerSub}`}
-          >
-            Selecciona una academia
-            para entrar a su panel.
-          </p>
+          <p className={`text-sm mt-1 ${headerSub}`}>Selecciona una academia para entrar a su panel.</p>
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            title="Cambiar tema"
-            onClick={toggleTheme}
-            className={`p-2 rounded-xl transition ${buttonIcon}`}
-          >
-            {darkMode ? (
-              <Sun size={20} />
-            ) : (
-              <Moon size={20} />
-            )}
+          <button title="Cambiar tema" onClick={toggleTheme} className={`p-2 rounded-xl transition ${buttonIcon}`}>
+            {darkMode ? <Sun size={20} /> : <Moon size={20} />}
           </button>
 
           <button
@@ -843,9 +605,7 @@ export default function SuperDashboard() {
 
           <button
             title="Cerrar sesión"
-            onClick={
-              handleCerrarSesion
-            }
+            onClick={handleCerrarSesion}
             className={`p-2 rounded-xl transition ${buttonIcon}`}
           >
             <LogOut size={20} />
@@ -859,138 +619,68 @@ export default function SuperDashboard() {
         <div className="mt-6">
           <input
             value={q}
-            onChange={(e) =>
-              setQ(
-                e.target.value
-              )
-            }
+            onChange={(e) => setQ(e.target.value)}
             placeholder="Buscar por nombre, deporte o estado…"
             className={`w-full md:w-[560px] rounded-2xl px-5 py-3 border outline-none transition ${searchInput}`}
           />
         </div>
 
         {loading && (
-          <div
-            className={`mt-10 ${
-              darkMode
-                ? "text-white/70"
-                : "text-ra-marron/70"
-            }`}
-          >
-            Cargando academias…
-          </div>
+          <div className={`mt-10 ${darkMode ? "text-white/70" : "text-ra-marron/70"}`}>Cargando academias…</div>
         )}
 
-        {!loading &&
-          msg &&
-          !openCreate && (
-            <div
-              className={`mt-8 rounded-2xl border px-5 py-4 font-semibold ${msgBox}`}
-            >
-              {msg}
+        {!loading && msg && !openCreate && (
+          <div className={`mt-8 rounded-2xl border px-5 py-4 font-semibold ${msgBox}`}>{msg}</div>
+        )}
+
+        {!loading && !msg && (
+          <>
+            <div className="mt-8 grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {filtered.map((a) => {
+                const id = Number(a?.id ?? 0);
+
+                const nombre = a?.nombre ?? `Academia #${id}`;
+
+                const deporteNombre = a?.deporte_nombre ?? "—";
+
+                const estadoNombre = a?.estado_nombre ?? "—";
+
+                return (
+                  <button
+                    key={String(id)}
+                    type="button"
+                    onClick={() => enterAcademia(a)}
+                    className={`${card} rounded-2xl p-6 shadow-lg transition transform flex flex-col items-center justify-center gap-3 h-44 hover:-translate-y-1 text-center`}
+                  >
+                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-ra-terracotta/90 border border-white/10">
+                      <Building2 className="w-8 h-8 text-white" />
+                    </div>
+
+                    <div
+                      className={`font-extrabold text-lg leading-tight ${darkMode ? "text-white" : "text-ra-marron"}`}
+                    >
+                      {nombre}
+                    </div>
+
+                    <div className={`text-xs inline-flex items-center gap-2 rounded-full px-3 py-1 border ${badge}`}>
+                      <span>{deporteNombre}</span>
+
+                      <span className={darkMode ? "text-white/40" : "text-ra-marron/40"}>•</span>
+
+                      <span>{estadoNombre}</span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
-          )}
 
-        {!loading &&
-          !msg && (
-            <>
-              <div className="mt-8 grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                {filtered.map(
-                  (a) => {
-                    const id =
-                      Number(
-                        a?.id ??
-                          0
-                      );
-
-                    const nombre =
-                      a?.nombre ??
-                      `Academia #${id}`;
-
-                    const deporteNombre =
-                      a?.deporte_nombre ??
-                      "—";
-
-                    const estadoNombre =
-                      a?.estado_nombre ??
-                      "—";
-
-                    return (
-                      <button
-                        key={String(
-                          id
-                        )}
-                        type="button"
-                        onClick={() =>
-                          enterAcademia(
-                            a
-                          )
-                        }
-                        className={`${card} rounded-2xl p-6 shadow-lg transition transform flex flex-col items-center justify-center gap-3 h-44 hover:-translate-y-1 text-center`}
-                      >
-                        <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-ra-terracotta/90 border border-white/10">
-                          <Building2 className="w-8 h-8 text-white" />
-                        </div>
-
-                        <div
-                          className={`font-extrabold text-lg leading-tight ${
-                            darkMode
-                              ? "text-white"
-                              : "text-ra-marron"
-                          }`}
-                        >
-                          {
-                            nombre
-                          }
-                        </div>
-
-                        <div
-                          className={`text-xs inline-flex items-center gap-2 rounded-full px-3 py-1 border ${badge}`}
-                        >
-                          <span>
-                            {
-                              deporteNombre
-                            }
-                          </span>
-
-                          <span
-                            className={
-                              darkMode
-                                ? "text-white/40"
-                                : "text-ra-marron/40"
-                            }
-                          >
-                            •
-                          </span>
-
-                          <span>
-                            {
-                              estadoNombre
-                            }
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  }
-                )}
+            {filtered.length === 0 && (
+              <div className={`mt-10 ${darkMode ? "text-white/70" : "text-ra-marron/70"}`}>
+                No hay academias que coincidan con tu búsqueda.
               </div>
-
-              {filtered.length ===
-                0 && (
-                <div
-                  className={`mt-10 ${
-                    darkMode
-                      ? "text-white/70"
-                      : "text-ra-marron/70"
-                  }`}
-                >
-                  No hay academias
-                  que coincidan con
-                  tu búsqueda.
-                </div>
-              )}
-            </>
-          )}
+            )}
+          </>
+        )}
       </main>
 
       {/* =====================================================
@@ -999,52 +689,29 @@ export default function SuperDashboard() {
 
       <Modal
         open={openCreate}
-        onClose={
-          closeCreateModal
-        }
+        onClose={closeCreateModal}
         title="Nueva academia"
         subtitle="Crea una nueva academia, define su deporte y registra sus sucursales."
         darkMode={darkMode}
       >
-        <form
-          onSubmit={
-            submitCreate
-          }
-          className="space-y-4"
-        >
+        <form onSubmit={submitCreate} className="space-y-4">
           {/* ───────── Nombre ───────── */}
 
           <div>
-            <label
-              className={`text-sm font-bold ${
-                darkMode
-                  ? "text-white/80"
-                  : "text-ra-marron/80"
-              }`}
-            >
-              Nombre
-            </label>
+            <label className={`text-sm font-bold ${darkMode ? "text-white/80" : "text-ra-marron/80"}`}>Nombre</label>
 
             <input
-              value={
-                form.nombre
-              }
+              value={form.nombre}
               onChange={(e) =>
-                setForm(
-                  (s) => ({
-                    ...s,
-                    nombre:
-                      e.target
-                        .value,
-                  })
-                )
+                setForm((s) => ({
+                  ...s,
+                  nombre: e.target.value,
+                }))
               }
               className={`mt-2 w-full rounded-xl px-4 py-3 border outline-none transition ${modalInput}`}
               placeholder="Ej: Academia WELI"
               maxLength={120}
-              disabled={
-                creating
-              }
+              disabled={creating}
             />
           </div>
 
@@ -1052,157 +719,73 @@ export default function SuperDashboard() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label
-                className={`text-sm font-bold ${
-                  darkMode
-                    ? "text-white/80"
-                    : "text-ra-marron/80"
-                }`}
-              >
-                Deporte
-              </label>
+              <label className={`text-sm font-bold ${darkMode ? "text-white/80" : "text-ra-marron/80"}`}>Deporte</label>
 
               <select
-                value={
-                  form.deporte_id
-                }
+                value={form.deporte_id}
                 onChange={(e) =>
-                  setForm(
-                    (s) => ({
-                      ...s,
+                  setForm((s) => ({
+                    ...s,
 
-                      deporte_id:
-                        e.target
-                          .value,
-                    })
-                  )
+                    deporte_id: e.target.value,
+                  }))
                 }
-                className={
-                  selectDark
-                }
-                disabled={
-                  creating ||
-                  !deportesReady
-                }
+                className={selectDark}
+                disabled={creating || !deportesReady}
               >
                 {!deportesReady && (
-                  <option
-                    value=""
-                    disabled
-                  >
-                    Cargando
-                    deportes…
+                  <option value="" disabled>
+                    Cargando deportes…
                   </option>
                 )}
 
-                {deportesReady &&
-                  deportes.length ===
-                    0 && (
-                    <option
-                      value=""
-                      disabled
-                    >
-                      No hay
-                      deportes
-                      (crea
-                      registros
-                      en tabla
-                      deportes)
+                {deportesReady && deportes.length === 0 && (
+                  <option value="" disabled>
+                    No hay deportes (crea registros en tabla deportes)
+                  </option>
+                )}
+
+                {deportesReady && deportes.length > 0 && (
+                  <>
+                    <option value="" disabled>
+                      Selecciona…
                     </option>
-                  )}
 
-                {deportesReady &&
-                  deportes.length >
-                    0 && (
-                    <>
-                      <option
-                        value=""
-                        disabled
-                      >
-                        Selecciona…
-                      </option>
-
-                      {deportes
-                        .slice()
-                        .sort(
-                          (
-                            a,
-                            b
-                          ) =>
-                            String(
-                              a.nombre
-                            ).localeCompare(
-                              String(
-                                b.nombre
-                              ),
-                              "es",
-                              {
-                                sensitivity:
-                                  "base",
-                              }
-                            )
-                        )
-                        .map(
-                          (d) => (
-                            <option
-                              key={String(
-                                d.id
-                              )}
-                              value={String(
-                                d.id
-                              )}
-                            >
-                              {
-                                d.nombre
-                              }
-                            </option>
-                          )
-                        )}
-                    </>
-                  )}
+                    {deportes
+                      .slice()
+                      .sort((a, b) =>
+                        String(a.nombre).localeCompare(String(b.nombre), "es", {
+                          sensitivity: "base",
+                        })
+                      )
+                      .map((d) => (
+                        <option key={String(d.id)} value={String(d.id)}>
+                          {d.nombre}
+                        </option>
+                      ))}
+                  </>
+                )}
               </select>
             </div>
 
             <div>
-              <label
-                className={`text-sm font-bold ${
-                  darkMode
-                    ? "text-white/80"
-                    : "text-ra-marron/80"
-                }`}
-              >
-                Estado
-              </label>
+              <label className={`text-sm font-bold ${darkMode ? "text-white/80" : "text-ra-marron/80"}`}>Estado</label>
 
               <select
-                value={
-                  form.estado_id
-                }
+                value={form.estado_id}
                 onChange={(e) =>
-                  setForm(
-                    (s) => ({
-                      ...s,
+                  setForm((s) => ({
+                    ...s,
 
-                      estado_id:
-                        e.target
-                          .value,
-                    })
-                  )
+                    estado_id: e.target.value,
+                  }))
                 }
-                className={
-                  selectDark
-                }
-                disabled={
-                  creating
-                }
+                className={selectDark}
+                disabled={creating}
               >
-                <option value="1">
-                  Activado
-                </option>
+                <option value="1">Activado</option>
 
-                <option value="2">
-                  Desactivado
-                </option>
+                <option value="2">Desactivado</option>
               </select>
             </div>
           </div>
@@ -1214,42 +797,19 @@ export default function SuperDashboard() {
           <div className="pt-2">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <label
-                  className={`text-sm font-bold ${
-                    darkMode
-                      ? "text-white/80"
-                      : "text-ra-marron/80"
-                  }`}
-                >
+                <label className={`text-sm font-bold ${darkMode ? "text-white/80" : "text-ra-marron/80"}`}>
                   Sucursales
                 </label>
 
-                <p
-                  className={`text-xs mt-1 ${
-                    darkMode
-                      ? "text-white/50"
-                      : "text-ra-marron/50"
-                  }`}
-                >
-                  Registra las
-                  sucursales que
-                  tendrá esta
-                  academia.
+                <p className={`text-xs mt-1 ${darkMode ? "text-white/50" : "text-ra-marron/50"}`}>
+                  Registra las sucursales que tendrá esta academia.
                 </p>
               </div>
 
               <button
                 type="button"
-                onClick={
-                  addSucursal
-                }
-                disabled={
-                  creating ||
-                  form
-                    .sucursales
-                    .length >=
-                    MAX_SUCURSALES
-                }
+                onClick={addSucursal}
+                disabled={creating || form.sucursales.length >= MAX_SUCURSALES}
                 className={[
                   "inline-flex items-center gap-2 rounded-xl px-3 py-2",
                   "border text-sm font-bold transition",
@@ -1258,174 +818,84 @@ export default function SuperDashboard() {
                   darkMode
                     ? "bg-white/10 border-white/15 hover:bg-white/15 text-white"
                     : "bg-white/60 border-ra-marron/15 hover:bg-white text-ra-marron",
-                ].join(
-                  " "
-                )}
+                ].join(" ")}
                 title={
-                  form
-                    .sucursales
-                    .length >=
-                  MAX_SUCURSALES
-                    ? `Máximo ${MAX_SUCURSALES} sucursales`
-                    : "Agregar sucursal"
+                  form.sucursales.length >= MAX_SUCURSALES ? `Máximo ${MAX_SUCURSALES} sucursales` : "Agregar sucursal"
                 }
               >
-                <Plus
-                  size={16}
-                />
-
+                <Plus size={16} />
                 Agregar
               </button>
             </div>
 
             {/* Cantidad registrada */}
 
-            <div
-              className={`mt-2 text-xs ${
-                darkMode
-                  ? "text-white/40"
-                  : "text-ra-marron/50"
-              }`}
-            >
-              {
-                form
-                  .sucursales
-                  .length
-              }{" "}
-              de{" "}
-              {
-                MAX_SUCURSALES
-              }{" "}
-              sucursales
+            <div className={`mt-2 text-xs ${darkMode ? "text-white/40" : "text-ra-marron/50"}`}>
+              {form.sucursales.length} de {MAX_SUCURSALES} sucursales
             </div>
 
             {/* Campos dinámicos */}
 
             <div className="mt-4 space-y-3">
-              {form.sucursales.map(
-                (
-                  sucursal,
-                  index
-                ) => (
-                  <div
-                    key={
-                      index
-                    }
-                    className="flex items-center gap-3"
-                  >
-                    <div className="flex-1">
-                      <label
-                        className={`text-xs font-semibold ${
-                          darkMode
-                            ? "text-white/60"
-                            : "text-ra-marron/60"
-                        }`}
-                      >
-                        Sucursal{" "}
-                        {index +
-                          1}
-                      </label>
+              {form.sucursales.map((sucursal, index) => (
+                <div key={index} className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <label className={`text-xs font-semibold ${darkMode ? "text-white/60" : "text-ra-marron/60"}`}>
+                      Sucursal {index + 1}
+                    </label>
 
-                      <input
-                        value={
-                          sucursal
-                        }
-                        onChange={(
-                          e
-                        ) =>
-                          updateSucursal(
-                            index,
-                            e
-                              .target
-                              .value
-                          )
-                        }
-                        className={`mt-1 w-full rounded-xl px-4 py-3 border outline-none transition ${modalInput}`}
-                        placeholder={`Ej: Sucursal ${
-                          index +
-                          1
-                        }`}
-                        maxLength={
-                          100
-                        }
-                        disabled={
-                          creating
-                        }
-                      />
-                    </div>
-
-                    {form
-                      .sucursales
-                      .length >
-                      1 && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          removeSucursal(
-                            index
-                          )
-                        }
-                        disabled={
-                          creating
-                        }
-                        className={[
-                          "shrink-0 mt-5 rounded-xl px-3 py-3 border",
-                          "font-bold transition",
-
-                          darkMode
-                            ? "bg-red-500/10 border-red-300/20 text-red-200 hover:bg-red-500/20"
-                            : "bg-red-50 border-red-200 text-red-700 hover:bg-red-100",
-                        ].join(
-                          " "
-                        )}
-                        title={`Eliminar sucursal ${
-                          index +
-                          1
-                        }`}
-                        aria-label={`Eliminar sucursal ${
-                          index +
-                          1
-                        }`}
-                      >
-                        ✕
-                      </button>
-                    )}
+                    <input
+                      value={sucursal}
+                      onChange={(e) => updateSucursal(index, e.target.value)}
+                      className={`mt-1 w-full rounded-xl px-4 py-3 border outline-none transition ${modalInput}`}
+                      placeholder={`Ej: Sucursal ${index + 1}`}
+                      maxLength={100}
+                      disabled={creating}
+                    />
                   </div>
-                )
-              )}
+
+                  {form.sucursales.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeSucursal(index)}
+                      disabled={creating}
+                      className={[
+                        "shrink-0 mt-5 rounded-xl px-3 py-3 border",
+                        "font-bold transition",
+
+                        darkMode
+                          ? "bg-red-500/10 border-red-300/20 text-red-200 hover:bg-red-500/20"
+                          : "bg-red-50 border-red-200 text-red-700 hover:bg-red-100",
+                      ].join(" ")}
+                      title={`Eliminar sucursal ${index + 1}`}
+                      aria-label={`Eliminar sucursal ${index + 1}`}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
 
           {/* ───────── Mensajes del formulario ───────── */}
 
-          {msg && (
-            <div
-              className={`rounded-xl border px-4 py-3 text-sm font-semibold ${msgBox}`}
-            >
-              {msg}
-            </div>
-          )}
+          {msg && <div className={`rounded-xl border px-4 py-3 text-sm font-semibold ${msgBox}`}>{msg}</div>}
 
           {/* ───────── Botones ───────── */}
 
           <div className="flex items-center justify-end gap-3 pt-2">
             <button
               type="button"
-              onClick={
-                closeCreateModal
-              }
+              onClick={closeCreateModal}
               className={[
                 "rounded-xl px-5 py-3 border font-bold transition",
 
                 darkMode
                   ? "bg-white/10 border-white/15 hover:bg-white/15 text-white"
                   : "bg-white/60 border-ra-marron/15 hover:bg-white/80 text-ra-marron",
-              ].join(
-                " "
-              )}
-              disabled={
-                creating
-              }
+              ].join(" ")}
+              disabled={creating}
             >
               Cancelar
             </button>
@@ -1433,22 +903,10 @@ export default function SuperDashboard() {
             <button
               type="submit"
               className="rounded-xl px-6 py-3 font-extrabold text-white bg-ra-terracotta hover:opacity-90 active:scale-[0.98] transition disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={
-                creating ||
-                !deportesReady ||
-                !form.deporte_id
-              }
-              title={
-                !deportesReady
-                  ? "Cargando deportes…"
-                  : !form.deporte_id
-                    ? "Selecciona un deporte"
-                    : ""
-              }
+              disabled={creating || !deportesReady || !form.deporte_id}
+              title={!deportesReady ? "Cargando deportes…" : !form.deporte_id ? "Selecciona un deporte" : ""}
             >
-              {creating
-                ? "Creando…"
-                : "Crear"}
+              {creating ? "Creando…" : "Crear"}
             </button>
           </div>
         </form>

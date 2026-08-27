@@ -1,9 +1,10 @@
 // src/pages/admin/dashboard.jsx
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { useTheme } from "../../context/ThemeContext";
-import api, { getToken, clearToken, setToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
+import api, { ACADEMIA_STORAGE_KEY, clearToken, getToken } from "../../services/api";
 import IsLoading from "../../components/isLoading";
 import {
   LogOut,
@@ -27,18 +28,15 @@ import {
 } from "lucide-react";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
-/* =======================
-   🎨 Conjunto X
-======================= */
-const RA = {
-  copper: "#aa5013",
-  brown: "#6d5829",
-  gold: "#b79f69",
-  cream: "#e8dac4",
-  sand: "#ffdda1",
-  caramel: "#dda272",
-  terracotta: "#e2773b",
-};
+const ADMIN_HOME = "/admin";
+const SUPER_HOME = "/super-dashboard";
+const SUPER_ADMIN_ROOT = "/super-dashboard/admin/dashboard";
+
+const USER_INFO_KEY = "weli_user_info";
+const PANEL_ROLES = new Set([1, 2, 3]);
+const PANEL_TYPES = new Set(["admin", "user", "staff", "superadmin"]);
+
+/* ───────────────────────── Breadcrumb ───────────────────────── */
 
 const segToLabel = (seg) => {
   const map = {
@@ -60,97 +58,90 @@ const segToLabel = (seg) => {
     noticias: "Registro Noticias",
   };
 
-  return map[seg] || (seg?.charAt(0).toUpperCase() + seg.slice(1).replaceAll("-", " "));
+  return map[seg] || seg?.charAt(0).toUpperCase() + seg.slice(1).replaceAll("-", " ");
 };
 
-const isExpired = (decoded) => !decoded?.exp || decoded.exp * 1000 < Date.now();
+/* ───────────────────────── JWT helpers ───────────────────────── */
 
-const extractRol = (decoded) => {
-  const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
-  const parsed = Number(rawRol);
-  return Number.isFinite(parsed) ? parsed : 0;
-};
-
-/* =======================
-   Academia snapshot (normado)
-======================= */
-const STORAGE_KEY = ACADEMIA_STORAGE_KEY || "weli_selected_academia";
-
-const readSelectedAcademia = () => {
+function decodeToken(token) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    return jwtDecode(token);
+  } catch {
+    return null;
+  }
+}
+
+function isExpired(decoded) {
+  const exp = Number(decoded?.exp ?? 0);
+
+  if (!Number.isFinite(exp) || exp <= 0) return true;
+
+  return Date.now() >= exp * 1000;
+}
+
+function extractType(decoded) {
+  return String(decoded?.type ?? decoded?.user?.type ?? "").trim().toLowerCase();
+}
+
+function extractRol(decoded) {
+  const rol = Number(decoded?.rol_id ?? decoded?.user?.rol_id ?? 0);
+
+  return Number.isInteger(rol) && PANEL_ROLES.has(rol) ? rol : 0;
+}
+
+function extractTokenAcademiaId(decoded) {
+  const academiaId = Number(decoded?.academia_id ?? decoded?.user?.academia_id ?? 0);
+
+  return Number.isInteger(academiaId) && academiaId > 0 ? academiaId : 0;
+}
+
+/* ───────────────────────── Academia Superadmin ───────────────────────── */
+
+function readSelectedAcademia() {
+  try {
+    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
     if (!raw) return null;
 
-    // acepta "12"
     const direct = Number(raw);
-    if (Number.isFinite(direct) && direct > 0) {
-      return { id: direct, nombre: null, deporte_nombre: null, estado_nombre: null, ts: null };
+
+    if (Number.isInteger(direct) && direct > 0) {
+      return {
+        id: direct,
+        nombre: null,
+        deporte_nombre: null,
+        estado_nombre: null,
+        ts: null,
+      };
     }
 
-    // acepta JSON
-    const p = JSON.parse(raw);
-    const id = Number(p?.id ?? p?.academia_id ?? p?.academy_id ?? 0);
-    if (!Number.isFinite(id) || id <= 0) return null;
+    const parsed = JSON.parse(raw);
+    const id = Number(parsed?.id ?? parsed?.academia_id ?? 0);
+
+    if (!Number.isInteger(id) || id <= 0) return null;
 
     return {
       id,
-      nombre: p?.nombre ?? null,
-      deporte_nombre: p?.deporte_nombre ?? null,
-      estado_nombre: p?.estado_nombre ?? null,
-      ts: p?.ts ?? null,
+      nombre: parsed?.nombre ?? null,
+      deporte_nombre: parsed?.deporte_nombre ?? null,
+      estado_nombre: parsed?.estado_nombre ?? null,
+      ts: parsed?.ts ?? null,
     };
   } catch {
     return null;
   }
-};
+}
 
-/**
- * ✅ Guard normado:
- * - Árbol super: SOLO rol 3 + academia seleccionada
- * - Árbol admin: roles 1/2/3, pero exige scope (academia seleccionada)
- */
-const ensureScopeOrRedirect = ({ navigate, isSuperTree }) => {
-  const token = getToken?.() || "";
-  if (!token) {
-    clearToken?.();
-    navigate("/login", { replace: true });
-    return { ok: false, rol: 0, snap: null };
-  }
+function clearLocalSession() {
+  try {
+    clearToken();
+  } catch {}
 
   try {
-    let decoded = jwtDecode(token);
+    localStorage.removeItem(USER_INFO_KEY);
+  } catch {}
+}
 
-    if (isExpired(decoded)) {
-      return { ok: true, rol: extractRol(decoded), snap: null, needsRefresh: true };
-    }
-
-    const rol = extractRol(decoded);
-
-    if (isSuperTree && rol !== 3) {
-      navigate("/admin", { replace: true });
-      return { ok: false, rol, snap: null };
-    }
-
-    const snap = readSelectedAcademia();
-
-    if (isSuperTree && !snap) {
-      navigate("/super-dashboard", { replace: true });
-      return { ok: false, rol, snap: null };
-    }
-
-    if (!isSuperTree && !snap) {
-      clearToken?.();
-      navigate("/login", { replace: true });
-      return { ok: false, rol, snap: null };
-    }
-
-    return { ok: true, rol, snap, needsRefresh: false };
-  } catch {
-    clearToken?.();
-    navigate("/login", { replace: true });
-    return { ok: false, rol: 0, snap: null };
-  }
-};
+/* ───────────────────────── Component ───────────────────────── */
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -167,42 +158,52 @@ export default function Dashboard() {
 
   useEffect(() => {
     mountedRef.current = true;
+
     return () => {
       mountedRef.current = false;
     };
   }, []);
 
   const isSuperTree = useMemo(
-    () => location.pathname.startsWith("/super-dashboard/admin/dashboard"),
+    () => location.pathname === SUPER_ADMIN_ROOT || location.pathname.startsWith(`${SUPER_ADMIN_ROOT}/`),
     [location.pathname]
   );
 
-  const ROOT = isSuperTree ? "/super-dashboard/admin/dashboard" : "/admin";
+  const ROOT = isSuperTree ? SUPER_ADMIN_ROOT : ADMIN_HOME;
   const BASE = ROOT;
 
-  /* =======================
-     Cards (roles reales)
-  ======================= */
+  /* ───────────────────────── Cards ───────────────────────── */
+
   const cards = useMemo(
     () => [
       { to: `${BASE}/crear-jugador`, label: "Crear Jugador", roles: [1, 3], Icon: UserPlus },
       { to: `${BASE}/listar-jugadores`, label: "Listar Jugadores", roles: [1, 2, 3], Icon: Users },
-
-      { to: `${BASE}/registrar-estadisticas`, label: "Registrar Estadísticas", roles: [1, 2, 3], Icon: ClipboardList },
+      {
+        to: `${BASE}/registrar-estadisticas`,
+        label: "Registrar Estadísticas",
+        roles: [1, 2, 3],
+        Icon: ClipboardList,
+      },
       { to: `${BASE}/estadisticas`, label: "Estadísticas Globales", roles: [1, 2, 3], Icon: BarChart3 },
-
       { to: `${BASE}/convocatorias`, label: "Crear Convocatorias", roles: [1, 3], Icon: CalendarPlus },
-      { to: `${BASE}/ver-convocaciones-historicas`, label: "Historial Convocatorias", roles: [1, 2, 3], Icon: History },
+      {
+        to: `${BASE}/ver-convocaciones-historicas`,
+        label: "Historial Convocatorias",
+        roles: [1, 2, 3],
+        Icon: History,
+      },
       { to: `${BASE}/agenda`, label: "Agenda de eventos", roles: [1, 2, 3], Icon: CalendarDays },
-
       { to: `${BASE}/gestionar-pagos`, label: "Gestión de pagos", roles: [1, 3], Icon: Banknote },
       { to: `${BASE}/power-bi`, label: "POWER BI FINANCIERO", roles: [1, 3], Icon: PieChart },
-
-      { to: `${BASE}/noticias`, label: "Registro Noticias", roles: [1, 2, 3], Icon: Newspaper, disabled: true },
-
+      {
+        to: `${BASE}/noticias`,
+        label: "Registro Noticias",
+        roles: [1, 2, 3],
+        Icon: Newspaper,
+        disabled: true,
+      },
       { to: `${BASE}/crear-usuario`, label: "Crear Usuario", roles: [1, 3], Icon: UserCog },
       { to: `${BASE}/configuracion`, label: "Configuración", roles: [1, 3], Icon: Settings },
-
       {
         to: `${BASE}/seguimiento-medico`,
         label: "Seguimiento médico",
@@ -214,117 +215,181 @@ export default function Dashboard() {
     [BASE]
   );
 
-  /* =======================
-     Auth + refresh + guard
-  ======================= */
+  /* ───────────────────────── Auth context ───────────────────────── */
+
   useEffect(() => {
-    (async () => {
+    const validateDashboardAccess = () => {
       try {
-        const g0 = ensureScopeOrRedirect({ navigate, isSuperTree });
-        if (!g0.ok && !g0.needsRefresh) return;
+        const token = getToken() || "";
 
-        let token = getToken?.() || "";
-        let decoded = null;
+        if (!token) {
+          clearLocalSession();
+          navigate("/login", { replace: true });
+          return;
+        }
 
-        if (g0.needsRefresh) {
-          try {
-            const r = await api.post("/auth/refresh", null, { meta: { isPublic: false } });
-            const newToken =
-              r?.data?.access_token || r?.data?.token || r?.data?.weli_token || r?.data?.jwt || null;
-            if (!newToken) throw new Error("no-refresh-token");
-            setToken(String(newToken));
-            token = String(newToken);
-          } catch {
-            clearToken?.();
+        const decoded = decodeToken(token);
+
+        if (!decoded || isExpired(decoded)) {
+          clearLocalSession();
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        const type = extractType(decoded);
+        const currentRol = extractRol(decoded);
+
+        if (!PANEL_TYPES.has(type) || !currentRol) {
+          clearLocalSession();
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        /*
+         * Admin y Staff:
+         * la academia proviene EXCLUSIVAMENTE del JWT firmado.
+         *
+         * Nunca exigimos weli_selected_academia para roles 1/2.
+         */
+        if (currentRol === 1 || currentRol === 2) {
+          const tokenAcademiaId = extractTokenAcademiaId(decoded);
+
+          if (!tokenAcademiaId) {
+            clearLocalSession();
             navigate("/login", { replace: true });
             return;
           }
-        }
 
-        try {
-          decoded = jwtDecode(token);
-        } catch {
-          clearToken?.();
-          navigate("/login", { replace: true });
+          if (isSuperTree) {
+            navigate(ADMIN_HOME, { replace: true });
+            return;
+          }
+
+          if (mountedRef.current) {
+            setRol(currentRol);
+            setSelectedAcademia(null);
+          }
+
           return;
         }
 
-        const r = extractRol(decoded);
-        if (mountedRef.current) setRol(r);
+        /*
+         * Superadmin:
+         * solamente puede utilizar el árbol
+         * /super-dashboard/admin/dashboard cuando existe
+         * una academia seleccionada.
+         */
+        if (currentRol === 3) {
+          if (!isSuperTree) {
+            navigate(SUPER_HOME, { replace: true });
+            return;
+          }
 
-        if (isSuperTree && r !== 3) {
-          navigate("/admin", { replace: true });
-          return;
-        }
+          const snapshot = readSelectedAcademia();
 
-        const snap = readSelectedAcademia();
-        if (mountedRef.current) setSelectedAcademia(snap);
+          if (!snapshot) {
+            navigate(SUPER_HOME, { replace: true });
+            return;
+          }
 
-        if (isSuperTree && r === 3 && !snap) {
-          navigate("/super-dashboard", { replace: true });
-          return;
-        }
-
-        if (!isSuperTree && !snap) {
-          clearToken?.();
-          navigate("/login", { replace: true });
-          return;
+          if (mountedRef.current) {
+            setRol(currentRol);
+            setSelectedAcademia(snapshot);
+          }
         }
       } catch {
-        clearToken?.();
+        clearLocalSession();
         navigate("/login", { replace: true });
       } finally {
-        if (mountedRef.current) setIsLoading(false);
+        if (mountedRef.current) {
+          setIsLoading(false);
+        }
       }
-    })();
+    };
+
+    validateDashboardAccess();
   }, [navigate, isSuperTree]);
+
+  /* ───────────────────────── Logout ───────────────────────── */
 
   const handleCerrarSesion = useCallback(async () => {
     try {
       await api.post("/auth/logout", null, { meta: { isPublic: false } });
     } catch {
-      // idempotente
+      // Logout local idempotente.
     } finally {
-      clearToken?.();
+      clearLocalSession();
+
       try {
-        localStorage.removeItem(STORAGE_KEY);
-      } catch { }
+        localStorage.removeItem(ACADEMIA_STORAGE_KEY);
+      } catch {}
+
       window.location.replace("/");
     }
   }, []);
 
+  /* ───────────────────────── Superadmin academy switch ───────────────────────── */
+
   const handleCambiarAcademia = useCallback(() => {
     try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch { }
-    navigate("/super-dashboard", { replace: true });
+      localStorage.removeItem(ACADEMIA_STORAGE_KEY);
+    } catch {}
+
+    navigate(SUPER_HOME, { replace: true });
   }, [navigate]);
+
+  /* ───────────────────────── Breadcrumb ───────────────────────── */
 
   const breadcrumb = useMemo(() => {
     const path = location.pathname;
     const base = [{ to: ROOT, label: "Inicio", last: false }];
-    if (path === ROOT) return [{ ...base[0], last: true }];
+
+    if (path === ROOT) {
+      return [{ ...base[0], last: true }];
+    }
 
     const rest = path.startsWith(ROOT) ? path.slice(ROOT.length) : path;
     const parts = rest.split("/").filter(Boolean);
 
     let acc = ROOT;
-    const tail = parts.map((seg, idx) => {
+
+    const tail = parts.map((seg, index) => {
       acc += `/${seg}`;
-      return { to: acc, label: segToLabel(seg), last: idx === parts.length - 1 };
+
+      return {
+        to: acc,
+        label: segToLabel(seg),
+        last: index === parts.length - 1,
+      };
     });
 
     const all = [...base, ...tail];
-    return all.map((x, i) => ({ ...x, last: i === all.length - 1 }));
+
+    return all.map((item, index) => ({
+      ...item,
+      last: index === all.length - 1,
+    }));
   }, [location.pathname, ROOT]);
 
-  if (isLoading || rol === null) return <IsLoading />;
+  /* ───────────────────────── Loading ───────────────────────── */
+
+  if (isLoading || rol === null) {
+    return <IsLoading />;
+  }
 
   const isRoot = location.pathname === ROOT;
 
-  /* =======================
-     ✅ ESTILO = SuperDashboard (tal cual)
-  ======================= */
+  /*
+   * NOTA DE PURGA:
+   *
+   * Las clases Tailwind ra-* se mantienen temporalmente porque
+   * pertenecen a la configuración visual existente.
+   *
+   * Deben renombrarse de manera coordinada con tailwind.config.*
+   * o el CSS donde estén declaradas. Cambiarlas solamente aquí
+   * rompería los estilos.
+   */
+
   const shell = darkMode
     ? "bg-[#111827] text-white"
     : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
@@ -343,23 +408,29 @@ export default function Dashboard() {
   return (
     <div className={`${shell} min-h-screen font-sans`}>
       <header className="px-6 pt-6">
-        {/* fila 1: breadcrumb (izq) + acciones (der) */}
         <div className="flex items-center justify-between gap-3">
           <nav className="text-sm min-w-0" aria-label="breadcrumb">
             <ol className="flex flex-wrap items-center gap-2 min-w-0">
-              {breadcrumb.map((b, i) => (
-                <li key={`${b.to}-${i}`} className="flex items-center gap-2 min-w-0">
-                  {i !== 0 && <span className="opacity-50">/</span>}
-                  {b.last ? (
-                    <span className={`font-semibold truncate ${darkMode ? "text-white/90" : "text-ra-marron/90"}`}>
-                      {b.label}
+              {breadcrumb.map((item, index) => (
+                <li key={`${item.to}-${index}`} className="flex items-center gap-2 min-w-0">
+                  {index !== 0 && <span className="opacity-50">/</span>}
+
+                  {item.last ? (
+                    <span
+                      className={`font-semibold truncate ${
+                        darkMode ? "text-white/90" : "text-ra-marron/90"
+                      }`}
+                    >
+                      {item.label}
                     </span>
                   ) : (
                     <Link
-                      className={`hover:opacity-90 truncate ${darkMode ? "text-white/80" : "text-ra-marron/80"}`}
-                      to={b.to}
+                      className={`hover:opacity-90 truncate ${
+                        darkMode ? "text-white/80" : "text-ra-marron/80"
+                      }`}
+                      to={item.to}
                     >
-                      {b.label}
+                      {item.label}
                     </Link>
                   )}
                 </li>
@@ -376,7 +447,9 @@ export default function Dashboard() {
                 ].join(" ")}
               >
                 <Building2 className="w-4 h-4" />
+
                 <span className="text-xs opacity-80">Academia:</span>
+
                 <span className="text-xs font-extrabold">
                   {selectedAcademia.nombre ?? `#${selectedAcademia.id}`}
                 </span>
@@ -396,34 +469,53 @@ export default function Dashboard() {
               </div>
             )}
 
-            <button title="Cambiar tema" onClick={toggleTheme} className={`p-2 rounded-xl transition ${buttonIcon}`}>
+            <button
+              type="button"
+              title="Cambiar tema"
+              onClick={toggleTheme}
+              className={`p-2 rounded-xl transition ${buttonIcon}`}
+            >
               {darkMode ? <Sun size={20} /> : <Moon size={20} />}
             </button>
 
-            <button title="Cerrar sesión" onClick={handleCerrarSesion} className={`p-2 rounded-xl transition ${buttonIcon}`}>
+            <button
+              type="button"
+              title="Cerrar sesión"
+              onClick={handleCerrarSesion}
+              className={`p-2 rounded-xl transition ${buttonIcon}`}
+            >
               <LogOut size={20} />
             </button>
           </div>
         </div>
 
-        {/* fila 2: título centrado bajo breadcrumb */}
         <h1 className="text-3xl font-extrabold text-center tracking-tight mt-6">
           Panel de Administración
         </h1>
-      </header>
 
+        <p className={`text-center mt-2 text-sm ${headerSub}`}>
+          {rol === 3 && selectedAcademia
+            ? selectedAcademia.nombre
+              ? `Administrando ${selectedAcademia.nombre}`
+              : `Academia #${selectedAcademia.id}`
+            : "Gestión administrativa WELI"}
+        </p>
+      </header>
 
       <main className="px-6 pb-20">
         {isRoot ? (
           <div className="mt-8 grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {cards
-              .filter((c) => !c.roles || c.roles.includes(rol))
-              .sort((a, b) => (a.label || "").localeCompare(b.label || "", "es", { sensitivity: "base" }))
+              .filter((item) => !item.roles || item.roles.includes(rol))
+              .sort((a, b) =>
+                (a.label || "").localeCompare(b.label || "", "es", {
+                  sensitivity: "base",
+                })
+              )
               .map(({ to, label, Icon, disabled }) => {
-                const iconWrap =
-                  darkMode
-                    ? "bg-ra-terracotta/90 border border-white/10"
-                    : "bg-ra-terracotta/90 border border-white/20";
+                const iconWrap = darkMode
+                  ? "bg-ra-terracotta/90 border border-white/10"
+                  : "bg-ra-terracotta/90 border border-white/20";
 
                 if (disabled) {
                   return (
@@ -436,7 +528,11 @@ export default function Dashboard() {
                         <Icon className="w-8 h-8 text-white" />
                       </div>
 
-                      <div className={`font-extrabold text-lg leading-tight ${darkMode ? "text-white" : "text-ra-marron"}`}>
+                      <div
+                        className={`font-extrabold text-lg leading-tight ${
+                          darkMode ? "text-white" : "text-ra-marron"
+                        }`}
+                      >
                         {label}
                       </div>
 
@@ -458,10 +554,13 @@ export default function Dashboard() {
                       <Icon className="w-8 h-8 text-white" />
                     </div>
 
-                    <div className={`font-extrabold text-lg leading-tight ${darkMode ? "text-white" : "text-ra-marron"}`}>
+                    <div
+                      className={`font-extrabold text-lg leading-tight ${
+                        darkMode ? "text-white" : "text-ra-marron"
+                      }`}
+                    >
                       {label}
                     </div>
-
                   </Link>
                 );
               })}

@@ -1,6 +1,6 @@
 // src/hooks/useMobileAutoScrollTop.jsx
-import { useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
 
 export function useMobileAutoScrollTop() {
   const location = useLocation();
@@ -8,7 +8,7 @@ export function useMobileAutoScrollTop() {
   useEffect(() => {
     const isMobile = window.innerWidth <= 768;
     if (isMobile) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }, [location.pathname]);
 }

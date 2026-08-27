@@ -15,7 +15,9 @@ const ACADEMIA_STORAGE_KEY = "weli_selected_academia";
 
 /** Normaliza: solo dígitos (RUT sin DV) */
 function normalizeRut(rut) {
-  return String(rut ?? "").replace(/\D/g, "").slice(0, 8);
+  return String(rut ?? "")
+    .replace(/\D/g, "")
+    .slice(0, 8);
 }
 
 /**
@@ -114,11 +116,7 @@ async function postWithTimeout(path, body, opts = {}) {
     const t1 = performance.now();
 
     const status = err?.status ?? err?.response?.status ?? 0;
-    const msg =
-      err?.message ||
-      err?.response?.data?.message ||
-      err?.response?.data?.error ||
-      "Error";
+    const msg = err?.message || err?.response?.data?.message || err?.response?.data?.error || "Error";
 
     if (AUTH_DEBUG) {
       console.log("[WELI AUTH]", path, "FAIL", {
@@ -196,12 +194,7 @@ export async function loginApoderado(rut, password, options = {}) {
       if (typeof data?.must_change_password !== "undefined") {
         localStorage.setItem(
           "apoderado_must_change_password",
-          String(
-            data.must_change_password === true ||
-              Number(data.must_change_password) === 1
-              ? 1
-              : 0
-          )
+          String(data.must_change_password === true || Number(data.must_change_password) === 1 ? 1 : 0)
         );
       }
     } catch {}
@@ -217,9 +210,7 @@ export async function loginApoderado(rut, password, options = {}) {
    LOGOUTS
 ──────────────────────────────── */
 async function safePostLogout(path) {
-  const token =
-    (typeof getToken === "function" ? getToken() : null) ||
-    localStorage.getItem(TOKEN_KEY);
+  const token = (typeof getToken === "function" ? getToken() : null) || localStorage.getItem(TOKEN_KEY);
 
   if (!token) return;
 

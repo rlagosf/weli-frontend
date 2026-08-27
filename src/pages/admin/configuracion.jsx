@@ -39,9 +39,7 @@ export default function Configuracion() {
 
   const dashboardBase = useMemo(() => {
     const p = location.pathname || "";
-    return p.startsWith("/super-dashboard/admin/dashboard")
-      ? "/super-dashboard/admin/dashboard"
-      : "/admin";
+    return p.startsWith("/super-dashboard/admin/dashboard") ? "/super-dashboard/admin/dashboard" : "/admin";
   }, [location.pathname]);
 
   const [rol, setRol] = useState(null);
@@ -84,7 +82,12 @@ export default function Configuracion() {
       { nombre: "Gestionar categorías", ruta: `${base}/configuracion/categorias`, Icon: Layers, roles: [1, 3] },
       { nombre: "Gestionar estados", ruta: `${base}/configuracion/estados`, Icon: CheckSquare, roles: [1, 3] },
       { nombre: "Gestionar posiciones", ruta: `${base}/configuracion/posiciones`, Icon: Goal, roles: [1, 3] },
-      { nombre: "Gestionar medios de pago", ruta: `${base}/configuracion/medios-pago`, Icon: CreditCard, roles: [1, 3] },
+      {
+        nombre: "Gestionar medios de pago",
+        ruta: `${base}/configuracion/medios-pago`,
+        Icon: CreditCard,
+        roles: [1, 3],
+      },
       { nombre: "Gestionar tipos de pago", ruta: `${base}/configuracion/tipos-pago`, Icon: ListChecks, roles: [1, 3] },
       { nombre: "Gestionar roles", ruta: `${base}/configuracion/roles`, Icon: ShieldCheck, roles: [3] },
       {
@@ -138,18 +141,14 @@ export default function Configuracion() {
 
     const iconBadge =
       "w-14 h-14 rounded-2xl flex items-center justify-center border " +
-      (darkMode
-        ? "bg-white/12 border-white/18"
-        : "bg-[rgba(109,88,41,0.08)] border-[rgba(109,88,41,0.18)]");
+      (darkMode ? "bg-white/12 border-white/18" : "bg-[rgba(109,88,41,0.08)] border-[rgba(109,88,41,0.18)]");
 
     const iconStyle = { color: darkMode ? PALETTE_X.cream : PALETTE_X.brown };
 
     // botón/indicador mini
     const chip =
       "inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border " +
-      (darkMode
-        ? "bg-black/20 border-white/15 text-white/80"
-        : "bg-white/70 border-ra-marron/15 text-ra-marron/70");
+      (darkMode ? "bg-black/20 border-white/15 text-white/80" : "bg-white/70 border-ra-marron/15 text-ra-marron/70");
 
     // tarjeta clickable (todo el link)
     const cardInner = "p-6 h-40 flex flex-col items-center justify-center gap-3 text-center";
@@ -175,14 +174,14 @@ export default function Configuracion() {
     <div className={`${ui.shell} min-h-screen font-sans`}>
       {/* Header centrado tipo SuperDashboard */}
       <header className="px-6 pt-6 text-center">
-        <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.titleMain} flex items-center justify-center gap-3`}>
+        <h1
+          className={`text-4xl font-extrabold tracking-tightish ${ui.titleMain} flex items-center justify-center gap-3`}
+        >
           <SettingsIcon className="w-8 h-8" style={ui.iconStyle} />
           Configuración
         </h1>
 
-        <p className={`text-sm mt-2 ${ui.subText}`}>
-          Administra catálogos y parámetros del sistema.
-        </p>
+        <p className={`text-sm mt-2 ${ui.subText}`}>Administra catálogos y parámetros del sistema.</p>
       </header>
 
       <main className="px-6 pb-20">

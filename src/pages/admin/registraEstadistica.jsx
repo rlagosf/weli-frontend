@@ -32,8 +32,7 @@ const readSelectedAcademia = () => {
   }
 };
 
-const isSuperTreePath = (pathname) =>
-  String(pathname || "").startsWith("/super-dashboard/admin/dashboard");
+const isSuperTreePath = (pathname) => String(pathname || "").startsWith("/super-dashboard/admin/dashboard");
 
 /* =======================
    🎨 Conjunto X
@@ -110,9 +109,7 @@ export default function ListarEstadisticas() {
   // ✅ Estrategia dorada: detecta árbol actual
   const dashboardBase = useMemo(() => {
     const p = location.pathname || "";
-    return p.startsWith("/super-dashboard/admin/dashboard")
-      ? "/super-dashboard/admin/dashboard"
-      : "/admin";
+    return p.startsWith("/super-dashboard/admin/dashboard") ? "/super-dashboard/admin/dashboard" : "/admin";
   }, [location.pathname]);
 
   // ─────────────────────────────
@@ -395,22 +392,18 @@ export default function ListarEstadisticas() {
       !a && !d
         ? base
         : base.filter((j) => {
-          const aj = Number(j?.academia_id ?? 0);
-          const dj = Number(j?.deporte_id ?? 0);
-          if (a && aj !== a) return false;
-          if (d && dj !== d) return false;
-          return true;
-        });
+            const aj = Number(j?.academia_id ?? 0);
+            const dj = Number(j?.deporte_id ?? 0);
+            if (a && aj !== a) return false;
+            if (d && dj !== d) return false;
+            return true;
+          });
 
     return scoped.map((j, idx) => {
       const jugador_id = Number(j?.id ?? j?.jugador_id ?? 0) || null;
 
       const rutBase =
-        j?.rut_jugador ??
-        j?.rut ??
-        j?.rutJugador ??
-        j?.rut_base ??
-        (jugador_id ? String(jugador_id) : `tmp-${idx}`);
+        j?.rut_jugador ?? j?.rut ?? j?.rutJugador ?? j?.rut_base ?? (jugador_id ? String(jugador_id) : `tmp-${idx}`);
 
       const rutStr = String(rutBase);
 
@@ -473,19 +466,13 @@ export default function ListarEstadisticas() {
         : "bg-[rgba(109,88,41,0.14)] text-[rgba(109,88,41,0.95)] border-b border-[rgba(109,88,41,0.28)]");
 
     const th =
-      "p-2 text-center whitespace-nowrap border-r " +
-      (darkMode ? "border-white/20" : "border-[rgba(109,88,41,0.28)]");
+      "p-2 text-center whitespace-nowrap border-r " + (darkMode ? "border-white/20" : "border-[rgba(109,88,41,0.28)]");
 
-    const td =
-      "p-2 text-center border-r " +
-      (darkMode ? "border-white/15" : "border-[rgba(109,88,41,0.22)]");
-
+    const td = "p-2 text-center border-r " + (darkMode ? "border-white/15" : "border-[rgba(109,88,41,0.22)]");
 
     const tr =
       "border-b cursor-pointer transition " +
-      (darkMode
-        ? "border-white/15 hover:bg-white/5"
-        : "border-[rgba(109,88,41,0.18)] hover:bg-[rgba(109,88,41,0.06)]");
+      (darkMode ? "border-white/15 hover:bg-white/5" : "border-[rgba(109,88,41,0.18)] hover:bg-[rgba(109,88,41,0.06)]");
 
     const warn =
       "rounded-2xl border px-5 py-4 font-semibold " +
@@ -495,9 +482,7 @@ export default function ListarEstadisticas() {
 
     const danger =
       "rounded-2xl border px-5 py-4 font-semibold " +
-      (darkMode
-        ? "border-red-200/20 bg-red-500/10 text-red-100"
-        : "border-red-200 bg-red-50 text-red-700");
+      (darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
 
     const actionBtn =
       "inline-flex items-center justify-center p-2 rounded-lg border transition-all " +
@@ -543,7 +528,8 @@ export default function ListarEstadisticas() {
         {!scope.deporte_id && (
           <div className="max-w-5xl mx-auto mt-6">
             <div className={ui.warn}>
-              Falta <b>deporte_id</b> en el scope. Si estás en super-dashboard, selecciona una academia con deporte asignado.
+              Falta <b>deporte_id</b> en el scope. Si estás en super-dashboard, selecciona una academia con deporte
+              asignado.
             </div>
           </div>
         )}

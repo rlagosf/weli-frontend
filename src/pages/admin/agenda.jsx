@@ -6,16 +6,7 @@ import { useTheme } from "../../context/ThemeContext";
 import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
 import IsLoading from "../../components/isLoading";
 import { Calendar, dateFnsLocalizer } from "react-big-calendar";
-import {
-  format,
-  parse,
-  startOfWeek,
-  getDay,
-  addDays,
-  addMinutes,
-  startOfDay,
-  isBefore,
-} from "date-fns";
+import { format, parse, startOfWeek, getDay, addDays, addMinutes, startOfDay, isBefore } from "date-fns";
 import esES from "date-fns/locale/es";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import DatePicker from "react-datepicker";
@@ -155,7 +146,9 @@ const getList = async (path, signal) => {
       if (
         e?.name === "CanceledError" ||
         e?.code === "ERR_CANCELED" ||
-        String(e?.message || "").toLowerCase().includes("canceled")
+        String(e?.message || "")
+          .toLowerCase()
+          .includes("canceled")
       ) {
         return [];
       }
@@ -318,9 +311,7 @@ export default function Agenda() {
               end,
               allDay:
                 e.allDay === true ||
-                (start.getHours() === 0 &&
-                  end.getHours() === 0 &&
-                  start.toDateString() !== end.toDateString()),
+                (start.getHours() === 0 && end.getHours() === 0 && start.toDateString() !== end.toDateString()),
             };
 
             ev.color = isHoliday(ev.title) ? THEME : pickEventColor(ev);
@@ -424,9 +415,7 @@ export default function Agenda() {
         <div className="flex items-center gap-2">
           <button
             className={
-              "px-3 py-1 rounded-lg border " +
-              (darkMode ? "border-white/20" : "border-black/10") +
-              " hover:opacity-80"
+              "px-3 py-1 rounded-lg border " + (darkMode ? "border-white/20" : "border-black/10") + " hover:opacity-80"
             }
             onClick={() => props.onNavigate("PREV")}
           >
@@ -441,9 +430,7 @@ export default function Agenda() {
           </button>
           <button
             className={
-              "px-3 py-1 rounded-lg border " +
-              (darkMode ? "border-white/20" : "border-black/10") +
-              " hover:opacity-80"
+              "px-3 py-1 rounded-lg border " + (darkMode ? "border-white/20" : "border-black/10") + " hover:opacity-80"
             }
             onClick={() => props.onNavigate("NEXT")}
           >
@@ -579,11 +566,7 @@ export default function Agenda() {
     }
 
     let finAjustado = fin;
-    if (
-      inicio.toDateString() !== fin.toDateString() &&
-      inicio.getHours() === 0 &&
-      fin.getHours() === 0
-    ) {
+    if (inicio.toDateString() !== fin.toDateString() && inicio.getHours() === 0 && fin.getHours() === 0) {
       finAjustado = addDays(fin, 1);
     }
 
@@ -636,10 +619,7 @@ export default function Agenda() {
         desc: creado.descripcion ?? creado.desc ?? payload.descripcion ?? "",
         start,
         end,
-        allDay:
-          start.getHours() === 0 &&
-          end.getHours() === 0 &&
-          start.toDateString() !== end.toDateString(),
+        allDay: start.getHours() === 0 && end.getHours() === 0 && start.toDateString() !== end.toDateString(),
       };
       newEvent.color = isHoliday(newEvent.title) ? THEME : pickEventColor(newEvent);
 
@@ -741,8 +721,7 @@ export default function Agenda() {
 
   const textAreaBase = inputBase;
 
-  const btnPrimary =
-    "rounded-xl px-6 py-3 font-extrabold text-white hover:opacity-90 active:scale-[0.98] transition";
+  const btnPrimary = "rounded-xl px-6 py-3 font-extrabold text-white hover:opacity-90 active:scale-[0.98] transition";
 
   const btnGhost =
     "rounded-xl px-5 py-3 border font-bold transition active:scale-[0.98] " +
@@ -817,9 +796,7 @@ export default function Agenda() {
           <div className={modalBase} style={{ maxWidth: 620 }}>
             <div className="mb-4">
               <h3 className="text-2xl text-center font-extrabold">Crear evento</h3>
-              <p className="text-center text-sm opacity-75 mt-1">
-                Completa los datos del evento y presiona Guardar.
-              </p>
+              <p className="text-center text-sm opacity-75 mt-1">Completa los datos del evento y presiona Guardar.</p>
             </div>
 
             <div className="space-y-3">

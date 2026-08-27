@@ -2,15 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Pie, Bar } from "react-chartjs-2";
-import {
-  Chart,
-  ArcElement,
-  Tooltip,
-  Legend,
-  BarElement,
-  CategoryScale,
-  LinearScale,
-} from "chart.js";
+import { Chart, ArcElement, Tooltip, Legend, BarElement, CategoryScale, LinearScale } from "chart.js";
 import api, { getToken, clearToken } from "../../services/api";
 import { useTheme } from "../../context/ThemeContext";
 import IsLoading from "../../components/isLoading";
@@ -39,9 +31,17 @@ const EVENT_COLORS = [
    Helpers visual (hex -> rgba)
 ======================= */
 const hexToRgba = (hex, a = 0.75) => {
-  const h = String(hex || "").replace("#", "").trim();
+  const h = String(hex || "")
+    .replace("#", "")
+    .trim();
   if (![3, 6].includes(h.length)) return `rgba(255,255,255,${a})`;
-  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const full =
+    h.length === 3
+      ? h
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : h;
   const n = parseInt(full, 16);
   const r = (n >> 16) & 255;
   const g = (n >> 8) & 255;
@@ -64,9 +64,7 @@ const PieValueInsidePlugin = {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.font = (pluginOptions && pluginOptions.font) || "12px sans-serif";
-    ctx.fillStyle =
-      (pluginOptions && pluginOptions.color) ||
-      (chart.options?.plugins?.legend?.labels?.color || "#fff");
+    ctx.fillStyle = (pluginOptions && pluginOptions.color) || chart.options?.plugins?.legend?.labels?.color || "#fff";
 
     meta.data.forEach((arc, i) => {
       const val = Number(values[i] || 0);
@@ -222,8 +220,7 @@ const readSelectedAcademia = () => {
   }
 };
 
-const isSuperTreePath = (pathname) =>
-  String(pathname || "").startsWith("/super-dashboard/admin/dashboard");
+const isSuperTreePath = (pathname) => String(pathname || "").startsWith("/super-dashboard/admin/dashboard");
 
 /* ───────────────── Deportes: config por deporte ───────────────── */
 function SPORT_META_FALLBACK_BASE(nombre) {
@@ -258,14 +255,7 @@ const SPORT_META = {
         "centros_acertados",
         "pases_clave",
       ],
-      defensivas: [
-        "intercepciones",
-        "despejes",
-        "duelos_ganados",
-        "entradas_exitosas",
-        "bloqueos",
-        "recuperaciones",
-      ],
+      defensivas: ["intercepciones", "despejes", "duelos_ganados", "entradas_exitosas", "bloqueos", "recuperaciones"],
       tecnicas: [
         "pases_completados",
         "pases_errados",
@@ -274,22 +264,9 @@ const SPORT_META = {
         "faltas_cometidas",
         "faltas_recibidas",
       ],
-      fisicas: [
-        "distancia_recorrida_km",
-        "sprints",
-        "duelos_aereos_ganados",
-      ],
-      disciplina: [
-        "tarjetas_amarillas",
-        "tarjetas_rojas",
-      ],
-      base: [
-        "minutos_jugados",
-        "partidos_jugados",
-        "lesiones",
-        "dias_baja",
-        "sanciones_federativas",
-      ],
+      fisicas: ["distancia_recorrida_km", "sprints", "duelos_aereos_ganados"],
+      disciplina: ["tarjetas_amarillas", "tarjetas_rojas"],
+      base: ["minutos_jugados", "partidos_jugados", "lesiones", "dias_baja", "sanciones_federativas"],
     },
     traducciones: {
       goles: "Goles",
@@ -529,12 +506,7 @@ const normalizeCatalog = (arr) =>
   (Array.isArray(arr) ? arr : [])
     .map((x) => ({
       id: Number(
-        x?.id ??
-          x?.categoria_id ??
-          x?.posicion_id ??
-          x?.estado_id ??
-          x?.sucursal_id ??
-          x?.prevision_medica_id
+        x?.id ?? x?.categoria_id ?? x?.posicion_id ?? x?.estado_id ?? x?.sucursal_id ?? x?.prevision_medica_id
       ),
       nombre: String(x?.nombre ?? x?.descripcion ?? "").trim(),
     }))
@@ -578,7 +550,9 @@ const resolveScope = ({ decoded, snap, locStateScope }) => {
   const deporte_id =
     Number(snap?.deporte_id ?? 0) ||
     Number(s?.deporte_id ?? s?.sport_id ?? 0) ||
-    Number(scope?.deporte_id ?? scope?.sport_id ?? decoded?.deporte_id ?? decoded?.sport_id ?? decoded?.id_deporte ?? 0) ||
+    Number(
+      scope?.deporte_id ?? scope?.sport_id ?? decoded?.deporte_id ?? decoded?.sport_id ?? decoded?.id_deporte ?? 0
+    ) ||
     null;
 
   return {
@@ -647,9 +621,7 @@ export default function EstadisticasGlobales() {
 
   const deporteId = scope.deporte_id ? Number(scope.deporte_id) : null;
   const sportMeta =
-    deporteId && SPORT_META[deporteId]
-      ? SPORT_META[deporteId]
-      : SPORT_META_FALLBACK_BASE("Deporte no configurado");
+    deporteId && SPORT_META[deporteId] ? SPORT_META[deporteId] : SPORT_META_FALLBACK_BASE("Deporte no configurado");
 
   const ui = useMemo(() => {
     const shell = darkMode
@@ -660,15 +632,11 @@ export default function EstadisticasGlobales() {
 
     const msgBox =
       "mt-6 rounded-2xl border px-5 py-4 font-semibold " +
-      (darkMode
-        ? "border-red-200/20 bg-red-500/10 text-red-100"
-        : "border-red-200 bg-red-50 text-red-700");
+      (darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
 
     const warnBox =
       "rounded-2xl border px-5 py-4 font-semibold " +
-      (darkMode
-        ? "border-amber-200/20 bg-amber-500/10 text-amber-100"
-        : "border-amber-200 bg-amber-50 text-amber-800");
+      (darkMode ? "border-amber-200/20 bg-amber-500/10 text-amber-100" : "border-amber-200 bg-amber-50 text-amber-800");
 
     const card =
       "rounded-2xl shadow-2xl border p-6 " +
@@ -1072,9 +1040,7 @@ export default function EstadisticasGlobales() {
     <div className={`${ui.shell} min-h-screen font-sans`}>
       <header className="px-6 pt-6">
         <div className="text-center">
-          <h1 className="text-4xl font-extrabold tracking-tightish">
-            {`Estadísticas Globales — ${sportMeta.nombre}`}
-          </h1>
+          <h1 className="text-4xl font-extrabold tracking-tightish">{`Estadísticas Globales — ${sportMeta.nombre}`}</h1>
           <p className={`text-sm mt-2 ${ui.headerSub}`}>
             {scopeLabel || "Visualización filtrada por tu contexto (academia y deporte)."}
           </p>
@@ -1092,8 +1058,8 @@ export default function EstadisticasGlobales() {
           <div className="mt-6 max-w-6xl mx-auto">
             <div className={ui.warnBox}>
               Falta <b>deporte_id</b> en el scope. <br />
-              Nota: intentamos derivarlo desde jugadores (que sí pasan tu auth). Si tampoco viene ahí,
-              entonces sí o sí lo tienes que incluir en <code>token.scope</code> o en el selector.
+              Nota: intentamos derivarlo desde jugadores (que sí pasan tu auth). Si tampoco viene ahí, entonces sí o sí
+              lo tienes que incluir en <code>token.scope</code> o en el selector.
             </div>
           </div>
         )}
@@ -1144,9 +1110,7 @@ export default function EstadisticasGlobales() {
           <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
             {Object.entries(sumasPorGrupo).map(([grupoNombre, datos], idx) => (
               <div key={idx} className={ui.card}>
-                <h2 className="font-extrabold mb-4 text-lg text-center">
-                  {String(grupoNombre).toUpperCase()}
-                </h2>
+                <h2 className="font-extrabold mb-4 text-lg text-center">{String(grupoNombre).toUpperCase()}</h2>
 
                 <div className="relative h-[360px] sm:h-[400px]">
                   <Bar
@@ -1173,8 +1137,8 @@ export default function EstadisticasGlobales() {
             <div className={ui.card}>
               <p className={`text-center ${ui.headerSub}`}>
                 Aún no hay métricas agregadas para <b>{sportMeta.nombre}</b>.<br />
-                Si sabes que existen, revisa que <code>/estadisticas/aggregate</code> acepte{" "}
-                <code>deporte_id</code> y que este componente pueda derivarlo (token/selector/jugadores).
+                Si sabes que existen, revisa que <code>/estadisticas/aggregate</code> acepte <code>deporte_id</code> y
+                que este componente pueda derivarlo (token/selector/jugadores).
               </p>
             </div>
           </div>
