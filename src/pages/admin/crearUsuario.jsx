@@ -1,179 +1,320 @@
 // src/pages/admin/crearUsuario.jsx
-import { useState, useEffect, useCallback, useMemo } from "react";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { useTheme } from "../../context/ThemeContext";
-import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
+import api, { ACADEMIA_STORAGE_KEY, clearToken, getToken } from "../../services/api";
 import IsLoading from "../../components/isLoading";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
-/* =======================
-   🎨 Conjunto X (WELI cobre)
-======================= */
-const PALETTE = {
-  fucsia: "#aa5013", // cobre (acento principal)
-  marron: "#6d5829", // base oscura cálida
-  gold: "#b79f69",
-  cream: "#e8dac4",
-  sand: "#ffdda1",
-  caramel: "#dda272",
-  terracotta: "#e2773b",
-};
-const ACCENT = PALETTE.fucsia;
+/* ───────────────────────── Configuración ───────────────────────── */
 
-/* =======================
-   Helpers
-======================= */
-const asArrayRoles = (resp) => {
-  const d = resp?.data ?? resp;
-  if (Array.isArray(d)) return d;
-  if (Array.isArray(d?.results)) return d.results;
-  if (Array.isArray(d?.items)) return d.items;
-  if (Array.isArray(d?.roles)) return d.roles;
-  if (Array.isArray(d?.data?.roles)) return d.data.roles;
-  return [];
-};
+const PANEL_TYPES = new Set(["admin", "user", "staff", "superadmin"]);
+const ALLOWED_CREATOR_ROLES = new Set([1, 3]);
 
-const isExpired = (decoded) => {
-  const now = Math.floor(Date.now() / 1000);
-  return !decoded?.exp || decoded.exp <= now;
-};
+const ACCENT = "#aa5013";
 
-const extractRol = (decoded) => {
-  const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
-  const parsed = Number(rawRol);
-  return Number.isFinite(parsed) ? parsed : 0;
-};
+/* ───────────────────────── Helpers JWT ───────────────────────── */
 
-/** Soporta "1" o JSON {"id":1} */
-const getAcademiaIdFromStorage = () => {
-  const key = ACADEMIA_STORAGE_KEY || "weli_selected_academia";
+function decodeToken(token) {
   try {
-    const raw = localStorage.getItem(key);
+    return jwtDecode(token);
+  } catch {
+    return null;
+  }
+}
+
+function isExpired(decoded) {
+  const exp = Number(decoded?.exp ?? 0);
+  const now = Math.floor(Date.now() / 1000);
+
+  if (!Number.isFinite(exp) || exp <= 0) return true;
+
+  return now >= exp;
+}
+
+function extractType(decoded) {
+  return String(decoded?.type ?? decoded?.user?.type ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function extractRol(decoded) {
+  const rol = Number(decoded?.rol_id ?? decoded?.user?.rol_id ?? 0);
+
+  return Number.isInteger(rol) && [1, 2, 3].includes(rol) ? rol : 0;
+}
+
+function extractTokenAcademiaId(decoded) {
+  const academiaId = Number(decoded?.academia_id ?? decoded?.user?.academia_id ?? 0);
+
+  return Number.isInteger(academiaId) && academiaId > 0 ? academiaId : 0;
+}
+
+/* ───────────────────────── Academia Superadmin ───────────────────────── */
+
+/**
+ * Esta función es EXCLUSIVAMENTE para Superadmin.
+ *
+ * Admin y Staff nunca deben obtener su academia desde localStorage.
+ */
+function getSelectedAcademiaIdForSuperadmin() {
+  try {
+    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
     if (!raw) return 0;
 
     const direct = Number(raw);
-    if (Number.isFinite(direct) && direct > 0) return direct;
+
+    if (Number.isInteger(direct) && direct > 0) {
+      return direct;
+    }
 
     const parsed = JSON.parse(raw);
-    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academy_id ?? parsed?.academiaId ?? 0);
-    return Number.isFinite(id) && id > 0 ? id : 0;
+    const academiaId = Number(parsed?.id ?? parsed?.academia_id ?? 0);
+
+    return Number.isInteger(academiaId) && academiaId > 0 ? academiaId : 0;
   } catch {
     return 0;
   }
-};
+}
 
-/**
- * ✅ Guard normado (roles + scope)
- * - Admin (1) y Superadmin (3)
- * - Superadmin requiere academia target seleccionada
- * - Admin también requiere scope (tenant)
- */
-const ensureScopeOrRedirect = (navigate) => {
-  const token = getToken?.() || "";
+/* ───────────────────────── Auth Guard ───────────────────────── */
+
+function ensureCreateUserAccess(navigate) {
+  const token = getToken() || "";
+
   if (!token) {
-    clearToken?.();
+    clearToken();
     navigate("/login", { replace: true });
-    return { ok: false, rol: 0 };
+
+    return {
+      ok: false,
+      rol: 0,
+      academiaId: 0,
+    };
   }
 
   try {
-    const decoded = jwtDecode(token);
-    if (isExpired(decoded)) throw new Error("expired");
+    const decoded = decodeToken(token);
 
+    if (!decoded || isExpired(decoded)) {
+      clearToken();
+      navigate("/login", { replace: true });
+
+      return {
+        ok: false,
+        rol: 0,
+        academiaId: 0,
+      };
+    }
+
+    const type = extractType(decoded);
     const rol = extractRol(decoded);
 
-    // Solo admin/superadmin pueden crear usuarios
-    if (![1, 3].includes(rol)) {
-      navigate("/admin", { replace: true });
-      return { ok: false, rol };
-    }
-
-    const academiaId = getAcademiaIdFromStorage();
-
-    if (rol === 3) {
-      if (academiaId <= 0) {
-        navigate("/super-dashboard", { replace: true });
-        return { ok: false, rol };
-      }
-      return { ok: true, rol };
-    }
-
-    // rol 1: scope obligatorio
-    if (academiaId <= 0) {
-      clearToken?.();
+    if (!PANEL_TYPES.has(type) || !rol) {
+      clearToken();
       navigate("/login", { replace: true });
-      return { ok: false, rol };
+
+      return {
+        ok: false,
+        rol: 0,
+        academiaId: 0,
+      };
     }
 
-    return { ok: true, rol };
+    /*
+     * Solo Admin y Superadmin pueden acceder
+     * al módulo de creación de usuarios.
+     */
+    if (!ALLOWED_CREATOR_ROLES.has(rol)) {
+      navigate("/admin", { replace: true });
+
+      return {
+        ok: false,
+        rol,
+        academiaId: 0,
+      };
+    }
+
+    /*
+     * ADMIN rol 1:
+     *
+     * La academia proviene del JWT firmado.
+     * NO se consulta weli_selected_academia.
+     */
+    if (rol === 1) {
+      const academiaId = extractTokenAcademiaId(decoded);
+
+      if (!academiaId) {
+        clearToken();
+        navigate("/login", { replace: true });
+
+        return {
+          ok: false,
+          rol,
+          academiaId: 0,
+        };
+      }
+
+      return {
+        ok: true,
+        rol,
+        academiaId,
+      };
+    }
+
+    /*
+     * SUPERADMIN rol 3:
+     *
+     * Debe existir una academia objetivo seleccionada.
+     */
+    const academiaId = getSelectedAcademiaIdForSuperadmin();
+
+    if (!academiaId) {
+      navigate("/super-dashboard", { replace: true });
+
+      return {
+        ok: false,
+        rol,
+        academiaId: 0,
+      };
+    }
+
+    return {
+      ok: true,
+      rol,
+      academiaId,
+    };
   } catch {
-    clearToken?.();
+    clearToken();
     navigate("/login", { replace: true });
-    return { ok: false, rol: 0 };
-  }
-};
 
-// GET robusto con/without slash + abort
-const tryGetList = async (paths, { signal }) => {
+    return {
+      ok: false,
+      rol: 0,
+      academiaId: 0,
+    };
+  }
+}
+
+/* ───────────────────────── Backend helpers ───────────────────────── */
+
+function asArrayRoles(response) {
+  const data = response?.data ?? response;
+
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.results)) return data.results;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.roles)) return data.roles;
+  if (Array.isArray(data?.data?.roles)) return data.data.roles;
+
+  return [];
+}
+
+async function tryGetList(paths, { signal }) {
   const variants = [];
-  for (const p of paths) {
-    if (p.endsWith("/")) variants.push(p, p.slice(0, -1));
-    else variants.push(p, `${p}/`);
-  }
-  const uniq = [...new Set(variants)];
 
-  for (const url of uniq) {
-    try {
-      const r = await api.get(url, { signal, meta: { isPublic: false } });
-      return asArrayRoles(r);
-    } catch (e) {
-      if (e?.name === "CanceledError" || e?.code === "ERR_CANCELED") return [];
-      const st = e?.status ?? e?.response?.status;
-      if (st === 401 || st === 403) throw e;
+  for (const path of paths) {
+    if (path.endsWith("/")) {
+      variants.push(path, path.slice(0, -1));
+    } else {
+      variants.push(path, `${path}/`);
     }
   }
-  return [];
-};
 
-// POST robusto con / y sin /
-const postWithFallback = async (path, body) => {
-  const urls = path.endsWith("/") ? [path, path.slice(0, -1)] : [path, `${path}/`];
+  const urls = [...new Set(variants)];
 
-  let lastErr = null;
   for (const url of urls) {
     try {
-      return await api.post(url, body, { meta: { isPublic: false } });
-    } catch (e) {
-      lastErr = e;
-      const st = e?.status ?? e?.response?.status;
-      if (st === 401 || st === 403) throw e;
+      const response = await api.get(url, {
+        signal,
+        meta: { isPublic: false },
+      });
+
+      return asArrayRoles(response);
+    } catch (error) {
+      if (error?.name === "CanceledError" || error?.code === "ERR_CANCELED") {
+        return [];
+      }
+
+      const status = error?.status ?? error?.response?.status;
+
+      if (status === 401 || status === 403) {
+        throw error;
+      }
     }
   }
-  throw lastErr ?? new Error("POST failed");
-};
 
-const pickBackendMessage = (err) => {
-  const data = err?.response?.data ?? err?.data ?? null;
+  return [];
+}
+
+async function postWithFallback(path, body) {
+  const urls = path.endsWith("/") ? [path, path.slice(0, -1)] : [path, `${path}/`];
+
+  let lastError = null;
+
+  for (const url of urls) {
+    try {
+      return await api.post(url, body, {
+        meta: { isPublic: false },
+      });
+    } catch (error) {
+      lastError = error;
+
+      const status = error?.status ?? error?.response?.status;
+
+      if (status === 401 || status === 403) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError ?? new Error("POST failed");
+}
+
+function pickBackendMessage(error) {
+  const data = error?.response?.data ?? error?.data ?? null;
 
   const detail = data?.detail ?? data?.message ?? data?.error ?? data?.msg ?? (typeof data === "string" ? data : null);
 
-  if (typeof detail === "string" && detail.trim()) return detail.trim();
+  if (typeof detail === "string" && detail.trim()) {
+    return detail.trim();
+  }
 
-  // Zod-like / validation arrays
   if (Array.isArray(data?.errors)) {
     const joined = data.errors
-      .map((e) => e?.message ?? e?.msg ?? e?.detail ?? e?.path?.join?.(".") ?? "")
+      .map((item) => item?.message ?? item?.msg ?? item?.detail ?? item?.path?.join?.(".") ?? "")
       .filter(Boolean)
       .join(" | ");
+
     if (joined) return joined;
   }
 
-  // Fastify-ish
-  if (typeof data?.validation === "string" && data.validation.trim()) return data.validation.trim();
+  if (typeof data?.validation === "string" && data.validation.trim()) {
+    return data.validation.trim();
+  }
 
   return "";
-};
+}
+
+/* ───────────────────────── Validation ───────────────────────── */
+
+function isValidRut(value) {
+  return /^[0-9]{7,8}$/.test(String(value || ""));
+}
+
+function isValidUsername(value) {
+  const username = String(value || "").trim();
+
+  return username.length >= 3 && username.length <= 80;
+}
+
+function isStrongPassword(value) {
+  return typeof value === "string" && value.length >= 6 && value.length <= 200;
+}
+
+/* ───────────────────────── Component ───────────────────────── */
 
 export default function CrearUsuario() {
   const { darkMode } = useTheme();
@@ -198,165 +339,253 @@ export default function CrearUsuario() {
 
   useMobileAutoScrollTop();
 
-  /* =======================
-     Auth (normado)
-  ======================= */
-  useEffect(() => {
-    const g = ensureScopeOrRedirect(navigate);
-    if (!g.ok) return;
-    setRolActual(g.rol);
-  }, [navigate]);
+  /* ───────────────────────── Auth inicial ───────────────────────── */
 
-  /* =======================
-     Carga roles (tenantizado)
-  ======================= */
   useEffect(() => {
-    const g = ensureScopeOrRedirect(navigate);
-    if (!g.ok) {
+    const guard = ensureCreateUserAccess(navigate);
+
+    if (!guard.ok) {
       setIsLoading(false);
       return;
     }
 
-    const abort = new AbortController();
+    setRolActual(guard.rol);
+  }, [navigate]);
 
-    (async () => {
+  /* ───────────────────────── Roles ───────────────────────── */
+
+  useEffect(() => {
+    if (!rolActual) return;
+
+    const guard = ensureCreateUserAccess(navigate);
+
+    if (!guard.ok) {
+      setIsLoading(false);
+      return;
+    }
+
+    const abortController = new AbortController();
+
+    const loadRoles = async () => {
       setIsLoading(true);
       setError("");
 
       try {
-        const listaRaw = await tryGetList(["/roles", "/rol"], { signal: abort.signal });
+        const rawRoles = await tryGetList(["/roles", "/rol"], {
+          signal: abortController.signal,
+        });
 
-        const listaNormalizada = (Array.isArray(listaRaw) ? listaRaw : [])
-          .map((r) => {
-            const id = r?.id ?? r?.rol_id ?? r?.role_id ?? r?.ID ?? null;
-            const nombre = r?.nombre ?? r?.descripcion ?? r?.name ?? r?.desc ?? (id != null ? String(id) : "");
+        const normalizedRoles = (Array.isArray(rawRoles) ? rawRoles : [])
+          .map((item) => {
+            const id = Number(item?.id ?? item?.rol_id ?? 0);
+
+            const nombre = String(item?.nombre ?? item?.descripcion ?? "").trim();
 
             return {
-              id: Number(id),
-              nombre: String(nombre).trim(),
+              id,
+              nombre,
             };
           })
-          .filter((r) => Number.isFinite(r.id) && r.id > 0 && r.nombre.length > 0);
+          .filter((item) => Number.isInteger(item.id) && item.id > 0 && item.nombre.length > 0);
 
-        // Seguridad de UI:
-        // - rol 1 (admin) NO puede ver/seleccionar rol 3 (superadmin).
-        // - rol 3 (superadmin) sí puede crear cualquier rol permitido por backend.
-        const lista = g.rol === 3 ? listaNormalizada : listaNormalizada.filter((r) => r.id !== 3);
+        /*
+         * Admin rol 1:
+         * no puede crear Superadmin rol 3.
+         *
+         * Superadmin rol 3:
+         * puede visualizar los roles permitidos por backend.
+         */
+        const allowedRoles = guard.rol === 3 ? normalizedRoles : normalizedRoles.filter((item) => item.id !== 3);
 
-        setRoles(lista);
+        setRoles(allowedRoles);
 
-        // Si por cualquier motivo quedó seleccionado un rol que el usuario
-        // actual no puede asignar, lo limpiamos.
-        setFormData((prev) => {
-          const rolSeleccionado = Number(prev.rol_id);
-          const permitido = lista.some((r) => r.id === rolSeleccionado);
+        setFormData((previous) => {
+          const selectedRole = Number(previous.rol_id);
 
-          if (prev.rol_id && !permitido) {
-            return { ...prev, rol_id: "" };
+          const stillAllowed = allowedRoles.some((item) => item.id === selectedRole);
+
+          if (previous.rol_id && !stillAllowed) {
+            return {
+              ...previous,
+              rol_id: "",
+            };
           }
 
-          if (!prev.rol_id && lista.length === 1) {
-            return { ...prev, rol_id: String(lista[0].id) };
+          if (!previous.rol_id && allowedRoles.length === 1) {
+            return {
+              ...previous,
+              rol_id: String(allowedRoles[0].id),
+            };
           }
 
-          return prev;
+          return previous;
         });
-      } catch (err) {
-        if (abort.signal.aborted) return;
-
-        const st = err?.status ?? err?.response?.status;
-
-        if (st === 401) {
-          clearToken?.();
-          navigate("/login", { replace: true });
+      } catch (requestError) {
+        if (abortController.signal.aborted) {
           return;
         }
 
-        if (st === 403) {
+        const status = requestError?.status ?? requestError?.response?.status;
+
+        if (status === 401) {
+          clearToken();
+          navigate("/login", {
+            replace: true,
+          });
+
+          return;
+        }
+
+        if (status === 403) {
           setError("No tienes permisos para listar roles.");
+
           return;
         }
 
         setError("❌ No se pudieron cargar los roles.");
       } finally {
-        if (!abort.signal.aborted) setIsLoading(false);
+        if (!abortController.signal.aborted) {
+          setIsLoading(false);
+        }
       }
-    })();
+    };
 
-    return () => abort.abort();
+    loadRoles();
+
+    return () => abortController.abort();
   }, [navigate, rolActual]);
 
-  const handleChange = useCallback((e) => {
-    const { name, value } = e.target;
+  /* ───────────────────────── Inputs ───────────────────────── */
+
+  const handleChange = useCallback((event) => {
+    const { name, value } = event.target;
 
     if (name === "rut_usuario") {
       const digits = String(value || "")
         .replace(/\D/g, "")
         .slice(0, 8);
-      setFormData((prev) => ({ ...prev, rut_usuario: digits }));
+
+      setFormData((previous) => ({
+        ...previous,
+        rut_usuario: digits,
+      }));
+
       return;
     }
 
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
   }, []);
 
-  const isValidRut = (v) => /^[0-9]{7,8}$/.test(String(v || ""));
-  const isStrongPassword = (v) => typeof v === "string" && v.length >= 6;
+  /* ───────────────────────── Submit ───────────────────────── */
 
   const enviarUsuario = useCallback(
-    async (e) => {
-      e.preventDefault();
+    async (event) => {
+      event.preventDefault();
+
       if (submitting) return;
 
-      const g = ensureScopeOrRedirect(navigate);
-      if (!g.ok) return;
+      const guard = ensureCreateUserAccess(navigate);
+
+      if (!guard.ok) return;
 
       setMensaje("");
       setError("");
 
+      const nombreUsuario = String(formData.nombre_usuario || "").trim();
+
       const rut = String(formData.rut_usuario || "");
+
       const rolId = Number(formData.rol_id);
 
+      if (!isValidUsername(nombreUsuario)) {
+        setError("El nombre de usuario debe contener entre 3 y 80 caracteres.");
+
+        return;
+      }
+
       if (!isValidRut(rut)) {
-        return setError("El RUT debe ser de 7 u 8 dígitos (sin DV).");
+        setError("El RUT debe ser de 7 u 8 dígitos, sin puntos ni dígito verificador.");
+
+        return;
       }
 
-      // Regla crítica:
-      // SOLO un superadmin (rol 3) puede crear otro superadmin.
-      // Esta validación protege incluso si alguien manipula el DOM/estado del frontend.
-      if (rolId === 3 && g.rol !== 3) {
-        return setError("No tienes permisos para crear usuarios superadmin.");
+      if (!Number.isInteger(rolId) || rolId <= 0) {
+        setError("Selecciona un rol válido.");
+
+        return;
       }
 
-      if (!roles.find((r) => r.id === rolId)) {
-        return setError("Rol seleccionado inválido.");
+      /*
+       * Defensa frontend adicional.
+       *
+       * La autorización real debe seguir
+       * ejecutándose también en backend.
+       */
+      if (rolId === 3 && guard.rol !== 3) {
+        setError("No tienes permisos para crear usuarios superadmin.");
+
+        return;
+      }
+
+      if (!roles.some((item) => item.id === rolId)) {
+        setError("Rol seleccionado inválido.");
+
+        return;
       }
 
       if (!isStrongPassword(formData.password)) {
-        return setError("La contraseña debe tener al menos 6 caracteres.");
+        setError("La contraseña debe tener entre 6 y 200 caracteres.");
+
+        return;
       }
 
-      // ✅ academia target SIEMPRE se evalúa en el submit (no congelado)
-      const academiaId = getAcademiaIdFromStorage();
+      /*
+       * ADMIN rol 1:
+       *
+       * NO enviamos academia_id.
+       * Backend debe derivarla del JWT/contexto autenticado.
+       *
+       * SUPERADMIN rol 3:
+       *
+       * enviamos explícitamente la academia target
+       * seleccionada.
+       */
+      let targetAcademiaId = 0;
 
-      // ✅ el backend lo exige para superadmin: lo mandamos sí o sí
-      if (g.rol === 3 && academiaId <= 0) {
-        return setError("academia_id es obligatorio para superadmin (selecciona una academia).");
+      if (guard.rol === 3) {
+        targetAcademiaId = getSelectedAcademiaIdForSuperadmin();
+
+        if (!targetAcademiaId) {
+          setError("Debes seleccionar una academia antes de crear el usuario.");
+
+          return;
+        }
       }
 
       const payload = {
-        ...formData,
+        nombre_usuario: nombreUsuario,
         rut_usuario: Number(rut),
+        email: String(formData.email || "").trim(),
+        password: formData.password,
         rol_id: rolId,
         estado_id: Number(formData.estado_id) || 1,
-        ...(g.rol === 3 ? { academia_id: academiaId } : {}),
+        ...(guard.rol === 3
+          ? {
+              academia_id: targetAcademiaId,
+            }
+          : {}),
       };
 
       setSubmitting(true);
+
       try {
         await postWithFallback("/usuarios", payload);
 
         setMensaje("✅ Usuario registrado correctamente");
+
         setFormData({
           nombre_usuario: "",
           rut_usuario: "",
@@ -365,43 +594,48 @@ export default function CrearUsuario() {
           rol_id: "",
           estado_id: 1,
         });
-      } catch (err) {
-        const st = err?.status ?? err?.response?.status;
+      } catch (requestError) {
+        const status = requestError?.status ?? requestError?.response?.status;
 
-        if (st === 401) {
-          clearToken?.();
-          navigate("/login", { replace: true });
+        if (status === 401) {
+          clearToken();
+
+          navigate("/login", {
+            replace: true,
+          });
+
           return;
         }
 
-        if (st === 403) return setError("No tienes permisos para registrar usuarios.");
+        if (status === 403) {
+          setError("No tienes permisos para registrar usuarios.");
 
-        const backendMsg = pickBackendMessage(err);
-        setError(backendMsg || "❌ Error al registrar usuario");
+          return;
+        }
+
+        const backendMessage = pickBackendMessage(requestError);
+
+        setError(backendMessage || "❌ Error al registrar usuario");
       } finally {
         setSubmitting(false);
       }
     },
-    [formData, roles, submitting, navigate]
+    [formData, navigate, roles, submitting]
   );
 
-  /* =======================
-     UI (replica estilo SuperDashboard)
-  ======================= */
+  /* ───────────────────────── UI ───────────────────────── */
+
   const ui = useMemo(() => {
-    // ✅ mismo shell que superDashboard.jsx
     const shell = darkMode
       ? "bg-[#111827] text-white"
       : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
 
     const headerSub = darkMode ? "text-white/70" : "text-ra-marron/70";
 
-    // ✅ card como las tarjetas del super dashboard
     const card =
       "relative w-full max-w-xl mx-auto rounded-2xl shadow-2xl border p-6 " +
       (darkMode ? "bg-white/10 border-white/15 text-white" : "bg-white/60 border-ra-marron/15 text-ra-marron");
 
-    // ✅ input estilo “searchInput / modalInput”
     const input = [
       "w-full rounded-2xl px-5 py-3 border outline-none transition",
       darkMode
@@ -411,8 +645,8 @@ export default function CrearUsuario() {
 
     const select = input;
 
-    // ✅ mensajes como msgBox del super
     const msgOk = darkMode ? "text-emerald-200" : "text-emerald-700";
+
     const msgErr =
       "mt-6 rounded-2xl border px-5 py-4 font-semibold " +
       (darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
@@ -420,17 +654,29 @@ export default function CrearUsuario() {
     const btn =
       "w-full rounded-xl px-6 py-3 font-extrabold text-white hover:opacity-90 active:scale-[0.98] transition disabled:opacity-60 disabled:cursor-not-allowed";
 
-    return { shell, headerSub, card, input, select, msgOk, msgErr, btn };
+    return {
+      shell,
+      headerSub,
+      card,
+      input,
+      select,
+      msgOk,
+      msgErr,
+      btn,
+    };
   }, [darkMode]);
 
-  if (isLoading) return <IsLoading />;
+  if (isLoading) {
+    return <IsLoading />;
+  }
 
   return (
     <div className={`${ui.shell} min-h-screen font-sans`}>
       <header className="px-6 pt-6">
-        <h1 className="text-4xl font-extrabold tracking-tightish text-center">Registrar Usuario</h1>
+        <h1 className="text-4xl font-extrabold tracking-tight text-center">Registrar Usuario</h1>
+
         <p className={`text-sm mt-2 text-center ${ui.headerSub}`}>
-          Crea un usuario staff/admin para la academia seleccionada.
+          {rolActual === 3 ? "Crea usuarios para la academia seleccionada." : "Crea usuarios asociados a tu academia."}
         </p>
       </header>
 
@@ -440,12 +686,15 @@ export default function CrearUsuario() {
             <form onSubmit={enviarUsuario} className="space-y-4" autoComplete="off">
               <input
                 name="nombre_usuario"
+                type="text"
                 value={formData.nombre_usuario}
                 onChange={handleChange}
-                placeholder="Nombre"
-                pattern="^[a-zA-ZáéíóúÁÉÍÓÚñÑ ]{3,}$"
-                title="Solo letras y mínimo 3 caracteres"
+                placeholder="Nombre de usuario"
                 className={ui.input}
+                minLength={3}
+                maxLength={80}
+                autoCapitalize="none"
+                spellCheck={false}
                 required
               />
 
@@ -470,8 +719,9 @@ export default function CrearUsuario() {
                 onChange={handleChange}
                 placeholder="Correo"
                 className={ui.input}
+                maxLength={254}
+                autoComplete="off"
                 required
-                autoComplete="new-email"
               />
 
               <input
@@ -481,27 +731,45 @@ export default function CrearUsuario() {
                 onChange={handleChange}
                 placeholder="Contraseña (mínimo 6 caracteres)"
                 className={ui.input}
-                required
-                autoComplete="new-password"
                 minLength={6}
+                maxLength={200}
+                autoComplete="new-password"
+                required
               />
 
               <select name="rol_id" value={formData.rol_id} onChange={handleChange} className={ui.select} required>
                 <option value="">Selecciona un Rol</option>
-                {roles.map((rol) => (
-                  <option key={rol.id} value={String(rol.id)}>
-                    {rol.nombre}
+
+                {roles.map((role) => (
+                  <option key={role.id} value={String(role.id)}>
+                    {role.nombre}
                   </option>
                 ))}
               </select>
 
-              <button type="submit" disabled={submitting} className={ui.btn} style={{ backgroundColor: ACCENT }}>
+              <button
+                type="submit"
+                disabled={submitting}
+                className={ui.btn}
+                style={{
+                  backgroundColor: ACCENT,
+                }}
+              >
                 {submitting ? "Guardando…" : "Guardar"}
               </button>
             </form>
 
-            {mensaje ? <div className={`mt-6 text-center font-bold ${ui.msgOk}`}>{mensaje}</div> : null}
-            {error ? <div className={ui.msgErr}>{error}</div> : null}
+            {mensaje && (
+              <div className={`mt-6 text-center font-bold ${ui.msgOk}`} role="status">
+                {mensaje}
+              </div>
+            )}
+
+            {error && (
+              <div className={ui.msgErr} role="alert">
+                {error}
+              </div>
+            )}
           </div>
         </div>
       </main>
