@@ -9,9 +9,10 @@ import { Pencil, Trash2, X, CreditCard } from "lucide-react";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 import IsLoading from "../../components/isLoading";
 
-/* =======================
-   🎨 Conjunto X (MISMA GAMA)
-======================= */
+/* =========================================================
+   PALETA
+========================================================= */
+
 const PALETTE = {
   copper: "#aa5013",
   brown: "#6d5829",
@@ -22,129 +23,258 @@ const PALETTE = {
   terracotta: "#e2773b",
 };
 
-/* ─────────────────────────────
+/* =========================================================
    CONSTANTES NEGOCIO
-───────────────────────────── */
-const ESTADO_JUGADOR_ACTIVO = 1;
-const TIPO_PAGO_MENSUALIDAD = 3;
-const SITUACION_PAGO_PAGADO_ID = 1; // Ajusta si tu catálogo usa otro ID
-const START_DEUDA_YEAR = 2025;
-const START_DEUDA_MONTH = 12;
+========================================================= */
 
-/* Paginación */
+const ESTADO_JUGADOR_ACTIVO = 1;
+
+const SITUACION_PAGO_PAGADO_ID = 1;
+
+/* =========================================================
+   PAGINACIÓN
+========================================================= */
+
 const PAGE_SIZE = 10;
+
 const MAX_PAGES = 200;
+
 const MANUAL_PAGE_SIZE = 10;
 
-/* ─────────────────────────────
-   HELPERS
-───────────────────────────── */
-const monthLabelEs = (year, month) => {
-  const d = new Date(year, month - 1, 1);
-  const m = new Intl.DateTimeFormat("es-CL", { month: "long" }).format(d);
-  return `${m} ${year}`;
-};
-
-const ymKey = (y, m) => `${y}-${String(m).padStart(2, "0")}`;
-
-const buildMesesExigibles = (now, diaCorte = 5, startYear = START_DEUDA_YEAR, startMonth = START_DEUDA_MONTH) => {
-  const yNow = now.getFullYear();
-  const mNow = now.getMonth() + 1;
-  const dNow = now.getDate();
-
-  let endY = yNow;
-  let endM = mNow - 1;
-
-  if (endM === 0) {
-    endM = 12;
-    endY = yNow - 1;
-  }
-  if (dNow > diaCorte) {
-    endY = yNow;
-    endM = mNow;
-  }
-
-  const startKey = startYear * 100 + startMonth;
-  const endKey = endY * 100 + endM;
-  if (endKey < startKey) return [];
-
-  const out = [];
-  let y = startYear;
-  let m = startMonth;
-
-  while (y * 100 + m <= endKey) {
-    out.push({ year: y, month: m, key: ymKey(y, m) });
-    m++;
-    if (m === 13) {
-      m = 1;
-      y++;
-    }
-  }
-  return out;
-};
+/* =========================================================
+   HELPERS GENERALES
+========================================================= */
 
 const asList = (raw) => {
   if (!raw) return [];
-  const d = raw?.data ?? raw;
-  if (Array.isArray(d)) return d;
-  if (Array.isArray(d?.results)) return d.results;
-  if (Array.isArray(d?.items)) return d.items;
-  if (Array.isArray(d?.rows)) return d.rows;
+
+  const data = raw?.data ?? raw;
+
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (Array.isArray(data?.results)) {
+    return data.results;
+  }
+
+  if (Array.isArray(data?.items)) {
+    return data.items;
+  }
+
+  if (Array.isArray(data?.rows)) {
+    return data.rows;
+  }
+
+  if (Array.isArray(data?.data)) {
+    return data.data;
+  }
+
   return [];
 };
 
 const buildIdNameMap = (arr, idKey = "id", nameKey = "nombre") => {
-  const m = new Map();
-  for (const x of Array.isArray(arr) ? arr : []) {
-    const id = x?.[idKey];
-    const name = x?.[nameKey] ?? String(id ?? "—");
-    if (id != null) m.set(String(id), String(name).trim());
+  const map = new Map();
+
+  for (const item of Array.isArray(arr) ? arr : []) {
+    const id = item?.[idKey];
+
+    const nombre = item?.[nameKey] ?? String(id ?? "—");
+
+    if (id != null) {
+      map.set(String(id), String(nombre).trim());
+    }
   }
-  return m;
+
+  return map;
 };
 
 const normalizeCatalog = (arr) =>
   (Array.isArray(arr) ? arr : [])
-    .map((x) => ({
+    .map((item) => ({
       id: Number(
-        x?.id ??
-          x?.posicion_id ??
-          x?.categoria_id ??
-          x?.establec_educ_id ??
-          x?.prevision_medica_id ??
-          x?.estado_id ??
-          x?.sucursal_id ??
-          x?.comuna_id
+        item?.id ??
+          item?.posicion_id ??
+          item?.categoria_id ??
+          item?.establec_educ_id ??
+          item?.prevision_medica_id ??
+          item?.estado_id ??
+          item?.sucursal_id ??
+          item?.comuna_id
       ),
-      nombre: String(x?.nombre ?? x?.descripcion ?? "").trim(),
-    }))
-    .filter((x) => Number.isFinite(x.id) && x.nombre);
 
-/* ─────────────────────────────
-   Auth / Headers (WELI)
-───────────────────────────── */
+      nombre: String(item?.nombre ?? item?.descripcion ?? "").trim(),
+    }))
+    .filter((item) => Number.isFinite(item.id) && item.id > 0 && item.nombre);
+
+/* =========================================================
+   PLANES
+========================================================= */
+
+const normalizePlanes = (arr) =>
+  (Array.isArray(arr) ? arr : [])
+    .map((item) => {
+      const id = Number(item?.id ?? item?.plan_id ?? 0);
+
+      return {
+        ...item,
+
+        id,
+
+        nombre: String(item?.nombre ?? item?.plan_nombre ?? item?.descripcion ?? `Plan ${id}`).trim(),
+      };
+    })
+    .filter((item) => Number.isInteger(item.id) && item.id > 0);
+
+/* =========================================================
+   TARIFAS
+========================================================= */
+
+const normalizeTarifas = (arr) =>
+  (Array.isArray(arr) ? arr : [])
+    .map((item) => {
+      const id = Number(item?.id ?? item?.tarifa_id ?? 0);
+
+      const planId = Number(item?.plan_id ?? item?.plan?.id ?? 0);
+
+      const tipoPagoId = Number(item?.tipo_pago_id ?? item?.tipo_pago?.id ?? 0);
+
+      const monto = Number(item?.monto ?? item?.monto_total ?? item?.valor ?? 0);
+
+      return {
+        ...item,
+
+        id,
+
+        plan_id: Number.isInteger(planId) && planId > 0 ? planId : null,
+
+        tipo_pago_id: Number.isInteger(tipoPagoId) && tipoPagoId > 0 ? tipoPagoId : null,
+
+        monto: Number.isFinite(monto) ? monto : 0,
+
+        nombre: String(item?.nombre ?? item?.tarifa_nombre ?? item?.descripcion ?? `Tarifa ${id}`).trim(),
+      };
+    })
+    .filter((item) => Number.isInteger(item.id) && item.id > 0);
+
+/* =========================================================
+   ASIGNACIONES JUGADOR → PLAN
+========================================================= */
+
+const normalizeJugadorPlanes = (arr) =>
+  (Array.isArray(arr) ? arr : [])
+    .map((item) => {
+      const id = Number(item?.id ?? item?.jugador_plan_id ?? 0);
+
+      const jugadorId = Number(item?.jugador_id ?? item?.jugador?.id ?? 0);
+
+      const planId = Number(item?.plan_id ?? item?.plan?.id ?? 0);
+
+      const rut = item?.jugador_rut ?? item?.rut_jugador ?? item?.jugador?.rut_jugador ?? null;
+
+      return {
+        ...item,
+
+        id: Number.isInteger(id) && id > 0 ? id : null,
+
+        jugador_id: Number.isInteger(jugadorId) && jugadorId > 0 ? jugadorId : null,
+
+        plan_id: Number.isInteger(planId) && planId > 0 ? planId : null,
+
+        jugador_rut: rut != null ? String(rut) : null,
+      };
+    })
+    .filter((item) => item.plan_id);
+
+/* =========================================================
+   CARGOS
+========================================================= */
+
+const normalizeCargos = (arr) =>
+  (Array.isArray(arr) ? arr : [])
+    .map((item) => {
+      const id = Number(item?.id ?? item?.cargo_id ?? 0);
+
+      const jugadorId = Number(item?.jugador_id ?? item?.jugador?.id ?? 0);
+
+      const jugadorPlanId = Number(item?.jugador_plan_id ?? item?.jugador_plan?.id ?? 0);
+
+      const planId = Number(item?.plan_id ?? item?.plan?.id ?? item?.jugador_plan?.plan_id ?? 0);
+
+      const tarifaId = Number(item?.tarifa_id ?? item?.tarifa?.id ?? 0);
+
+      const tipoPagoId = Number(item?.tipo_pago_id ?? item?.tipo_pago?.id ?? item?.tarifa?.tipo_pago_id ?? 0);
+
+      const montoTotal = Number(item?.monto_total ?? item?.monto ?? item?.total ?? 0);
+
+      const saldoRaw = item?.saldo ?? item?.saldo_pendiente ?? item?.monto_pendiente ?? null;
+
+      const saldo = saldoRaw == null ? null : Number(saldoRaw);
+
+      const rut = item?.jugador_rut ?? item?.rut_jugador ?? item?.jugador?.rut_jugador ?? null;
+
+      return {
+        ...item,
+
+        id: Number.isInteger(id) && id > 0 ? id : null,
+
+        jugador_id: Number.isInteger(jugadorId) && jugadorId > 0 ? jugadorId : null,
+
+        jugador_plan_id: Number.isInteger(jugadorPlanId) && jugadorPlanId > 0 ? jugadorPlanId : null,
+
+        plan_id: Number.isInteger(planId) && planId > 0 ? planId : null,
+
+        tarifa_id: Number.isInteger(tarifaId) && tarifaId > 0 ? tarifaId : null,
+
+        tipo_pago_id: Number.isInteger(tipoPagoId) && tipoPagoId > 0 ? tipoPagoId : null,
+
+        monto_total: Number.isFinite(montoTotal) ? montoTotal : 0,
+
+        saldo: Number.isFinite(saldo) ? saldo : null,
+
+        jugador_rut: rut != null ? String(rut) : null,
+
+        descripcion: String(item?.descripcion ?? item?.concepto ?? item?.nombre ?? `Cargo #${id}`).trim(),
+      };
+    })
+    .filter((item) => item.id);
+
+/* =========================================================
+   AUTH
+========================================================= */
+
 const isExpired = (decoded) => {
   const now = Math.floor(Date.now() / 1000);
+
   return !decoded?.exp || decoded.exp <= now;
 };
 
 const extractRol = (decoded) => {
   const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
+
   const parsed = Number(rawRol);
+
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-/** Soporta "1" o JSON {"id":1} */
 const getAcademiaIdFromStorage = () => {
   try {
     const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
-    if (!raw) return null;
+
+    if (!raw) {
+      return null;
+    }
 
     const direct = Number(raw);
-    if (Number.isFinite(direct) && direct > 0) return direct;
+
+    if (Number.isFinite(direct) && direct > 0) {
+      return direct;
+    }
 
     const parsed = JSON.parse(raw);
+
     const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
+
     return Number.isFinite(id) && id > 0 ? id : null;
   } catch {
     return null;
@@ -153,476 +283,824 @@ const getAcademiaIdFromStorage = () => {
 
 const buildHeaders = (rol) => {
   const token = getToken();
-  const h = token ? { Authorization: `Bearer ${token}` } : {};
+
+  const headers = token
+    ? {
+        Authorization: `Bearer ${token}`,
+      }
+    : {};
+
   if (rol === 3) {
-    const a = getAcademiaIdFromStorage();
-    if (a) h["x-academia-id"] = String(a);
-  }
-  return h;
-};
+    const academiaId = getAcademiaIdFromStorage();
 
-// intenta varias rutas y variantes con / y sin /
-const tryGetList = async (paths, { signal, headers }) => {
-  const variants = [];
-  for (const p of paths) {
-    variants.push(p.endsWith("/") ? p : `${p}/`);
-    variants.push(p.endsWith("/") ? p.slice(0, -1) : p);
-  }
-  const uniq = [...new Set(variants)];
-
-  for (const url of uniq) {
-    try {
-      const r = await api.get(url, { signal, headers });
-      return asList(r);
-    } catch (e) {
-      const st = e?.status ?? e?.response?.status;
-      if (st === 401 || st === 403) throw e;
+    if (academiaId) {
+      headers["x-academia-id"] = String(academiaId);
     }
   }
+
+  return headers;
+};
+
+/* =========================================================
+   API FALLBACK
+========================================================= */
+
+const tryGetList = async (paths, { signal, headers }) => {
+  const variants = [];
+
+  for (const path of paths) {
+    variants.push(path.endsWith("/") ? path : `${path}/`);
+
+    variants.push(path.endsWith("/") ? path.slice(0, -1) : path);
+  }
+
+  const unique = [...new Set(variants)];
+
+  for (const url of unique) {
+    try {
+      const response = await api.get(url, {
+        signal,
+        headers,
+      });
+
+      return asList(response);
+    } catch (error) {
+      const status = error?.status ?? error?.response?.status;
+
+      if (status === 401 || status === 403) {
+        throw error;
+      }
+    }
+  }
+
   return [];
 };
 
 const getWithFallback = async (path, { signal, headers } = {}) => {
   const urls = path.endsWith("/") ? [path, path.slice(0, -1)] : [path, `${path}/`];
 
-  let lastErr = null;
+  let lastError = null;
+
   for (const url of urls) {
     try {
-      return await api.get(url, { signal, headers });
-    } catch (e) {
-      lastErr = e;
-      const st = e?.status ?? e?.response?.status;
-      if (st === 401 || st === 403) throw e;
+      return await api.get(url, {
+        signal,
+        headers,
+      });
+    } catch (error) {
+      lastError = error;
+
+      const status = error?.status ?? error?.response?.status;
+
+      if (status === 401 || status === 403) {
+        throw error;
+      }
     }
   }
-  throw lastErr ?? new Error("GET failed");
+
+  throw lastError ?? new Error("GET failed");
 };
 
 const postWithFallback = async (path, body, { signal, headers } = {}) => {
   const urls = path.endsWith("/") ? [path, path.slice(0, -1)] : [path, `${path}/`];
 
-  let lastErr = null;
+  let lastError = null;
+
   for (const url of urls) {
     try {
-      return await api.post(url, body, { signal, headers });
-    } catch (e) {
-      lastErr = e;
-      const st = e?.status ?? e?.response?.status;
-      if (st === 401 || st === 403) throw e;
+      return await api.post(url, body, {
+        signal,
+        headers,
+      });
+    } catch (error) {
+      lastError = error;
+
+      const status = error?.status ?? error?.response?.status;
+
+      if (status === 401 || status === 403) {
+        throw error;
+      }
     }
   }
-  throw lastErr ?? new Error("POST failed");
+
+  throw lastError ?? new Error("POST failed");
 };
 
 const putWithFallback = async (path, body, { signal, headers } = {}) => {
   const urls = path.endsWith("/") ? [path, path.slice(0, -1)] : [path, `${path}/`];
 
-  let lastErr = null;
+  let lastError = null;
+
   for (const url of urls) {
     try {
-      return await api.put(url, body, { signal, headers });
-    } catch (e) {
-      lastErr = e;
-      const st = e?.status ?? e?.response?.status;
-      if (st === 401 || st === 403) throw e;
+      return await api.put(url, body, {
+        signal,
+        headers,
+      });
+    } catch (error) {
+      lastError = error;
+
+      const status = error?.status ?? error?.response?.status;
+
+      if (status === 401 || status === 403) {
+        throw error;
+      }
     }
   }
-  throw lastErr ?? new Error("PUT failed");
+
+  throw lastError ?? new Error("PUT failed");
 };
 
 const deleteWithFallback = async (path, { signal, headers } = {}) => {
   const urls = path.endsWith("/") ? [path, path.slice(0, -1)] : [path, `${path}/`];
 
-  let lastErr = null;
+  let lastError = null;
+
   for (const url of urls) {
     try {
-      return await api.delete(url, { signal, headers });
-    } catch (e) {
-      lastErr = e;
-      const st = e?.status ?? e?.response?.status;
-      if (st === 401 || st === 403) throw e;
-    }
-  }
-  throw lastErr ?? new Error("DELETE failed");
-};
+      return await api.delete(url, {
+        signal,
+        headers,
+      });
+    } catch (error) {
+      lastError = error;
 
-/* ✅ FINAL: normalizePagos */
-const normalizePagos = (arr, { tipoPagoMap, medioPagoMap, situacionPagoMap, jugadoresMap }) => {
-  const list = Array.isArray(arr) ? arr : [];
+      const status = error?.status ?? error?.response?.status;
 
-  const safeInt = (v) => {
-    const n = v == null ? NaN : Number(v);
-    return Number.isFinite(n) ? n : null;
-  };
-
-  const safeIdPos = (v) => {
-    const n = v == null ? NaN : Number(v);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  };
-
-  const parseDate = (v) => {
-    if (!v) return null;
-    const d = new Date(v);
-    return Number.isNaN(d.getTime()) ? null : d;
-  };
-
-  return list.map((p) => {
-    const tipoIdRaw = p?.tipo_pago_id ?? p?.tipo_id ?? p?.tipoPagoId ?? p?.tipo_pago?.id ?? null;
-    const medioIdRaw = p?.medio_pago_id ?? p?.medio_id ?? p?.medioPagoId ?? p?.medio_pago?.id ?? null;
-    const situIdRaw = p?.situacion_pago_id ?? p?.estado_pago_id ?? p?.estado_id ?? p?.situacion_pago?.id ?? null;
-
-    const tipoId = safeInt(tipoIdRaw);
-    const medioId = safeInt(medioIdRaw);
-    const situId = safeInt(situIdRaw);
-
-    const rutPlano = p?.jugador_rut ?? p?.rut_jugador ?? p?.rut ?? p?.jugador?.rut_jugador ?? p?.jugador?.rut ?? null;
-
-    const jAnidado = p?.jugador ?? {};
-    const jFromMap = rutPlano != null ? jugadoresMap.get(String(rutPlano)) : null;
-
-    const jugadorNombre =
-      jAnidado?.nombre_jugador ??
-      jAnidado?.nombre ??
-      jAnidado?.nombre_completo ??
-      jFromMap?.nombre ??
-      p?.jugador_nombre ??
-      p?.nombre_jugador ??
-      "—";
-
-    const catIdRaw = jAnidado?.categoria?.id ?? jAnidado?.categoria_id ?? jFromMap?.categoria?.id ?? null;
-    const catId = safeInt(catIdRaw);
-
-    const catNombre =
-      jAnidado?.categoria?.nombre ??
-      jAnidado?.categoria_nombre ??
-      jFromMap?.categoria?.nombre ??
-      (typeof jAnidado?.categoria === "string" ? jAnidado?.categoria : null) ??
-      "Sin categoría";
-
-    const fecha = p?.fecha_pago ?? p?.fecha ?? null;
-    const d = parseDate(fecha);
-
-    let tipoNombreBase =
-      p?.tipo_pago?.nombre ??
-      p?.tipo_pago_nombre ??
-      (tipoId != null ? (tipoPagoMap.get(String(tipoId)) ?? String(tipoId)) : "—");
-
-    if (tipoId === TIPO_PAGO_MENSUALIDAD && d) {
-      const labelMes = monthLabelEs(d.getFullYear(), d.getMonth() + 1);
-      if (!String(tipoNombreBase).toLowerCase().includes(String(labelMes).toLowerCase())) {
-        tipoNombreBase = `Mensualidad ${labelMes}`;
+      if (status === 401 || status === 403) {
+        throw error;
       }
     }
+  }
+
+  throw lastError ?? new Error("DELETE failed");
+};
+
+/* =========================================================
+   NORMALIZAR PAGOS
+========================================================= */
+
+const normalizePagos = (
+  arr,
+  { tipoPagoMap, medioPagoMap, situacionPagoMap, jugadoresMap, cargosMap, planesMap, tarifasMap }
+) => {
+  const list = Array.isArray(arr) ? arr : [];
+
+  const safeInt = (value) => {
+    const number = value == null ? NaN : Number(value);
+
+    return Number.isFinite(number) ? number : null;
+  };
+
+  const safeId = (value) => {
+    const number = value == null ? NaN : Number(value);
+
+    return Number.isFinite(number) && number > 0 ? number : null;
+  };
+
+  return list.map((pago) => {
+    const tipoId = safeInt(pago?.tipo_pago_id ?? pago?.tipo_id ?? pago?.tipoPagoId ?? pago?.tipo_pago?.id);
+
+    const medioId = safeInt(pago?.medio_pago_id ?? pago?.medio_id ?? pago?.medioPagoId ?? pago?.medio_pago?.id);
+
+    const situacionId = safeInt(
+      pago?.situacion_pago_id ?? pago?.estado_pago_id ?? pago?.estado_id ?? pago?.situacion_pago?.id
+    );
+
+    const cargoId = safeId(pago?.cargo_id ?? pago?.cargo?.id);
+
+    const cargo = cargoId ? (cargosMap.get(String(cargoId)) ?? null) : null;
+
+    const tarifaId = safeId(pago?.tarifa_id ?? pago?.tarifa?.id ?? cargo?.tarifa_id);
+
+    const tarifa = tarifaId ? (tarifasMap.get(String(tarifaId)) ?? null) : null;
+
+    const planId = safeId(pago?.plan_id ?? pago?.plan?.id ?? cargo?.plan_id ?? tarifa?.plan_id);
+
+    const plan = planId ? (planesMap.get(String(planId)) ?? null) : null;
+
+    const rut =
+      pago?.jugador_rut ?? pago?.rut_jugador ?? pago?.rut ?? pago?.jugador?.rut_jugador ?? pago?.jugador?.rut ?? null;
+
+    const jugadorMap = rut != null ? jugadoresMap.get(String(rut)) : null;
+
+    const jugador = pago?.jugador ?? {};
+
+    const jugadorNombre =
+      jugador?.nombre_jugador ??
+      jugador?.nombre ??
+      jugador?.nombre_completo ??
+      jugadorMap?.nombre ??
+      pago?.jugador_nombre ??
+      pago?.nombre_jugador ??
+      "—";
+
+    const categoriaNombre =
+      jugador?.categoria?.nombre ?? jugador?.categoria_nombre ?? jugadorMap?.categoria?.nombre ?? "Sin categoría";
+
+    const fecha = pago?.fecha_pago ?? pago?.fecha ?? null;
+
+    const tipoNombre =
+      pago?.tipo_pago?.nombre ??
+      pago?.tipo_pago_nombre ??
+      (tipoId != null ? (tipoPagoMap.get(String(tipoId)) ?? String(tipoId)) : "—");
 
     const medioNombre =
-      p?.medio_pago?.nombre ??
-      p?.medio_pago_nombre ??
+      pago?.medio_pago?.nombre ??
+      pago?.medio_pago_nombre ??
       (medioId != null ? (medioPagoMap.get(String(medioId)) ?? String(medioId)) : "—");
 
-    const situNombre =
-      p?.situacion_pago?.nombre ??
-      p?.estado_pago_nombre ??
-      p?.estado_nombre ??
-      (situId != null ? (situacionPagoMap.get(String(situId)) ?? String(situId)) : "—");
+    const situacionNombre =
+      pago?.situacion_pago?.nombre ??
+      pago?.estado_pago_nombre ??
+      pago?.estado_nombre ??
+      (situacionId != null ? (situacionPagoMap.get(String(situacionId)) ?? String(situacionId)) : "—");
 
-    const idRaw = p?.id ?? p?.ID ?? p?.pago_id ?? p?.pagoId ?? (typeof p?.id_pago !== "undefined" ? p.id_pago : null);
-    const id = safeIdPos(idRaw);
+    const id = safeId(pago?.id ?? pago?.ID ?? pago?.pago_id ?? pago?.pagoId ?? pago?.id_pago);
 
     return {
+      ...pago,
+
       id,
-      monto: Number(p?.monto ?? 0),
+
+      cargo_id: cargoId,
+
+      tarifa_id: tarifaId,
+
+      plan_id: planId,
+
+      monto: Number(pago?.monto ?? 0),
+
       fecha_pago: fecha,
+
       jugador: {
-        rut_jugador: rutPlano ?? "—",
+        rut_jugador: rut ?? "—",
+
         nombre_jugador: jugadorNombre,
-        categoria: { id: catId, nombre: catNombre },
+
+        categoria: {
+          nombre: categoriaNombre,
+        },
       },
-      tipo_pago: { id: tipoId, nombre: tipoNombreBase },
-      situacion_pago: { id: situId, nombre: situNombre },
-      medio_pago: { id: medioId, nombre: medioNombre },
-      observaciones: p?.observaciones ?? "",
+
+      plan: {
+        id: planId,
+
+        nombre: pago?.plan?.nombre ?? plan?.nombre ?? "—",
+      },
+
+      tarifa: {
+        id: tarifaId,
+
+        nombre: pago?.tarifa?.nombre ?? tarifa?.nombre ?? "—",
+      },
+
+      tipo_pago: {
+        id: tipoId,
+
+        nombre: tipoNombre,
+      },
+
+      situacion_pago: {
+        id: situacionId,
+
+        nombre: situacionNombre,
+      },
+
+      medio_pago: {
+        id: medioId,
+
+        nombre: medioNombre,
+      },
+
+      observaciones: pago?.observaciones ?? "",
     };
   });
 };
 
-/* ─────────────────────────────
+/* =========================================================
    COMPONENTE
-───────────────────────────── */
+========================================================= */
+
 export default function ListarPagos() {
   const { darkMode } = useTheme();
+
   const navigate = useNavigate();
+
   const location = useLocation();
+
   useMobileAutoScrollTop();
 
-  // ✅ Estrategia dorada: detecta árbol actual (sin hardcodear)
   const dashboardBase = useMemo(() => {
-    const p = location.pathname || "";
-    return p.startsWith("/super-dashboard/admin/dashboard") ? "/super-dashboard/admin/dashboard" : "/admin";
+    const path = location.pathname || "";
+
+    return path.startsWith("/super-dashboard/admin/dashboard") ? "/super-dashboard/admin/dashboard" : "/admin";
   }, [location.pathname]);
 
   const breadcrumbBootRef = useRef(false);
 
   const [rolActual, setRolActual] = useState(0);
+
   const [academiaTarget, setAcademiaTarget] = useState(() => getAcademiaIdFromStorage());
 
   const [isLoading, setIsLoading] = useState(true);
+
   const [error, setError] = useState("");
 
   const [pagos, setPagos] = useState([]);
 
   const [tipoPagoMap, setTipoPagoMap] = useState(new Map());
+
   const [medioPagoMap, setMedioPagoMap] = useState(new Map());
+
   const [situacionPagoMap, setSituacionPagoMap] = useState(new Map());
+
   const [jugadoresMap, setJugadoresMap] = useState(new Map());
 
-  // Filtros pagos
-  const [filtroTexto, setFiltroTexto] = useState("");
-  const [filtroEstado, setFiltroEstado] = useState(""); // PAGADO / VENCIDO
-  const [filtroTipoPago, setFiltroTipoPago] = useState(""); // id tipo_pago
-  const [filtroMedioPago, setFiltroMedioPago] = useState(""); // id medio_pago
+  const [planes, setPlanes] = useState([]);
 
-  // Paginación pagos
+  const [tarifas, setTarifas] = useState([]);
+
+  const [jugadorPlanes, setJugadorPlanes] = useState([]);
+
+  const [cargos, setCargos] = useState([]);
+
+  const [filtroTexto, setFiltroTexto] = useState("");
+
+  const [filtroEstado, setFiltroEstado] = useState("");
+
+  const [filtroTipoPago, setFiltroTipoPago] = useState("");
+
+  const [filtroMedioPago, setFiltroMedioPago] = useState("");
+
   const [page, setPage] = useState(1);
 
-  // Pagos manuales: filtro + paginación
   const [manualFiltro, setManualFiltro] = useState("");
+
   const [manualPage, setManualPage] = useState(1);
 
-  // Modal edición/registro
   const [editOpen, setEditOpen] = useState(false);
+
   const [editBusy, setEditBusy] = useState(false);
+
   const [editError, setEditError] = useState("");
 
-  // Modal de éxito + recarga visual
   const [successOpen, setSuccessOpen] = useState(false);
+
   const [successMsg, setSuccessMsg] = useState("");
+
   const [reloadBusy, setReloadBusy] = useState(false);
 
   const [editForm, setEditForm] = useState({
     id: null,
-    virtual: false,
+
     create: false,
-    deuda_year: null,
-    deuda_month: null,
+
     jugador_rut: "",
+
+    plan_id: "",
+
+    tarifa_id: "",
+
+    cargo_id: "",
+
     monto: "",
+
     fecha_pago: "",
+
     tipo_pago_id: "",
+
     medio_pago_id: "",
+
     situacion_pago_id: "",
+
     observaciones: "",
   });
 
-  /* 🔐 Sesión + rol */
+  /* =======================================================
+     AUTH
+  ======================================================= */
+
   useEffect(() => {
     try {
       const token = getToken();
-      if (!token) throw new Error("no-token");
+
+      if (!token) {
+        throw new Error("no-token");
+      }
 
       const decoded = jwtDecode(token);
-      if (isExpired(decoded)) throw new Error("expired");
+
+      if (isExpired(decoded)) {
+        throw new Error("expired");
+      }
 
       const rol = extractRol(decoded);
+
       if (![1, 3].includes(rol)) {
-        navigate(dashboardBase, { replace: true });
+        navigate(dashboardBase, {
+          replace: true,
+        });
+
         return;
       }
 
       if (rol === 3) {
-        const a = getAcademiaIdFromStorage();
-        if (!a) throw new Error("missing-academia-target");
-        setAcademiaTarget(a);
+        const academiaId = getAcademiaIdFromStorage();
+
+        if (!academiaId) {
+          throw new Error("missing-academia-target");
+        }
+
+        setAcademiaTarget(academiaId);
       }
 
       setRolActual(rol);
     } catch {
       clearToken();
-      navigate("/login", { replace: true });
+
+      navigate("/login", {
+        replace: true,
+      });
     }
   }, [navigate, dashboardBase]);
 
-  /* 🧭 Breadcrumb (ANTI-LOOP) */
+  /* =======================================================
+     BREADCRUMB
+  ======================================================= */
+
   useEffect(() => {
-    if (breadcrumbBootRef.current) return;
+    if (breadcrumbBootRef.current) {
+      return;
+    }
+
     const currentPath = location.pathname + location.search;
-    const bc = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : [];
-    const last = bc[bc.length - 1];
+
+    const breadcrumb = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : [];
+
+    const last = breadcrumb[breadcrumb.length - 1];
 
     const label = "Pagos centralizados";
+
     if (!last || last.label !== label) {
       breadcrumbBootRef.current = true;
+
       navigate(currentPath, {
         replace: true,
+
         state: {
           ...(location.state || {}),
-          breadcrumb: [{ label, to: location.pathname }],
+
+          breadcrumb: [
+            {
+              label,
+
+              to: location.pathname,
+            },
+          ],
         },
       });
     } else {
       breadcrumbBootRef.current = true;
     }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.search]);
 
-  /* ✅ cambios de academia target (rol 3) */
+  /* =======================================================
+     CAMBIO ACADEMIA SUPERADMIN
+  ======================================================= */
+
   useEffect(() => {
     const sync = () => setAcademiaTarget(getAcademiaIdFromStorage());
 
-    const onStorage = (e) => {
-      if (e?.key === ACADEMIA_STORAGE_KEY) sync();
+    const onStorage = (event) => {
+      if (event?.key === ACADEMIA_STORAGE_KEY) {
+        sync();
+      }
     };
 
     let last = String(localStorage.getItem(ACADEMIA_STORAGE_KEY) ?? "");
-    const t = setInterval(() => {
-      const now = String(localStorage.getItem(ACADEMIA_STORAGE_KEY) ?? "");
-      if (now !== last) {
-        last = now;
+
+    const timer = setInterval(() => {
+      const current = String(localStorage.getItem(ACADEMIA_STORAGE_KEY) ?? "");
+
+      if (current !== last) {
+        last = current;
+
         sync();
       }
     }, 800);
 
     window.addEventListener("storage", onStorage);
+
     return () => {
       window.removeEventListener("storage", onStorage);
-      clearInterval(t);
+
+      clearInterval(timer);
     };
   }, []);
 
-  /* 📡 Carga catálogos + jugadores + pagos */
+  /* =======================================================
+     MAPS
+  ======================================================= */
+
+  const planesMap = useMemo(() => new Map(planes.map((plan) => [String(plan.id), plan])), [planes]);
+
+  const tarifasMap = useMemo(() => new Map(tarifas.map((tarifa) => [String(tarifa.id), tarifa])), [tarifas]);
+
+  const cargosMap = useMemo(() => new Map(cargos.map((cargo) => [String(cargo.id), cargo])), [cargos]);
+
+  /* =======================================================
+     CARGA
+  ======================================================= */
+
   useEffect(() => {
-    if (!rolActual) return;
-    if (rolActual === 3 && !academiaTarget) return;
+    if (!rolActual) {
+      return;
+    }
+
+    if (rolActual === 3 && !academiaTarget) {
+      return;
+    }
 
     const abort = new AbortController();
+
     const headers = buildHeaders(rolActual);
 
     (async () => {
       setIsLoading(true);
+
       setError("");
 
       try {
-        const [tipos, medios, situaciones, jugadoresList, categoriasRaw, sucursalesRaw] = await Promise.all([
-          tryGetList(["/tipo-pago", "/tipo_pago"], { signal: abort.signal, headers }),
-          tryGetList(["/medio-pago", "/medio_pago"], { signal: abort.signal, headers }),
-          tryGetList(["/situacion-pago", "/situacion_pago", "/estado-pago", "/estado_pago"], {
+        const [
+          tipos,
+          medios,
+          situaciones,
+          jugadoresList,
+          categoriasRaw,
+          sucursalesRaw,
+          planesRaw,
+          tarifasRaw,
+          jugadorPlanesRaw,
+          cargosRaw,
+        ] = await Promise.all([
+          tryGetList(["/tipo-pago", "/tipo_pago"], {
             signal: abort.signal,
+
             headers,
           }),
-          tryGetList(["/jugadores"], { signal: abort.signal, headers }),
-          tryGetList(["/categorias"], { signal: abort.signal, headers }),
-          tryGetList(["/sucursales-real", "/sucursales-real/"], { signal: abort.signal, headers }),
+
+          tryGetList(["/medio-pago", "/medio_pago"], {
+            signal: abort.signal,
+
+            headers,
+          }),
+
+          tryGetList(["/situacion-pago", "/situacion_pago", "/estado-pago", "/estado_pago"], {
+            signal: abort.signal,
+
+            headers,
+          }),
+
+          tryGetList(["/jugadores"], {
+            signal: abort.signal,
+
+            headers,
+          }),
+
+          tryGetList(["/categorias"], {
+            signal: abort.signal,
+
+            headers,
+          }),
+
+          tryGetList(["/sucursales-real", "/sucursales-real/"], {
+            signal: abort.signal,
+
+            headers,
+          }),
+
+          tryGetList(["/planes"], {
+            signal: abort.signal,
+
+            headers,
+          }),
+
+          tryGetList(["/plan-tarifas"], {
+            signal: abort.signal,
+
+            headers,
+          }),
+
+          tryGetList(["/jugador-planes"], {
+            signal: abort.signal,
+
+            headers,
+          }),
+
+          tryGetList(["/cargos-jugador"], {
+            signal: abort.signal,
+
+            headers,
+          }),
         ]);
 
-        if (abort.signal.aborted) return;
+        if (abort.signal.aborted) {
+          return;
+        }
 
         const tipoMap = buildIdNameMap(tipos, "id", "nombre");
+
         const medioMap = buildIdNameMap(medios, "id", "nombre");
+
         const situMap = buildIdNameMap(situaciones, "id", "nombre");
+
         setTipoPagoMap(tipoMap);
+
         setMedioPagoMap(medioMap);
+
         setSituacionPagoMap(situMap);
 
-        const _categorias = normalizeCatalog(categoriasRaw);
-        const _sucursales = normalizeCatalog(sucursalesRaw);
+        const planesN = normalizePlanes(planesRaw);
 
-        const catMap = new Map(_categorias.map((c) => [Number(c.id), c.nombre]));
-        const sucMap = new Map(_sucursales.map((s) => [Number(s.id), s.nombre]));
+        const tarifasN = normalizeTarifas(tarifasRaw);
 
-        const activos = (Array.isArray(jugadoresList) ? jugadoresList : []).filter((j) => {
-          const estadoId = Number(j?.estado_id ?? j?.estadoId ?? j?.estado ?? 0);
+        const jugadorPlanesN = normalizeJugadorPlanes(jugadorPlanesRaw);
+
+        const cargosN = normalizeCargos(cargosRaw);
+
+        setPlanes(planesN);
+
+        setTarifas(tarifasN);
+
+        setJugadorPlanes(jugadorPlanesN);
+
+        setCargos(cargosN);
+
+        const planesMapLocal = new Map(planesN.map((plan) => [String(plan.id), plan]));
+
+        const tarifasMapLocal = new Map(tarifasN.map((tarifa) => [String(tarifa.id), tarifa]));
+
+        const cargosMapLocal = new Map(cargosN.map((cargo) => [String(cargo.id), cargo]));
+
+        const categorias = normalizeCatalog(categoriasRaw);
+
+        const sucursales = normalizeCatalog(sucursalesRaw);
+
+        const catMap = new Map(categorias.map((categoria) => [Number(categoria.id), categoria.nombre]));
+
+        const sucMap = new Map(sucursales.map((sucursal) => [Number(sucursal.id), sucursal.nombre]));
+
+        const activos = (Array.isArray(jugadoresList) ? jugadoresList : []).filter((jugador) => {
+          const estadoId = Number(jugador?.estado_id ?? jugador?.estadoId ?? jugador?.estado ?? 0);
+
           return estadoId === ESTADO_JUGADOR_ACTIVO;
         });
 
-        const jm = new Map();
-        for (const j of activos) {
-          const rut = j?.rut_jugador ?? j?.rut ?? null;
-          if (rut == null) continue;
+        const jugadorMap = new Map();
 
-          const categoriaId = j?.categoria_id ?? j?.categoria?.id ?? null;
+        for (const jugador of activos) {
+          const rut = jugador?.rut_jugador ?? jugador?.rut ?? null;
+
+          if (rut == null) {
+            continue;
+          }
+
+          const jugadorId = Number(jugador?.id ?? jugador?.jugador_id ?? 0);
+
+          const categoriaId = jugador?.categoria_id ?? jugador?.categoria?.id ?? null;
+
           const categoriaNombre =
-            j?.categoria?.nombre ??
-            j?.categoria_nombre ??
+            jugador?.categoria?.nombre ??
+            jugador?.categoria_nombre ??
             (categoriaId != null ? (catMap.get(Number(categoriaId)) ?? String(categoriaId)) : null) ??
-            (typeof j?.categoria === "string" ? j.categoria : null) ??
             "Sin categoría";
 
-          const sucursalId = j?.sucursal_id ?? j?.sucursal?.id ?? j?.id_sucursal ?? null;
+          const sucursalId = jugador?.sucursal_id ?? jugador?.sucursal?.id ?? jugador?.id_sucursal ?? null;
+
           const sucursalNombre =
-            j?.sucursal?.nombre ??
-            j?.sucursal_nombre ??
-            j?.nombre_sucursal ??
+            jugador?.sucursal?.nombre ??
+            jugador?.sucursal_nombre ??
+            jugador?.nombre_sucursal ??
             (sucursalId != null ? sucMap.get(Number(sucursalId)) : null) ??
             (sucursalId != null ? `Sucursal ${sucursalId}` : null) ??
             "Sin sucursal";
 
-          jm.set(String(rut), {
-            nombre: j?.nombre_jugador ?? j?.nombre ?? j?.nombre_completo ?? "—",
-            categoria: { id: categoriaId, nombre: categoriaNombre },
-            sucursal: { id: sucursalId, nombre: sucursalNombre },
+          jugadorMap.set(String(rut), {
+            id: Number.isInteger(jugadorId) && jugadorId > 0 ? jugadorId : null,
+
+            nombre: jugador?.nombre_jugador ?? jugador?.nombre ?? jugador?.nombre_completo ?? "—",
+
+            categoria: {
+              id: categoriaId,
+
+              nombre: categoriaNombre,
+            },
+
+            sucursal: {
+              id: sucursalId,
+
+              nombre: sucursalNombre,
+            },
           });
         }
-        setJugadoresMap(jm);
+
+        setJugadoresMap(jugadorMap);
 
         const respEstado = await getWithFallback("/pagos-jugador/estado-cuenta", {
           signal: abort.signal,
+
           headers,
         });
-        if (abort.signal.aborted) return;
 
-        const rawPagos = Array.isArray(respEstado?.data?.pagos) ? respEstado.data.pagos : [];
-
-        // Filtrar pagos solo de activos
-        const rutsActivos = new Set(Array.from(jm.keys()));
-        const rawPagosActivos = rawPagos.filter((p) => {
-          const rut = p?.jugador_rut ?? p?.rut_jugador ?? p?.rut ?? p?.jugador?.rut_jugador ?? p?.jugador?.rut;
-          return rut != null && rutsActivos.has(String(rut));
-        });
-
-        const pagosNorm = normalizePagos(rawPagosActivos, {
-          tipoPagoMap: tipoMap,
-          medioPagoMap: medioMap,
-          situacionPagoMap: situMap,
-          jugadoresMap: jm,
-        });
-
-        setPagos(pagosNorm);
-      } catch (e) {
-        if (abort.signal.aborted) return;
-
-        const st = e?.status ?? e?.response?.status;
-        const msg = String(e?.message ?? "").toLowerCase();
-
-        if (st === 401 || st === 403) {
-          clearToken();
-          navigate("/login", { replace: true });
+        if (abort.signal.aborted) {
           return;
         }
 
-        if (rolActual === 3 && (msg.includes("academia") || msg.includes("x-academia"))) {
+        const rawPagos = Array.isArray(respEstado?.data?.pagos) ? respEstado.data.pagos : [];
+
+        const rutsActivos = new Set(Array.from(jugadorMap.keys()));
+
+        const rawPagosActivos = rawPagos.filter((pago) => {
+          const rut =
+            pago?.jugador_rut ?? pago?.rut_jugador ?? pago?.rut ?? pago?.jugador?.rut_jugador ?? pago?.jugador?.rut;
+
+          return rut != null && rutsActivos.has(String(rut));
+        });
+
+        setPagos(
+          normalizePagos(rawPagosActivos, {
+            tipoPagoMap: tipoMap,
+
+            medioPagoMap: medioMap,
+
+            situacionPagoMap: situMap,
+
+            jugadoresMap: jugadorMap,
+
+            cargosMap: cargosMapLocal,
+
+            planesMap: planesMapLocal,
+
+            tarifasMap: tarifasMapLocal,
+          })
+        );
+      } catch (errorCarga) {
+        if (abort.signal.aborted) {
+          return;
+        }
+
+        const status = errorCarga?.status ?? errorCarga?.response?.status;
+
+        const message = String(errorCarga?.message ?? "").toLowerCase();
+
+        if (status === 401 || status === 403) {
+          clearToken();
+
+          navigate("/login", {
+            replace: true,
+          });
+
+          return;
+        }
+
+        if (rolActual === 3 && (message.includes("academia") || message.includes("x-academia"))) {
           setError("⚠️ Superadmin: selecciona una academia para ver pagos centralizados.");
+
           return;
         }
 
         setError("❌ No se pudieron cargar los pagos centralizados.");
       } finally {
-        if (!abort.signal.aborted) setIsLoading(false);
+        if (!abort.signal.aborted) {
+          setIsLoading(false);
+        }
       }
     })();
 
     return () => abort.abort();
   }, [navigate, rolActual, academiaTarget]);
 
-  /* =======================
-     UI (compacta)
-     - page bg-transparent (plan gama)
-     - cards coherentes
-     - tablas + modales compactos
-======================= */
+  /* =======================================================
+     UI RESPONSIVA
+
+     CAMBIOS:
+     - tarjetas más anchas
+     - sin overflow horizontal
+     - sin min-width forzado
+     - tablas solo en desktop
+     - cards en mobile/tablet
+  ======================================================= */
+
   const ui = useMemo(() => {
-    // ✅ Plan gama: sin fondo “cuadro”
-    const page = "min-h-[calc(100vh-100px)] font-sans bg-transparent px-3 pt-3 pb-16";
+    const page = "min-h-[calc(100vh-100px)] w-full font-sans bg-transparent px-2 sm:px-4 lg:px-6 2xl:px-8 pt-3 pb-16";
+
+    const content = "w-full max-w-[1600px] mx-auto";
 
     const title = darkMode ? "text-white" : "text-ra-marron";
+
     const subtitle = darkMode ? "text-white/70" : "text-ra-marron/70";
 
     const msgBox =
@@ -633,82 +1111,147 @@ export default function ListarPagos() {
       "rounded-xl border px-4 py-3 font-semibold text-sm " +
       (darkMode ? "border-amber-200/20 bg-amber-500/10 text-amber-100" : "border-amber-200 bg-amber-50 text-amber-800");
 
+    /*
+     * CAMBIO:
+     * ya no max-w-6xl.
+     */
     const card =
-      "max-w-6xl mx-auto rounded-xl shadow-[0_14px_40px_rgba(0,0,0,0.18)] border " +
+      "w-full max-w-[1600px] mx-auto rounded-xl shadow-[0_14px_40px_rgba(0,0,0,0.18)] border " +
       (darkMode ? "bg-white/8 border-white/12" : "bg-white/55 border-ra-marron/12");
 
-    const cardPad = "p-3"; // ✅ compacto
+    const cardPad = "p-3 sm:p-4";
 
     const line = darkMode ? "rgba(255,255,255,0.14)" : "rgba(109,88,41,0.18)";
+
     const border = `1px solid ${line}`;
 
-    const tableWrap = "w-full overflow-x-auto";
+    /*
+     * SIN overflow-x-auto.
+     */
+    const tableWrap = "w-full";
 
-    // ✅ tabla compacta
-    const table = "w-full text-[11px] sm:text-xs min-w-[920px] border-separate border-spacing-0";
+    /*
+     * SIN min-w.
+     *
+     * table-fixed fuerza distribución dentro
+     * del ancho real disponible.
+     */
+    const table = "w-full table-fixed text-[10px] 2xl:text-[11px] border-separate border-spacing-0";
 
-    const thead = "text-[10px] sm:text-[11px] " + (darkMode ? "bg-black/20" : "bg-ra-cream/90");
+    const thead = "text-[9px] 2xl:text-[10px] " + (darkMode ? "bg-black/20" : "bg-ra-cream/90");
 
     const thBase =
-      "py-1.5 px-2 text-center whitespace-nowrap font-extrabold " + (darkMode ? "text-[#ffdda1]" : "text-[#6d5829]");
+      "py-2 px-1.5 text-center font-extrabold leading-tight " + (darkMode ? "text-[#ffdda1]" : "text-[#6d5829]");
 
-    const tdBase = "py-1.5 px-2 text-center " + (darkMode ? "text-white/90" : "text-ra-marron");
+    /*
+     * break-words / whitespace-normal permiten
+     * que las columnas no ensanchen la tabla.
+     */
+    const tdBase =
+      "py-2 px-1.5 text-center align-middle whitespace-normal break-words leading-tight " +
+      (darkMode ? "text-white/90" : "text-ra-marron");
 
     const tr = "transition " + (darkMode ? "hover:bg-white/7" : "hover:bg-white/70");
 
-    const cellBorderStyle = { borderRight: border, borderBottom: border };
-    const headBorderStyle = { borderRight: border, borderBottom: border, borderTop: border };
+    const cellBorderStyle = {
+      borderRight: border,
 
-    // ✅ controles compactos
+      borderBottom: border,
+    };
+
+    const headBorderStyle = {
+      borderRight: border,
+
+      borderBottom: border,
+
+      borderTop: border,
+    };
+
     const controlBase =
-      "w-full h-9 px-2.5 rounded-md text-[12px] leading-none outline-none transition " +
+      "w-full h-10 px-3 rounded-md text-[12px] outline-none transition " +
       (darkMode
-        ? "border border-white/12 bg-black/20 text-white placeholder-white/45 focus:border-white/22"
-        : "border border-ra-marron/12 bg-white/70 text-ra-marron placeholder-ra-marron/45 focus:border-ra-marron/24");
+        ? "border border-white/20 bg-[#111827] text-white placeholder:text-white/50 focus:border-[#ffdda1] focus:ring-2 focus:ring-[#ffdda1]/20 [&>option]:bg-[#111827] [&>option]:text-white"
+        : "border border-[#9b7b50] bg-white text-[#3f2d18] placeholder:text-[#7b6750] focus:border-[#aa5013] focus:ring-2 focus:ring-[#aa5013]/15 [&>option]:bg-white [&>option]:text-[#3f2d18]");
+
+    const controlDisabled = darkMode
+      ? "disabled:bg-[#1f2937] disabled:text-white/70 disabled:border-white/10"
+      : "disabled:bg-[#eee7dc] disabled:text-[#67594a] disabled:border-[#c8b79f]";
 
     const controlTextArea =
-      "w-full min-h-[70px] rounded-md p-2.5 text-[12px] outline-none transition " +
+      "w-full min-h-[80px] rounded-md p-2.5 text-[12px] outline-none transition " +
       (darkMode
-        ? "border border-white/12 bg-black/20 text-white placeholder-white/45 focus:border-white/22"
-        : "border border-ra-marron/12 bg-white/70 text-ra-marron placeholder-ra-marron/45 focus:border-ra-marron/24");
+        ? "border border-white/20 bg-[#111827] text-white placeholder:text-white/50 focus:border-[#ffdda1] focus:ring-2 focus:ring-[#ffdda1]/20"
+        : "border border-[#9b7b50] bg-white text-[#3f2d18] placeholder:text-[#7b6750] focus:border-[#aa5013] focus:ring-2 focus:ring-[#aa5013]/15");
 
-    // ✅ botones compactos
+    const modalLabel =
+      "block text-[10px] sm:text-[11px] mb-0.5 sm:mb-1 font-bold " + (darkMode ? "text-[#f5e7d0]" : "text-[#4a351f]");
+
+    const modalHelp = "text-[10px] mt-1 " + (darkMode ? "text-[#d6c7b2]" : "text-[#6d5829]");
+
     const btnPrimary =
-      "inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md font-extrabold text-[12px] transition " +
-      "disabled:opacity-50 disabled:cursor-not-allowed";
+      "inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md font-extrabold text-[12px] transition disabled:opacity-50 disabled:cursor-not-allowed";
+
     const btnPrimaryStyle = {
       backgroundColor: PALETTE.sand,
+
       color: PALETTE.brown,
+
       boxShadow: darkMode ? "0 10px 26px rgba(0,0,0,0.22)" : "0 10px 26px rgba(109,88,41,0.14)",
     };
 
     const btnSecondary =
-      "px-2.5 py-1 rounded-md border transition font-semibold text-[12px] " +
+      "px-3 py-2 rounded-md border transition font-semibold text-[12px] " +
       (darkMode
         ? "border-white/18 hover:bg-white/8 text-white"
         : "border-ra-marron/18 hover:bg-white/70 text-ra-marron") +
       " disabled:opacity-50 disabled:cursor-not-allowed";
 
     const badge =
-      "text-[11px] inline-flex items-center gap-2 rounded-full px-2.5 py-1 border font-semibold " +
+      "text-[10px] sm:text-[11px] inline-flex items-center gap-2 rounded-full px-2.5 py-1 border font-semibold " +
       (darkMode ? "bg-white/8 border-white/10 text-white/80" : "bg-white/60 border-ra-marron/10 text-ra-marron/80");
 
+    /*
+     * Tarjetas mobile.
+     */
+    const mobileCard =
+      "rounded-xl border p-3 sm:p-4 shadow-sm " +
+      (darkMode ? "bg-black/15 border-white/12" : "bg-white/65 border-ra-marron/15");
+
+    const mobileLabel =
+      "text-[10px] uppercase tracking-wide font-bold " + (darkMode ? "text-white/50" : "text-ra-marron/55");
+
+    const mobileValue =
+      "text-[12px] sm:text-[13px] font-semibold break-words " + (darkMode ? "text-white/90" : "text-ra-marron");
+
     const pill = (estadoRaw) => {
-      const e = String(estadoRaw ?? "")
+      const estado = String(estadoRaw ?? "")
         .trim()
         .toUpperCase();
-      if (e === "PAGADO") return "bg-emerald-500/15 text-emerald-100 border border-emerald-300/20";
-      if (e === "VENCIDO") return "bg-red-500/15 text-red-100 border border-red-300/20";
-      return "bg-white/10 text-white/90 border border-white/12";
+
+      if (estado === "PAGADO") {
+        return darkMode
+          ? "bg-emerald-500/15 text-emerald-100 border border-emerald-300/20"
+          : "bg-emerald-100 text-emerald-800 border border-emerald-300";
+      }
+
+      if (estado === "VENCIDO") {
+        return darkMode
+          ? "bg-red-500/15 text-red-100 border border-red-300/20"
+          : "bg-red-100 text-red-800 border border-red-300";
+      }
+
+      return darkMode
+        ? "bg-white/10 text-white/90 border border-white/12"
+        : "bg-stone-100 text-stone-700 border border-stone-300";
     };
 
     const modalCard =
-      "w-[95%] max-w-xl rounded-xl shadow-[0_16px_60px_rgba(0,0,0,0.35)] border " +
-      (darkMode ? "bg-[#121212]/82 border-white/12" : "bg-white/88 border-ra-marron/12") +
-      " backdrop-blur-md";
+      "w-[98%] sm:w-[94%] max-w-2xl rounded-xl shadow-[0_16px_60px_rgba(0,0,0,0.45)] border backdrop-blur-md overflow-hidden " +
+      (darkMode ? "bg-[#111827] border-white/20 text-white" : "bg-[#fffaf2] border-[#b99a70] text-[#3f2d18]");
 
     return {
       page,
+      content,
       title,
       subtitle,
       msgBox,
@@ -725,246 +1268,166 @@ export default function ListarPagos() {
       tr,
       cellBorderStyle,
       headBorderStyle,
-      controlBase,
-      controlTextArea,
+
+      controlBase: `${controlBase} ${controlDisabled}`,
+
+      controlTextArea: `${controlTextArea} ${controlDisabled}`,
+
+      modalLabel,
+      modalHelp,
       btnPrimary,
       btnPrimaryStyle,
       btnSecondary,
       badge,
+      mobileCard,
+      mobileLabel,
+      mobileValue,
       pill,
       modalCard,
     };
   }, [darkMode]);
 
-  const toCLP = (n) =>
-    new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(
-      Number(n || 0)
-    );
+  /* =======================================================
+     CLP
+  ======================================================= */
 
-  const findIdByName = (map, wantedName) => {
-    const target = String(wantedName || "")
-      .trim()
-      .toUpperCase();
-    for (const [id, name] of map.entries()) {
-      if (
-        String(name || "")
-          .trim()
-          .toUpperCase() === target
-      )
-        return Number(id);
-    }
-    return null;
-  };
+  const toCLP = (value) =>
+    new Intl.NumberFormat("es-CL", {
+      style: "currency",
 
-  const situacionVencidoId = useMemo(() => findIdByName(situacionPagoMap, "VENCIDO"), [situacionPagoMap]);
+      currency: "CLP",
 
-  /* ─────────────────────────────
-     Filas pagos (incluye vencidos virtuales)
-  ───────────────────────────── */
+      maximumFractionDigits: 0,
+    }).format(Number(value || 0));
+
+  /* =======================================================
+     FILAS PAGOS REALES
+  ======================================================= */
+
   const filas = useMemo(() => {
-    const rows = [];
-
-    const getPeriodoMensualidad = (p) => {
-      const dy = p?.deuda_year ?? p?.periodo?.year ?? null;
-      const dm = p?.deuda_month ?? p?.periodo?.month ?? null;
-
-      const y = dy != null ? Number(dy) : null;
-      const m = dm != null ? Number(dm) : null;
-
-      if (Number.isFinite(y) && Number.isFinite(m) && m >= 1 && m <= 12) {
-        return { year: y, month: m, key: ymKey(y, m) };
-      }
-
-      const d = p?.fecha_pago ? new Date(p.fecha_pago) : null;
-      if (!d || isNaN(d.getTime())) return null;
-      return { year: d.getFullYear(), month: d.getMonth() + 1, key: ymKey(d.getFullYear(), d.getMonth() + 1) };
-    };
-
-    const mensualidadesPagadas = new Map(); // rut -> Set("YYYY-MM")
-
-    for (const p of pagos) {
-      const rut = String(p?.jugador?.rut_jugador ?? "");
-      if (!rut) continue;
-
-      const tipoId = Number(p?.tipo_pago?.id ?? p?.tipo_pago_id ?? NaN);
-      const situId = Number(p?.situacion_pago?.id ?? p?.situacion_pago_id ?? NaN);
-
-      if (tipoId !== TIPO_PAGO_MENSUALIDAD) continue;
-      if (situId !== SITUACION_PAGO_PAGADO_ID) continue;
-
-      const periodo = getPeriodoMensualidad(p);
-      if (!periodo) continue;
-
-      const set = mensualidadesPagadas.get(rut) || new Set();
-      set.add(periodo.key);
-      mensualidadesPagadas.set(rut, set);
-    }
-
     const seen = new Set();
 
-    for (const p of pagos) {
-      const rut = String(p?.jugador?.rut_jugador ?? "");
-      if (!rut) continue;
+    const rows = [];
 
-      const nombre = p?.jugador?.nombre_jugador ?? "—";
-      const categoria =
-        p?.jugador?.categoria?.nombre ??
-        (typeof p?.jugador?.categoria === "string" ? p.jugador.categoria : null) ??
-        "Sin categoría";
+    for (const pago of pagos) {
+      const rut = String(pago?.jugador?.rut_jugador ?? "");
 
-      const estado = p?.situacion_pago?.nombre || "—";
+      if (!rut) {
+        continue;
+      }
 
-      const tipoId = Number(p?.tipo_pago?.id ?? p?.tipo_pago_id ?? NaN);
-      const idNum = p?.id != null ? Number(p.id) : NaN;
-      const safeId = Number.isFinite(idNum) && idNum > 0 ? idNum : null;
+      const id = Number(pago?.id ?? 0);
 
-      const periodo = tipoId === TIPO_PAGO_MENSUALIDAD ? getPeriodoMensualidad(p) : null;
+      const safeId = Number.isFinite(id) && id > 0 ? id : null;
 
-      const dedupeKey = safeId
-        ? `ID-${safeId}`
-        : periodo
-          ? `MENS-${rut}-${tipoId}-${periodo.key}`
-          : `NOID-${rut}-${tipoId}-${String(p?.fecha_pago ?? "")}-${String(p?.monto ?? "")}`;
+      const key = safeId
+        ? `PAGO-${safeId}`
+        : ["PAGO", rut, pago?.cargo_id ?? "", pago?.fecha_pago ?? "", pago?.monto ?? ""].join("-");
 
-      if (seen.has(dedupeKey)) continue;
-      seen.add(dedupeKey);
+      if (seen.has(key)) {
+        continue;
+      }
 
-      const ts = (() => {
-        if (!p?.fecha_pago) return 0;
-        const d = new Date(p.fecha_pago);
-        return isNaN(d.getTime()) ? 0 : d.getTime();
-      })();
+      seen.add(key);
 
-      rows.push({ key: safeId ?? dedupeKey, id: safeId, rut, nombre, categoria, estado, pago: p, ts, virtual: false });
+      const fecha = pago?.fecha_pago ? new Date(pago.fecha_pago) : null;
+
+      const timestamp = fecha && !Number.isNaN(fecha.getTime()) ? fecha.getTime() : 0;
+
+      rows.push({
+        key,
+
+        id: safeId,
+
+        rut,
+
+        nombre: pago?.jugador?.nombre_jugador ?? "—",
+
+        categoria: pago?.jugador?.categoria?.nombre ?? "Sin categoría",
+
+        estado: pago?.situacion_pago?.nombre ?? "—",
+
+        pago,
+
+        ts: timestamp,
+      });
     }
 
-    const mesesExigibles = buildMesesExigibles(new Date(), 5);
-
-    for (const [rut, j] of jugadoresMap.entries()) {
-      const setPagadas = mensualidadesPagadas.get(String(rut)) || new Set();
-
-      for (const mm of mesesExigibles) {
-        if (setPagadas.has(mm.key)) continue;
-
-        const labelMes = monthLabelEs(mm.year, mm.month);
-        const vKey = `VIRTUAL-${rut}-${mm.key}`;
-
-        if (seen.has(`MENS-${rut}-${TIPO_PAGO_MENSUALIDAD}-${mm.key}`)) continue;
-
-        rows.push({
-          key: vKey,
-          id: null,
-          rut: String(rut),
-          nombre: j?.nombre ?? "—",
-          categoria: j?.categoria?.nombre ?? "Sin categoría",
-          estado: "VENCIDO",
-          pago: {
-            id: null,
-            monto: 0,
-            fecha_pago: null,
-            deuda_year: mm.year,
-            deuda_month: mm.month,
-            jugador: {
-              rut_jugador: String(rut),
-              nombre_jugador: j?.nombre ?? "—",
-              categoria: j?.categoria ?? null,
-            },
-            tipo_pago: { id: TIPO_PAGO_MENSUALIDAD, nombre: `Mensualidad ${labelMes}` },
-            situacion_pago: { id: null, nombre: "VENCIDO" },
-            medio_pago: { id: null, nombre: "—" },
-            observaciones: "",
-          },
-          ts: 0,
-          virtual: true,
-        });
-      }
-    }
-
-    const pesoEstado = (estadoRaw) => {
-      const e = (estadoRaw ?? "").toString().toUpperCase();
-      if (e === "VENCIDO") return 0;
-      if (e === "PAGADO") return 1;
-      return 2;
-    };
-
-    rows.sort((a, b) => {
-      const ea = pesoEstado(a.estado);
-      const eb = pesoEstado(b.estado);
-      if (ea !== eb) return ea - eb;
-
-      const aKey = String(a?.key ?? "");
-      const bKey = String(b?.key ?? "");
-
-      if (aKey.startsWith("VIRTUAL-") && bKey.startsWith("VIRTUAL-")) {
-        return aKey.localeCompare(bKey);
-      }
-      return b.ts - a.ts;
-    });
+    rows.sort((a, b) => b.ts - a.ts);
 
     return rows;
-  }, [pagos, jugadoresMap]);
+  }, [pagos]);
 
-  /* ─────────────────────────────
-     Opciones filtros pagos
-  ───────────────────────────── */
-  const opcionesTipoPago = useMemo(() => {
-    const m = new Map();
-    for (const r of filas) {
-      const id = r?.pago?.tipo_pago?.id;
-      const nombre = r?.pago?.tipo_pago?.nombre;
-      if (!id || !nombre) continue;
-      m.set(String(id), nombre);
-    }
-    return Array.from(m, ([value, label]) => ({ value, label }));
-  }, [filas]);
+  /* =======================================================
+     FILTROS
+  ======================================================= */
 
-  const opcionesMedioPago = useMemo(() => {
-    const m = new Map();
-    for (const r of filas) {
-      const id = r?.pago?.medio_pago?.id;
-      const nombre = r?.pago?.medio_pago?.nombre;
-      if (!id || !nombre) continue;
-      m.set(String(id), nombre);
-    }
-    return Array.from(m, ([value, label]) => ({ value, label }));
-  }, [filas]);
+  const opcionesTipoPago = useMemo(
+    () =>
+      Array.from(tipoPagoMap, ([value, label]) => ({
+        value,
+        label,
+      })),
+    [tipoPagoMap]
+  );
 
-  /* ─────────────────────────────
-     Filtros pagos + paginación
-     ✅ Sin filtro categoría (columna eliminada)
-  ───────────────────────────── */
+  const opcionesMedioPago = useMemo(
+    () =>
+      Array.from(medioPagoMap, ([value, label]) => ({
+        value,
+        label,
+      })),
+    [medioPagoMap]
+  );
+
   const filasFiltradas = useMemo(() => {
-    const f = (filtroTexto || "").toLowerCase().trim();
+    const filtro = (filtroTexto || "").toLowerCase().trim();
 
     return filas.filter((row) => {
       const pago = row.pago ?? {};
+
       const rut = row.rut || "";
+
       const nombre = row.nombre || "";
+
       const categoria = row.categoria || "";
 
+      const plan = pago?.plan?.nombre ?? "";
+
+      const tarifa = pago?.tarifa?.nombre ?? "";
+
       let okTexto = true;
-      if (f) {
+
+      if (filtro) {
         okTexto =
-          rut.includes(f) ||
-          formatRutWithDV(rut).toLowerCase().includes(f) ||
-          nombre.toLowerCase().includes(f) ||
-          // ✅ se mantiene búsqueda por categoría (aunque no se muestre la columna)
-          categoria.toLowerCase().includes(f);
+          rut.includes(filtro) ||
+          formatRutWithDV(rut).toLowerCase().includes(filtro) ||
+          nombre.toLowerCase().includes(filtro) ||
+          categoria.toLowerCase().includes(filtro) ||
+          plan.toLowerCase().includes(filtro) ||
+          tarifa.toLowerCase().includes(filtro);
       }
 
       let okEstado = true;
-      if (filtroEstado) okEstado = (row.estado ?? "").toUpperCase() === filtroEstado.toUpperCase();
+
+      if (filtroEstado) {
+        okEstado = (row.estado ?? "").toUpperCase() === filtroEstado.toUpperCase();
+      }
 
       let okTipo = true;
+
       if (filtroTipoPago) {
-        const idTipo = pago?.tipo_pago?.id ? String(pago.tipo_pago.id) : "";
-        okTipo = idTipo === filtroTipoPago;
+        const tipoId = pago?.tipo_pago?.id ? String(pago.tipo_pago.id) : "";
+
+        okTipo = tipoId === filtroTipoPago;
       }
 
       let okMedio = true;
+
       if (filtroMedioPago) {
-        const idMedio = pago?.medio_pago?.id ? String(pago.medio_pago.id) : "";
-        okMedio = idMedio === filtroMedioPago;
+        const medioId = pago?.medio_pago?.id ? String(pago.medio_pago.id) : "";
+
+        okMedio = medioId === filtroMedioPago;
       }
 
       return okTexto && okEstado && okTipo && okMedio;
@@ -972,104 +1435,279 @@ export default function ListarPagos() {
   }, [filas, filtroTexto, filtroEstado, filtroTipoPago, filtroMedioPago]);
 
   const totalPages = useMemo(() => {
-    const tp = Math.ceil(filasFiltradas.length / PAGE_SIZE);
-    return Math.max(1, Math.min(tp || 1, MAX_PAGES));
+    const total = Math.ceil(filasFiltradas.length / PAGE_SIZE);
+
+    return Math.max(1, Math.min(total || 1, MAX_PAGES));
   }, [filasFiltradas]);
 
   useEffect(() => setPage(1), [filtroTexto, filtroEstado, filtroTipoPago, filtroMedioPago]);
 
   const pageData = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
-    const end = start + PAGE_SIZE;
-    return filasFiltradas.slice(start, end);
+
+    return filasFiltradas.slice(start, start + PAGE_SIZE);
   }, [filasFiltradas, page]);
 
-  /* ─────────────────────────────
-     Jugadores para pagos manuales
-  ───────────────────────────── */
-  const jugadoresManualRows = useMemo(() => {
-    const f = (manualFiltro || "").toLowerCase().trim();
+  /* =======================================================
+     JUGADORES MANUALES
+  ======================================================= */
 
-    const rows = Array.from(jugadoresMap.entries()).map(([rut, j]) => ({
+  const jugadoresManualRows = useMemo(() => {
+    const filtro = (manualFiltro || "").toLowerCase().trim();
+
+    const rows = Array.from(jugadoresMap.entries()).map(([rut, jugador]) => ({
       rut: String(rut),
-      nombre: j?.nombre ?? "—",
-      categoria: j?.categoria?.nombre ?? "Sin categoría",
-      sucursal: j?.sucursal?.nombre ?? "Sin sucursal",
+
+      id: jugador?.id ?? null,
+
+      nombre: jugador?.nombre ?? "—",
+
+      categoria: jugador?.categoria?.nombre ?? "Sin categoría",
+
+      sucursal: jugador?.sucursal?.nombre ?? "Sin sucursal",
     }));
 
-    const filtrados = !f
+    const filtrados = !filtro
       ? rows
-      : rows.filter((r) => {
-          const rutFmt = formatRutWithDV(r.rut).toLowerCase();
+      : rows.filter((row) => {
+          const rutFmt = formatRutWithDV(row.rut).toLowerCase();
+
           return (
-            r.rut.includes(f) ||
-            rutFmt.includes(f) ||
-            r.nombre.toLowerCase().includes(f) ||
-            r.categoria.toLowerCase().includes(f) ||
-            r.sucursal.toLowerCase().includes(f)
+            row.rut.includes(filtro) ||
+            rutFmt.includes(filtro) ||
+            row.nombre.toLowerCase().includes(filtro) ||
+            row.categoria.toLowerCase().includes(filtro) ||
+            row.sucursal.toLowerCase().includes(filtro)
           );
         });
 
     filtrados.sort((a, b) => a.nombre.localeCompare(b.nombre));
+
     return filtrados;
   }, [jugadoresMap, manualFiltro]);
 
   const manualTotalPages = useMemo(() => {
-    const tp = Math.ceil(jugadoresManualRows.length / MANUAL_PAGE_SIZE);
-    return Math.max(1, Math.min(tp || 1, MAX_PAGES));
+    const total = Math.ceil(jugadoresManualRows.length / MANUAL_PAGE_SIZE);
+
+    return Math.max(1, Math.min(total || 1, MAX_PAGES));
   }, [jugadoresManualRows]);
 
   useEffect(() => setManualPage(1), [manualFiltro]);
 
   const manualPageData = useMemo(() => {
     const start = (manualPage - 1) * MANUAL_PAGE_SIZE;
-    const end = start + MANUAL_PAGE_SIZE;
-    return jugadoresManualRows.slice(start, end);
+
+    return jugadoresManualRows.slice(start, start + MANUAL_PAGE_SIZE);
   }, [jugadoresManualRows, manualPage]);
 
-  /* ─────────────────────────────
-     Acciones
-  ───────────────────────────── */
+  /* =======================================================
+     CONTEXTO FINANCIERO
+  ======================================================= */
+
+  const jugadorActual = useMemo(
+    () => (editForm.jugador_rut ? (jugadoresMap.get(String(editForm.jugador_rut)) ?? null) : null),
+    [editForm.jugador_rut, jugadoresMap]
+  );
+
+  const planesJugador = useMemo(() => {
+    if (!editForm.jugador_rut) {
+      return [];
+    }
+
+    const rut = String(editForm.jugador_rut);
+
+    const jugadorId = jugadorActual?.id ?? null;
+
+    const planIds = new Set();
+
+    jugadorPlanes.forEach((asignacion) => {
+      const matchId = jugadorId && asignacion.jugador_id === jugadorId;
+
+      const matchRut = asignacion.jugador_rut && String(asignacion.jugador_rut) === rut;
+
+      if ((matchId || matchRut) && asignacion.plan_id) {
+        planIds.add(String(asignacion.plan_id));
+      }
+    });
+
+    cargos.forEach((cargo) => {
+      const matchId = jugadorId && cargo.jugador_id === jugadorId;
+
+      const matchRut = cargo.jugador_rut && String(cargo.jugador_rut) === rut;
+
+      if ((matchId || matchRut) && cargo.plan_id) {
+        planIds.add(String(cargo.plan_id));
+      }
+    });
+
+    return Array.from(planIds)
+      .map((planId) => planesMap.get(String(planId)))
+      .filter(Boolean);
+  }, [editForm.jugador_rut, jugadorActual, jugadorPlanes, cargos, planesMap]);
+
+  const tarifasDisponibles = useMemo(() => {
+    const planId = Number(editForm.plan_id);
+
+    if (!Number.isInteger(planId) || planId <= 0) {
+      return [];
+    }
+
+    return tarifas.filter((tarifa) => Number(tarifa.plan_id) === planId);
+  }, [editForm.plan_id, tarifas]);
+
+  const cargosDisponibles = useMemo(() => {
+    if (!editForm.jugador_rut) {
+      return [];
+    }
+
+    const rut = String(editForm.jugador_rut);
+
+    const jugadorId = jugadorActual?.id ?? null;
+
+    const planId = Number(editForm.plan_id);
+
+    const tarifaId = Number(editForm.tarifa_id);
+
+    return cargos.filter((cargo) => {
+      const matchJugador =
+        (jugadorId && cargo.jugador_id === jugadorId) || (cargo.jugador_rut && String(cargo.jugador_rut) === rut);
+
+      if (!matchJugador) {
+        return false;
+      }
+
+      if (Number.isInteger(planId) && planId > 0 && cargo.plan_id && cargo.plan_id !== planId) {
+        return false;
+      }
+
+      if (Number.isInteger(tarifaId) && tarifaId > 0 && cargo.tarifa_id && cargo.tarifa_id !== tarifaId) {
+        return false;
+      }
+
+      if (cargo.saldo != null && cargo.saldo <= 0) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [editForm.jugador_rut, editForm.plan_id, editForm.tarifa_id, jugadorActual, cargos]);
+
+  /* =======================================================
+     CAMBIOS PLAN/TARIFA/CARGO
+  ======================================================= */
+
+  const handlePlanChange = (event) => {
+    const planId = event.target.value;
+
+    setEditForm((previous) => ({
+      ...previous,
+
+      plan_id: planId,
+
+      tarifa_id: "",
+
+      cargo_id: "",
+
+      tipo_pago_id: "",
+
+      monto: "",
+    }));
+  };
+
+  const handleTarifaChange = (event) => {
+    const tarifaId = event.target.value;
+
+    const tarifa = tarifasMap.get(String(tarifaId));
+
+    setEditForm((previous) => ({
+      ...previous,
+
+      tarifa_id: tarifaId,
+
+      cargo_id: "",
+
+      tipo_pago_id: tarifa?.tipo_pago_id ? String(tarifa.tipo_pago_id) : previous.tipo_pago_id,
+
+      monto: tarifa && tarifa.monto > 0 ? String(tarifa.monto) : previous.monto,
+    }));
+  };
+
+  const handleCargoChange = (event) => {
+    const cargoId = event.target.value;
+
+    const cargo = cargosMap.get(String(cargoId));
+
+    if (!cargo) {
+      setEditForm((previous) => ({
+        ...previous,
+
+        cargo_id: "",
+      }));
+
+      return;
+    }
+
+    const tarifa = cargo.tarifa_id ? tarifasMap.get(String(cargo.tarifa_id)) : null;
+
+    const monto = cargo.saldo != null && cargo.saldo > 0 ? cargo.saldo : cargo.monto_total;
+
+    setEditForm((previous) => ({
+      ...previous,
+
+      cargo_id: String(cargo.id),
+
+      plan_id: cargo.plan_id ? String(cargo.plan_id) : previous.plan_id,
+
+      tarifa_id: cargo.tarifa_id ? String(cargo.tarifa_id) : previous.tarifa_id,
+
+      tipo_pago_id: cargo.tipo_pago_id
+        ? String(cargo.tipo_pago_id)
+        : tarifa?.tipo_pago_id
+          ? String(tarifa.tipo_pago_id)
+          : previous.tipo_pago_id,
+
+      monto: Number.isFinite(monto) && monto > 0 ? String(monto) : previous.monto,
+    }));
+  };
+
+  /* =======================================================
+     MODAL
+  ======================================================= */
+
   const openEdit = (row) => {
     const pago = row?.pago;
-    if (!row?.rut) return;
 
-    const isVirtual = Boolean(row.virtual);
+    if (!pago || !row?.rut) {
+      return;
+    }
 
-    const deudaYear = pago?.deuda_year ?? null;
-    const deudaMonth = pago?.deuda_month ?? null;
-
-    const defaultFechaDeuda = deudaYear && deudaMonth ? `${deudaYear}-${String(deudaMonth).padStart(2, "0")}-01` : "";
-
-    const idRaw = pago?.id ?? row?.id ?? null;
-    const idNum = idRaw == null ? null : Number(idRaw);
-    const safeId = Number.isFinite(idNum) && idNum > 0 ? idNum : null;
+    const id = Number(pago?.id ?? row?.id ?? 0);
 
     setEditError("");
+
     setEditForm({
-      id: isVirtual ? null : safeId,
-      virtual: isVirtual,
+      id: Number.isFinite(id) && id > 0 ? id : null,
+
       create: false,
 
-      deuda_year: deudaYear,
-      deuda_month: deudaMonth,
-
       jugador_rut: row.rut,
+
+      plan_id: pago?.plan_id ? String(pago.plan_id) : "",
+
+      tarifa_id: pago?.tarifa_id ? String(pago.tarifa_id) : "",
+
+      cargo_id: pago?.cargo_id ? String(pago.cargo_id) : "",
+
       monto: pago?.monto ?? "",
-      fecha_pago: isVirtual ? defaultFechaDeuda : pago?.fecha_pago ? String(pago.fecha_pago).slice(0, 10) : "",
-      tipo_pago_id: isVirtual
-        ? String(TIPO_PAGO_MENSUALIDAD)
-        : pago?.tipo_pago?.id != null
-          ? String(pago.tipo_pago.id)
-          : "",
+
+      fecha_pago: pago?.fecha_pago ? String(pago.fecha_pago).slice(0, 10) : "",
+
+      tipo_pago_id: pago?.tipo_pago?.id != null ? String(pago.tipo_pago.id) : "",
+
       medio_pago_id: pago?.medio_pago?.id != null ? String(pago.medio_pago.id) : "",
-      situacion_pago_id: isVirtual
-        ? situacionVencidoId != null
-          ? String(situacionVencidoId)
-          : ""
-        : pago?.situacion_pago?.id != null
-          ? String(pago.situacion_pago.id)
-          : "",
+
+      situacion_pago_id: pago?.situacion_pago?.id != null ? String(pago.situacion_pago.id) : "",
+
       observaciones: pago?.observaciones ?? "",
     });
 
@@ -1077,24 +1715,37 @@ export default function ListarPagos() {
   };
 
   const openManualPago = (rut) => {
-    const r = String(rut ?? "").trim();
-    if (!r) return;
+    const value = String(rut ?? "").trim();
+
+    if (!value) {
+      return;
+    }
 
     setEditError("");
+
     setEditForm({
       id: null,
-      virtual: false,
+
       create: true,
 
-      deuda_year: null,
-      deuda_month: null,
+      jugador_rut: value,
 
-      jugador_rut: r,
+      plan_id: "",
+
+      tarifa_id: "",
+
+      cargo_id: "",
+
       monto: "",
-      fecha_pago: "",
+
+      fecha_pago: new Date().toISOString().slice(0, 10),
+
       tipo_pago_id: "",
+
       medio_pago_id: "",
+
       situacion_pago_id: String(SITUACION_PAGO_PAGADO_ID),
+
       observaciones: "",
     });
 
@@ -1102,170 +1753,294 @@ export default function ListarPagos() {
   };
 
   const closeEdit = () => {
-    if (editBusy || reloadBusy) return;
+    if (editBusy || reloadBusy) {
+      return;
+    }
+
     setEditOpen(false);
   };
+
+  /* =======================================================
+     REFRESH
+  ======================================================= */
 
   const refetchPagosActivos = useCallback(async () => {
     const headers = buildHeaders(rolActual);
 
-    const respEstado = await getWithFallback("/pagos-jugador/estado-cuenta", { headers });
-    const rawPagos = Array.isArray(respEstado?.data?.pagos) ? respEstado.data.pagos : [];
+    const response = await getWithFallback("/pagos-jugador/estado-cuenta", {
+      headers,
+    });
+
+    const rawPagos = Array.isArray(response?.data?.pagos) ? response.data.pagos : [];
 
     const rutsActivos = new Set(Array.from(jugadoresMap.keys()));
-    const rawPagosActivos = rawPagos.filter((p) => {
-      const rut = p?.jugador_rut ?? p?.rut_jugador ?? p?.rut ?? p?.jugador?.rut_jugador ?? p?.jugador?.rut;
+
+    const rawPagosActivos = rawPagos.filter((pago) => {
+      const rut =
+        pago?.jugador_rut ?? pago?.rut_jugador ?? pago?.rut ?? pago?.jugador?.rut_jugador ?? pago?.jugador?.rut;
+
       return rut != null && rutsActivos.has(String(rut));
     });
 
-    const pagosNorm = normalizePagos(rawPagosActivos, {
-      tipoPagoMap,
-      medioPagoMap,
-      situacionPagoMap,
-      jugadoresMap,
-    });
-
-    setPagos(pagosNorm);
-  }, [jugadoresMap, tipoPagoMap, medioPagoMap, situacionPagoMap, rolActual]);
+    setPagos(
+      normalizePagos(rawPagosActivos, {
+        tipoPagoMap,
+        medioPagoMap,
+        situacionPagoMap,
+        jugadoresMap,
+        cargosMap,
+        planesMap,
+        tarifasMap,
+      })
+    );
+  }, [jugadoresMap, tipoPagoMap, medioPagoMap, situacionPagoMap, cargosMap, planesMap, tarifasMap, rolActual]);
 
   const showSuccessAndReload = useCallback(
-    async (msg) => {
-      setSuccessMsg(msg);
+    async (message) => {
+      setSuccessMsg(message);
+
       setSuccessOpen(true);
-      await new Promise((r) => setTimeout(r, 900));
+
+      await new Promise((resolve) => setTimeout(resolve, 900));
+
       setSuccessOpen(false);
 
       setReloadBusy(true);
+
       setIsLoading(true);
 
       try {
         await refetchPagosActivos();
       } finally {
         setIsLoading(false);
+
         setReloadBusy(false);
       }
     },
     [refetchPagosActivos]
   );
 
-  const submitEdit = async (e) => {
-    e.preventDefault();
+  /* =======================================================
+     GUARDAR
+  ======================================================= */
+
+  const submitEdit = async (event) => {
+    event.preventDefault();
 
     if (!editForm.jugador_rut) {
-      setEditError("RUT inválido");
+      setEditError("RUT inválido.");
+
       return;
     }
 
-    const isVirtual = Boolean(editForm.virtual);
     const isCreate = Boolean(editForm.create);
+
+    if (isCreate && !editForm.plan_id) {
+      setEditError("Selecciona el plan asociado al jugador.");
+
+      return;
+    }
+
+    if (isCreate && !editForm.tarifa_id) {
+      setEditError("Selecciona una tarifa.");
+
+      return;
+    }
+
+    const monto = Number(editForm.monto);
+
+    if (!Number.isFinite(monto) || monto <= 0) {
+      setEditError("El monto debe ser mayor a 0.");
+
+      return;
+    }
+
+    if (!editForm.fecha_pago) {
+      setEditError("La fecha de pago es obligatoria.");
+
+      return;
+    }
+
+    if (!editForm.medio_pago_id) {
+      setEditError("Seleccione medio de pago.");
+
+      return;
+    }
+
+    if (!editForm.tipo_pago_id) {
+      setEditError("La tarifa seleccionada no tiene un tipo de pago válido.");
+
+      return;
+    }
+
+    if (!editForm.situacion_pago_id) {
+      setEditError("Seleccione situación.");
+
+      return;
+    }
 
     const payload = {
       jugador_rut: editForm.jugador_rut,
-      monto: Number(editForm.monto),
+
+      ...(editForm.cargo_id
+        ? {
+            cargo_id: Number(editForm.cargo_id),
+          }
+        : {}),
+
+      monto,
+
       fecha_pago: editForm.fecha_pago,
-      tipo_pago_id: isVirtual ? TIPO_PAGO_MENSUALIDAD : Number(editForm.tipo_pago_id),
+
+      tipo_pago_id: Number(editForm.tipo_pago_id),
+
       medio_pago_id: Number(editForm.medio_pago_id),
-      // 👇 tu comportamiento actual: virtual se guarda como PAGADO
-      situacion_pago_id: isVirtual ? SITUACION_PAGO_PAGADO_ID : Number(editForm.situacion_pago_id),
+
+      situacion_pago_id: Number(editForm.situacion_pago_id),
+
       observaciones: editForm.observaciones ?? "",
     };
 
-    if (!payload.monto || Number(payload.monto) <= 0) return setEditError("El monto debe ser mayor a 0");
-    if (!payload.fecha_pago) return setEditError("La fecha de pago es obligatoria");
-    if (!payload.medio_pago_id) return setEditError("Seleccione medio de pago");
-    if (!payload.tipo_pago_id) return setEditError("Seleccione tipo de pago");
-    if (!payload.situacion_pago_id) return setEditError("Seleccione situación");
-
     setEditBusy(true);
+
     setEditError("");
 
     const headers = buildHeaders(rolActual);
 
     try {
-      if (isVirtual || isCreate) {
-        await postWithFallback("/pagos-jugador", payload, { headers });
+      if (isCreate) {
+        await postWithFallback("/pagos-jugador", payload, {
+          headers,
+        });
+
         setEditOpen(false);
-        await showSuccessAndReload("Pago completado");
+
+        await showSuccessAndReload("Pago registrado correctamente");
+
         return;
       }
 
-      const idNum = Number(editForm.id);
-      if (!Number.isFinite(idNum) || idNum <= 0) {
-        setEditError("ID de pago inválido");
+      const id = Number(editForm.id);
+
+      if (!Number.isFinite(id) || id <= 0) {
+        setEditError("ID de pago inválido.");
+
         return;
       }
 
-      await putWithFallback(`/pagos-jugador/${idNum}`, payload, { headers });
+      await putWithFallback(`/pagos-jugador/${id}`, payload, {
+        headers,
+      });
 
-      setPagos((prev) =>
-        prev.map((p) => {
-          const pid = Number(p?.id);
-          if (!Number.isFinite(pid) || pid !== idNum) return p;
+      setPagos((previous) =>
+        previous.map((pago) => {
+          if (Number(pago?.id) !== id) {
+            return pago;
+          }
 
           return {
-            ...p,
-            id: idNum,
-            monto: Number(payload.monto),
+            ...pago,
+
+            monto,
+
             fecha_pago: payload.fecha_pago,
+
+            cargo_id: payload.cargo_id ?? pago.cargo_id,
+
             tipo_pago: {
-              id: Number(payload.tipo_pago_id),
-              nombre: tipoPagoMap.get(String(payload.tipo_pago_id)) ?? p.tipo_pago?.nombre,
+              id: payload.tipo_pago_id,
+
+              nombre: tipoPagoMap.get(String(payload.tipo_pago_id)) ?? pago.tipo_pago?.nombre,
             },
+
             medio_pago: {
-              id: Number(payload.medio_pago_id),
-              nombre: medioPagoMap.get(String(payload.medio_pago_id)) ?? p.medio_pago?.nombre,
+              id: payload.medio_pago_id,
+
+              nombre: medioPagoMap.get(String(payload.medio_pago_id)) ?? pago.medio_pago?.nombre,
             },
+
             situacion_pago: {
-              id: Number(payload.situacion_pago_id),
-              nombre: situacionPagoMap.get(String(payload.situacion_pago_id)) ?? p.situacion_pago?.nombre,
+              id: payload.situacion_pago_id,
+
+              nombre: situacionPagoMap.get(String(payload.situacion_pago_id)) ?? pago.situacion_pago?.nombre,
             },
-            observaciones: payload.observaciones ?? "",
+
+            observaciones: payload.observaciones,
           };
         })
       );
 
       setEditOpen(false);
+
       await showSuccessAndReload("Registro actualizado");
-    } catch (err) {
-      const st = err?.status ?? err?.response?.status;
-      if (st === 401 || st === 403) {
+    } catch (errorSubmit) {
+      const status = errorSubmit?.status ?? errorSubmit?.response?.status;
+
+      if (status === 401 || status === 403) {
         clearToken();
-        navigate("/login", { replace: true });
+
+        navigate("/login", {
+          replace: true,
+        });
+
         return;
       }
-      setEditError(err?.response?.data?.message || err?.message || "No se pudo guardar el pago");
+
+      setEditError(errorSubmit?.response?.data?.message ?? errorSubmit?.message ?? "No se pudo guardar el pago.");
     } finally {
       setEditBusy(false);
     }
   };
 
+  /* =======================================================
+     ELIMINAR
+  ======================================================= */
+
   const removePago = async (row) => {
     const pago = row?.pago;
-    if (!pago || !pago.id || row?.virtual) return;
 
-    const ok = window.confirm(`¿Eliminar el pago #${pago.id}? Esta acción es irreversible.`);
-    if (!ok) return;
+    if (!pago || !pago.id) {
+      return;
+    }
+
+    const confirmed = window.confirm(`¿Eliminar el pago #${pago.id}? Esta acción es irreversible.`);
+
+    if (!confirmed) {
+      return;
+    }
 
     const headers = buildHeaders(rolActual);
 
     try {
-      await deleteWithFallback(`/pagos-jugador/${pago.id}`, { headers });
-      setPagos((prev) => prev.filter((p) => Number(p.id) !== Number(pago.id)));
-    } catch (err) {
-      const st = err?.status ?? err?.response?.status;
-      if (st === 401 || st === 403) {
+      await deleteWithFallback(`/pagos-jugador/${pago.id}`, {
+        headers,
+      });
+
+      setPagos((previous) => previous.filter((item) => Number(item.id) !== Number(pago.id)));
+    } catch (errorDelete) {
+      const status = errorDelete?.status ?? errorDelete?.response?.status;
+
+      if (status === 401 || status === 403) {
         clearToken();
-        navigate("/login", { replace: true });
+
+        navigate("/login", {
+          replace: true,
+        });
+
         return;
       }
-      alert(err?.message || "No se pudo eliminar el pago");
+
+      alert(errorDelete?.message ?? "No se pudo eliminar el pago");
     }
   };
 
-  /* ─────────────────────────────
-     Render
-  ───────────────────────────── */
-  if (isLoading) return <IsLoading />;
+  /* =======================================================
+     LOADING
+  ======================================================= */
+
+  if (isLoading) {
+    return <IsLoading />;
+  }
 
   if (error && !pagos.length) {
     return (
@@ -1275,499 +2050,963 @@ export default function ListarPagos() {
     );
   }
 
+  /* =======================================================
+     RENDER
+  ======================================================= */
+
   return (
     <div className={ui.page}>
-      {/* Header */}
-      <header className="max-w-6xl mx-auto">
-        <div className="text-center">
-          <h1 className={`text-xl sm:text-2xl font-extrabold tracking-tightish ${ui.title}`}>Pagos Centralizados</h1>
-          <p className={`text-[11px] sm:text-xs mt-1 ${ui.subtitle}`}>
-            Vista consolidada de pagos de jugadores <span className="font-semibold">ACTIVOS</span>. Se agregan filas
-            virtuales de <span className="font-semibold">Mensualidad VENCIDA</span> cuando falta el registro.
-          </p>
-        </div>
-      </header>
+      <div className={ui.content}>
+        {/* =================================================
+            HEADER
+        ================================================= */}
 
-      <main className="mt-4">
-        {!!error && (
-          <div className="max-w-6xl mx-auto mb-3">
-            <div className={ui.warnBox}>{error}</div>
-          </div>
-        )}
+        <header className="w-full">
+          <div className="text-center">
+            <h1 className={`text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tightish ${ui.title}`}>
+              Pagos Centralizados
+            </h1>
 
-        {/* Filtros pagos */}
-        <div className={`${ui.card} ${ui.cardPad}`}>
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h3 className={`text-sm font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}>Filtros</h3>
-            <span className={ui.badge}>
-              Filtrados: {filasFiltradas.length} · Página: {page}/{totalPages}
-            </span>
-          </div>
-
-          <div className="mt-3" style={{ height: 1, background: ui.line }} />
-
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 items-end w-full">
-            <input
-              type="text"
-              placeholder="Buscar por RUT, nombre (o categoría)"
-              value={filtroTexto}
-              onChange={(e) => setFiltroTexto(e.target.value)}
-              className={ui.controlBase}
-            />
-
-            <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className={ui.controlBase}>
-              <option value="">Estado (todos)</option>
-              <option value="PAGADO">PAGADO</option>
-              <option value="VENCIDO">VENCIDO</option>
-            </select>
-
-            <select
-              value={filtroTipoPago}
-              onChange={(e) => setFiltroTipoPago(e.target.value)}
-              className={ui.controlBase}
-            >
-              <option value="">Tipo de pago (todos)</option>
-              {opcionesTipoPago.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={filtroMedioPago}
-              onChange={(e) => setFiltroMedioPago(e.target.value)}
-              className={ui.controlBase}
-            >
-              <option value="">Medio de pago (todos)</option>
-              {opcionesMedioPago.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Tabla pagos */}
-        <div className={`${ui.card} ${ui.cardPad} mt-4`}>
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h3 className={`text-sm font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}>Tabla de Pagos</h3>
-            <span className={ui.badge}>
-              Mostrando {pageData.length} de {filasFiltradas.length}
-            </span>
-          </div>
-
-          <div className="mt-3" style={{ height: 1, background: ui.line }} />
-
-          <div className={`mt-3 ${ui.tableWrap}`}>
-            <table className={ui.table}>
-              <thead className={ui.thead}>
-                <tr>
-                  <th className={`${ui.thBase} min-w-[110px]`} style={{ ...ui.headBorderStyle, borderLeft: ui.border }}>
-                    RUT
-                  </th>
-                  <th className={`${ui.thBase} min-w-[220px]`} style={ui.headBorderStyle}>
-                    Nombre
-                  </th>
-                  {/* ✅ CATEGORÍA ELIMINADA */}
-                  <th className={`${ui.thBase} min-w-[190px]`} style={ui.headBorderStyle}>
-                    Tipo
-                  </th>
-                  <th className={`${ui.thBase} min-w-[130px]`} style={ui.headBorderStyle}>
-                    Estado
-                  </th>
-                  <th className={`${ui.thBase} min-w-[110px]`} style={ui.headBorderStyle}>
-                    Fecha
-                  </th>
-                  <th className={`${ui.thBase} min-w-[110px]`} style={ui.headBorderStyle}>
-                    Monto
-                  </th>
-                  <th className={`${ui.thBase} min-w-[150px]`} style={ui.headBorderStyle}>
-                    Medio
-                  </th>
-                  <th className={`${ui.thBase} min-w-[96px]`} style={{ ...ui.headBorderStyle, borderRight: ui.border }}>
-                    Acción
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {pageData.map((row) => {
-                  const pago = row.pago;
-                  return (
-                    <tr key={row.key} className={ui.tr}>
-                      <td className={ui.tdBase} style={{ ...ui.cellBorderStyle, borderLeft: ui.border }}>
-                        {row.rut ? formatRutWithDV(row.rut) : "—"}
-                      </td>
-
-                      <td className={`${ui.tdBase} break-all`} style={ui.cellBorderStyle}>
-                        {row.nombre}
-                      </td>
-
-                      <td className={`${ui.tdBase} break-all`} style={ui.cellBorderStyle}>
-                        {pago?.tipo_pago?.nombre ?? "—"}
-                      </td>
-
-                      <td className={ui.tdBase} style={ui.cellBorderStyle}>
-                        <span
-                          className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${ui.pill(
-                            row.estado
-                          )}`}
-                        >
-                          {row.estado}
-                        </span>
-                      </td>
-
-                      <td className={ui.tdBase} style={ui.cellBorderStyle}>
-                        {pago?.fecha_pago ? new Date(pago.fecha_pago).toLocaleDateString("es-CL") : "—"}
-                      </td>
-
-                      <td className={ui.tdBase} style={ui.cellBorderStyle}>
-                        {pago ? toCLP(pago.monto) : "—"}
-                      </td>
-
-                      <td className={`${ui.tdBase} break-all`} style={ui.cellBorderStyle}>
-                        {pago?.medio_pago?.nombre ?? "—"}
-                      </td>
-
-                      <td className={ui.tdBase} style={{ ...ui.cellBorderStyle, borderRight: ui.border }}>
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            onClick={() => openEdit(row)}
-                            className="p-0.5 rounded hover:bg-white/10 disabled:opacity-50"
-                            title={row.virtual ? "Registrar pago de mensualidad" : "Editar pago"}
-                            disabled={reloadBusy}
-                          >
-                            <Pencil size={16} />
-                          </button>
-
-                          <button
-                            onClick={() => removePago(row)}
-                            className="p-0.5 rounded hover:bg-white/10 disabled:opacity-50"
-                            title={row.virtual ? "No se puede eliminar (fila virtual)" : "Eliminar pago"}
-                            disabled={reloadBusy || row.virtual || !pago?.id}
-                          >
-                            <Trash2 size={16} color="#ff6b6b" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-
-                {pageData.length === 0 && (
-                  <tr>
-                    <td
-                      className={ui.tdBase}
-                      style={{ ...ui.cellBorderStyle, borderLeft: ui.border, borderRight: ui.border }}
-                      colSpan={8}
-                    >
-                      No hay registros que coincidan con los filtros.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Paginación pagos */}
-          <div className="mt-4 flex flex-col items-center justify-center gap-2">
-            <div className="flex items-center justify-center gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={reloadBusy || page <= 1}
-                className={ui.btnSecondary}
-              >
-                Anterior
-              </button>
-
-              <span className={ui.badge}>
-                Página{" "}
-                <span style={{ color: PALETTE.sand }} className="font-extrabold">
-                  {page}
-                </span>{" "}
-                de <span className="font-extrabold">{totalPages}</span>
-              </span>
-
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={reloadBusy || page >= totalPages}
-                className={ui.btnSecondary}
-              >
-                Siguiente
-              </button>
-            </div>
-
-            <div className={`text-[11px] ${ui.subtitle}`}>
-              Mostrando <span className="font-semibold">{pageData.length}</span> de{" "}
-              <span className="font-semibold">{filasFiltradas.length}</span> pagos filtrados.
-            </div>
-          </div>
-        </div>
-
-        {/* ─────────────────────────────
-            INGRESAR PAGOS MANUALES
-          ───────────────────────────── */}
-        <div className={`${ui.card} ${ui.cardPad} mt-6`}>
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h3 className={`text-sm font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}>
-              Ingresar Pagos Manuales
-            </h3>
-            <span className={ui.badge}>Jugadores activos: {jugadoresManualRows.length}</span>
-          </div>
-
-          <div className="mt-1">
-            <p className={`text-[11px] ${ui.subtitle} text-center sm:text-left`}>
-              Se listan <span className="font-semibold">solo jugadores activos</span> (estado_id = 1).
+            <p className={`text-[11px] sm:text-xs mt-1 ${ui.subtitle}`}>
+              Vista consolidada de pagos reales registrados para jugadores{" "}
+              <span className="font-semibold">ACTIVOS</span>. Los planes, tarifas y cargos provienen del modelo
+              financiero de WELI.
             </p>
           </div>
+        </header>
 
-          <div className="mt-3" style={{ height: 1, background: ui.line }} />
-
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2.5 items-end">
-            <input
-              type="text"
-              placeholder="Buscar por RUT, nombre, categoría o sucursal"
-              value={manualFiltro}
-              onChange={(e) => setManualFiltro(e.target.value)}
-              className={ui.controlBase}
-            />
-            <div className={`text-[11px] ${ui.subtitle} md:text-right`}>
-              Página {manualPage}/{manualTotalPages}
+        <main className="mt-4 w-full">
+          {!!error && (
+            <div className="w-full mb-3">
+              <div className={ui.warnBox}>{error}</div>
             </div>
-          </div>
+          )}
 
-          <div className={`mt-3 ${ui.tableWrap}`}>
-            <table className={ui.table}>
-              <thead className={ui.thead}>
-                <tr>
-                  <th className={`${ui.thBase} min-w-[110px]`} style={{ ...ui.headBorderStyle, borderLeft: ui.border }}>
-                    RUT
-                  </th>
-                  <th className={`${ui.thBase} min-w-[260px]`} style={ui.headBorderStyle}>
-                    Nombre
-                  </th>
-                  <th className={`${ui.thBase} min-w-[150px]`} style={ui.headBorderStyle}>
-                    Categoría
-                  </th>
-                  <th className={`${ui.thBase} min-w-[150px]`} style={ui.headBorderStyle}>
-                    Sucursal
-                  </th>
-                  <th
-                    className={`${ui.thBase} min-w-[150px]`}
-                    style={{ ...ui.headBorderStyle, borderRight: ui.border }}
-                  >
-                    Acción
-                  </th>
-                </tr>
-              </thead>
+          {/* =================================================
+              FILTROS
+          ================================================= */}
 
-              <tbody>
-                {manualPageData.map((j) => (
-                  <tr key={`MANUAL-${j.rut}`} className={ui.tr}>
-                    <td className={ui.tdBase} style={{ ...ui.cellBorderStyle, borderLeft: ui.border }}>
-                      {formatRutWithDV(j.rut)}
-                    </td>
-                    <td className={`${ui.tdBase} break-all`} style={ui.cellBorderStyle}>
-                      {j.nombre}
-                    </td>
-                    <td className={`${ui.tdBase} break-all`} style={ui.cellBorderStyle}>
-                      {j.categoria}
-                    </td>
-                    <td className={`${ui.tdBase} break-all`} style={ui.cellBorderStyle}>
-                      {j.sucursal}
-                    </td>
-                    <td className={ui.tdBase} style={{ ...ui.cellBorderStyle, borderRight: ui.border }}>
-                      <button
-                        onClick={() => openManualPago(j.rut)}
-                        disabled={reloadBusy}
-                        className={ui.btnPrimary}
-                        style={ui.btnPrimaryStyle}
-                        title="Ingresar pago manual"
-                      >
-                        <CreditCard size={14} />
-                        Ingresar pago
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-
-                {manualPageData.length === 0 && (
-                  <tr>
-                    <td
-                      className={ui.tdBase}
-                      style={{ ...ui.cellBorderStyle, borderLeft: ui.border, borderRight: ui.border }}
-                      colSpan={5}
-                    >
-                      No hay jugadores que coincidan con el filtro.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* paginación manual */}
-          <div className="mt-4 flex flex-col items-center justify-center gap-2">
-            <div className="flex items-center justify-center gap-2">
-              <button
-                onClick={() => setManualPage((p) => Math.max(1, p - 1))}
-                disabled={reloadBusy || manualPage <= 1}
-                className={ui.btnSecondary}
-              >
-                Anterior
-              </button>
+          <div className={`${ui.card} ${ui.cardPad}`}>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <h3 className={`text-sm font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}>Filtros</h3>
 
               <span className={ui.badge}>
-                Página{" "}
-                <span style={{ color: PALETTE.sand }} className="font-extrabold">
-                  {manualPage}
-                </span>{" "}
-                de <span className="font-extrabold">{manualTotalPages}</span>
+                Filtrados: {filasFiltradas.length}
+                {" · "}
+                Página: {page}/{totalPages}
               </span>
-
-              <button
-                onClick={() => setManualPage((p) => Math.min(manualTotalPages, p + 1))}
-                disabled={reloadBusy || manualPage >= manualTotalPages}
-                className={ui.btnSecondary}
-              >
-                Siguiente
-              </button>
             </div>
 
-            <div className={`text-[11px] ${ui.subtitle}`}>
-              Mostrando <span className="font-semibold">{manualPageData.length}</span> de{" "}
-              <span className="font-semibold">{jugadoresManualRows.length}</span> jugadores filtrados.
+            <div
+              className="mt-3"
+              style={{
+                height: 1,
+
+                background: ui.line,
+              }}
+            />
+
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5 w-full">
+              <input
+                type="text"
+                placeholder="Buscar por RUT, nombre, categoría, plan o tarifa"
+                value={filtroTexto}
+                onChange={(event) => setFiltroTexto(event.target.value)}
+                className={ui.controlBase}
+              />
+
+              <select
+                value={filtroEstado}
+                onChange={(event) => setFiltroEstado(event.target.value)}
+                className={ui.controlBase}
+              >
+                <option value="">Estado (todos)</option>
+
+                <option value="PAGADO">PAGADO</option>
+
+                <option value="VENCIDO">VENCIDO</option>
+              </select>
+
+              <select
+                value={filtroTipoPago}
+                onChange={(event) => setFiltroTipoPago(event.target.value)}
+                className={ui.controlBase}
+              >
+                <option value="">Tipo de pago (todos)</option>
+
+                {opcionesTipoPago.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={filtroMedioPago}
+                onChange={(event) => setFiltroMedioPago(event.target.value)}
+                className={ui.controlBase}
+              >
+                <option value="">Medio de pago (todos)</option>
+
+                {opcionesMedioPago.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
-        </div>
-      </main>
 
-      {/* Modal Edición / Registro */}
-      {editOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-3">
-          <div className={ui.modalCard}>
+          {/* =================================================
+              PAGOS
+          ================================================= */}
+
+          <div className={`${ui.card} ${ui.cardPad} mt-4`}>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <h3 className={`text-sm font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}>Tabla de Pagos</h3>
+
+              <span className={ui.badge}>
+                Mostrando {pageData.length}
+                {" de "}
+                {filasFiltradas.length}
+              </span>
+            </div>
+
             <div
-              className={`px-4 py-3 border-b flex items-center justify-between gap-3 ${
-                darkMode ? "border-white/10" : "border-ra-marron/10"
-              }`}
-            >
-              <h3 className={`text-[13px] font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}>
-                {editForm.virtual
-                  ? `Registrar mensualidad vencida (${monthLabelEs(editForm.deuda_year, editForm.deuda_month)}) - ${formatRutWithDV(
-                      editForm.jugador_rut
-                    )}`
-                  : editForm.create
-                    ? `Ingresar pago manual - ${formatRutWithDV(editForm.jugador_rut)}`
-                    : `Editar pago #${editForm.id}`}
+              className="mt-3"
+              style={{
+                height: 1,
+
+                background: ui.line,
+              }}
+            />
+
+            {/* ===============================================
+                DESKTOP XL
+
+                SIN SCROLL HORIZONTAL
+            =============================================== */}
+
+            <div className="hidden xl:block mt-3 w-full">
+              <table className={ui.table}>
+                <thead className={ui.thead}>
+                  <tr>
+                    <th
+                      className={`${ui.thBase} w-[9%]`}
+                      style={{
+                        ...ui.headBorderStyle,
+                        borderLeft: ui.border,
+                      }}
+                    >
+                      RUT
+                    </th>
+
+                    <th className={`${ui.thBase} w-[15%]`} style={ui.headBorderStyle}>
+                      Nombre
+                    </th>
+
+                    <th className={`${ui.thBase} w-[11%]`} style={ui.headBorderStyle}>
+                      Plan
+                    </th>
+
+                    <th className={`${ui.thBase} w-[12%]`} style={ui.headBorderStyle}>
+                      Tarifa
+                    </th>
+
+                    <th className={`${ui.thBase} w-[10%]`} style={ui.headBorderStyle}>
+                      Tipo
+                    </th>
+
+                    <th className={`${ui.thBase} w-[8%]`} style={ui.headBorderStyle}>
+                      Estado
+                    </th>
+
+                    <th className={`${ui.thBase} w-[9%]`} style={ui.headBorderStyle}>
+                      Fecha
+                    </th>
+
+                    <th className={`${ui.thBase} w-[9%]`} style={ui.headBorderStyle}>
+                      Monto
+                    </th>
+
+                    <th className={`${ui.thBase} w-[11%]`} style={ui.headBorderStyle}>
+                      Medio
+                    </th>
+
+                    <th
+                      className={`${ui.thBase} w-[6%]`}
+                      style={{
+                        ...ui.headBorderStyle,
+                        borderRight: ui.border,
+                      }}
+                    >
+                      Acción
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {pageData.map((row) => {
+                    const pago = row.pago;
+
+                    return (
+                      <tr key={row.key} className={ui.tr}>
+                        <td
+                          className={ui.tdBase}
+                          style={{
+                            ...ui.cellBorderStyle,
+
+                            borderLeft: ui.border,
+                          }}
+                        >
+                          {row.rut ? formatRutWithDV(row.rut) : "—"}
+                        </td>
+
+                        <td className={ui.tdBase} style={ui.cellBorderStyle}>
+                          {row.nombre}
+                        </td>
+
+                        <td className={ui.tdBase} style={ui.cellBorderStyle}>
+                          {pago?.plan?.nombre ?? "—"}
+                        </td>
+
+                        <td className={ui.tdBase} style={ui.cellBorderStyle}>
+                          {pago?.tarifa?.nombre ?? "—"}
+                        </td>
+
+                        <td className={ui.tdBase} style={ui.cellBorderStyle}>
+                          {pago?.tipo_pago?.nombre ?? "—"}
+                        </td>
+
+                        <td className={ui.tdBase} style={ui.cellBorderStyle}>
+                          <span
+                            className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold ${ui.pill(
+                              row.estado
+                            )}`}
+                          >
+                            {row.estado}
+                          </span>
+                        </td>
+
+                        <td className={ui.tdBase} style={ui.cellBorderStyle}>
+                          {pago?.fecha_pago ? new Date(pago.fecha_pago).toLocaleDateString("es-CL") : "—"}
+                        </td>
+
+                        <td className={ui.tdBase} style={ui.cellBorderStyle}>
+                          {toCLP(pago?.monto)}
+                        </td>
+
+                        <td className={ui.tdBase} style={ui.cellBorderStyle}>
+                          {pago?.medio_pago?.nombre ?? "—"}
+                        </td>
+
+                        <td
+                          className={ui.tdBase}
+                          style={{
+                            ...ui.cellBorderStyle,
+
+                            borderRight: ui.border,
+                          }}
+                        >
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => openEdit(row)}
+                              className="p-1 rounded hover:bg-white/10 disabled:opacity-50"
+                              title="Editar pago"
+                              disabled={reloadBusy}
+                            >
+                              <Pencil size={15} />
+                            </button>
+
+                            <button
+                              onClick={() => removePago(row)}
+                              className="p-1 rounded hover:bg-white/10 disabled:opacity-50"
+                              title="Eliminar pago"
+                              disabled={reloadBusy || !pago?.id}
+                            >
+                              <Trash2 size={15} color="#ff6b6b" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {pageData.length === 0 && (
+                    <tr>
+                      <td
+                        className={ui.tdBase}
+                        style={{
+                          ...ui.cellBorderStyle,
+
+                          borderLeft: ui.border,
+
+                          borderRight: ui.border,
+                        }}
+                        colSpan={10}
+                      >
+                        No hay registros que coincidan con los filtros.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ===============================================
+                MOBILE / TABLET
+
+                CARDS EN VEZ DE TABLA.
+                NO EXISTE SCROLL HORIZONTAL.
+            =============================================== */}
+
+            <div className="xl:hidden mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+              {pageData.map((row) => {
+                const pago = row.pago;
+
+                return (
+                  <article key={`MOBILE-${row.key}`} className={ui.mobileCard}>
+                    {/* encabezado */}
+
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className={ui.mobileLabel}>Jugador</div>
+
+                        <div className={`${ui.mobileValue} text-[14px]`}>{row.nombre}</div>
+
+                        <div className={`mt-0.5 text-[11px] ${ui.subtitle}`}>
+                          {row.rut ? formatRutWithDV(row.rut) : "—"}
+                        </div>
+                      </div>
+
+                      <span
+                        className={`shrink-0 inline-flex items-center justify-center px-2 py-1 rounded-full text-[10px] font-semibold ${ui.pill(
+                          row.estado
+                        )}`}
+                      >
+                        {row.estado}
+                      </span>
+                    </div>
+
+                    <div
+                      className="my-3"
+                      style={{
+                        height: 1,
+
+                        background: ui.line,
+                      }}
+                    />
+
+                    {/* datos principales */}
+
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-3">
+                      <div>
+                        <div className={ui.mobileLabel}>Plan</div>
+
+                        <div className={ui.mobileValue}>{pago?.plan?.nombre ?? "—"}</div>
+                      </div>
+
+                      <div>
+                        <div className={ui.mobileLabel}>Tarifa</div>
+
+                        <div className={ui.mobileValue}>{pago?.tarifa?.nombre ?? "—"}</div>
+                      </div>
+
+                      <div>
+                        <div className={ui.mobileLabel}>Tipo</div>
+
+                        <div className={ui.mobileValue}>{pago?.tipo_pago?.nombre ?? "—"}</div>
+                      </div>
+
+                      <div>
+                        <div className={ui.mobileLabel}>Medio</div>
+
+                        <div className={ui.mobileValue}>{pago?.medio_pago?.nombre ?? "—"}</div>
+                      </div>
+
+                      <div>
+                        <div className={ui.mobileLabel}>Fecha</div>
+
+                        <div className={ui.mobileValue}>
+                          {pago?.fecha_pago ? new Date(pago.fecha_pago).toLocaleDateString("es-CL") : "—"}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className={ui.mobileLabel}>Monto</div>
+
+                        <div className={`${ui.mobileValue} font-extrabold`}>{toCLP(pago?.monto)}</div>
+                      </div>
+                    </div>
+
+                    {/* acciones */}
+
+                    <div
+                      className="mt-3 pt-3 flex gap-2"
+                      style={{
+                        borderTop: ui.border,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => openEdit(row)}
+                        disabled={reloadBusy}
+                        className={`${ui.btnSecondary} flex-1 inline-flex items-center justify-center gap-2`}
+                      >
+                        <Pencil size={15} />
+                        Editar
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => removePago(row)}
+                        disabled={reloadBusy || !pago?.id}
+                        className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-red-400/30 bg-red-500/10 text-red-500 font-semibold text-[12px] transition hover:bg-red-500/15 disabled:opacity-50"
+                      >
+                        <Trash2 size={15} />
+                        Eliminar
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+
+              {pageData.length === 0 && (
+                <div className={`${ui.mobileCard} md:col-span-2 text-center ${ui.subtitle}`}>
+                  No hay registros que coincidan con los filtros.
+                </div>
+              )}
+            </div>
+
+            {/* ===============================================
+                PAGINACIÓN PAGOS
+            =============================================== */}
+
+            <div className="mt-4 flex flex-col items-center justify-center gap-2">
+              <div className="flex items-center justify-center gap-2 w-full sm:w-auto">
+                <button
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  disabled={reloadBusy || page <= 1}
+                  className={`${ui.btnSecondary} flex-1 sm:flex-none`}
+                >
+                  Anterior
+                </button>
+
+                <span className={ui.badge}>
+                  {page}/{totalPages}
+                </span>
+
+                <button
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                  disabled={reloadBusy || page >= totalPages}
+                  className={`${ui.btnSecondary} flex-1 sm:flex-none`}
+                >
+                  Siguiente
+                </button>
+              </div>
+
+              <div className={`text-[11px] ${ui.subtitle} text-center`}>
+                Mostrando <span className="font-semibold">{pageData.length}</span> de{" "}
+                <span className="font-semibold">{filasFiltradas.length}</span> pagos filtrados.
+              </div>
+            </div>
+          </div>
+
+          {/* =================================================
+              PAGOS MANUALES
+          ================================================= */}
+
+          <div className={`${ui.card} ${ui.cardPad} mt-6`}>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <h3 className={`text-sm font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}>
+                Ingresar Pagos Manuales
               </h3>
 
+              <span className={ui.badge}>Jugadores activos: {jugadoresManualRows.length}</span>
+            </div>
+
+            <p className={`mt-1 text-[11px] ${ui.subtitle}`}>
+              Selecciona un jugador y registra el pago utilizando su plan, tarifa y cargo financiero real.
+            </p>
+
+            <div
+              className="mt-3"
+              style={{
+                height: 1,
+
+                background: ui.line,
+              }}
+            />
+
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-3 items-center">
+              <input
+                type="text"
+                placeholder="Buscar por RUT, nombre, categoría o sucursal"
+                value={manualFiltro}
+                onChange={(event) => setManualFiltro(event.target.value)}
+                className={ui.controlBase}
+              />
+
+              <div className={`text-[11px] ${ui.subtitle} text-center md:text-right`}>
+                Página {manualPage}/{manualTotalPages}
+              </div>
+            </div>
+
+            {/* ===============================================
+                MANUAL DESKTOP
+            =============================================== */}
+
+            <div className="hidden lg:block mt-3 w-full">
+              <table className={ui.table}>
+                <thead className={ui.thead}>
+                  <tr>
+                    <th
+                      className={`${ui.thBase} w-[15%]`}
+                      style={{
+                        ...ui.headBorderStyle,
+
+                        borderLeft: ui.border,
+                      }}
+                    >
+                      RUT
+                    </th>
+
+                    <th className={`${ui.thBase} w-[32%]`} style={ui.headBorderStyle}>
+                      Nombre
+                    </th>
+
+                    <th className={`${ui.thBase} w-[18%]`} style={ui.headBorderStyle}>
+                      Categoría
+                    </th>
+
+                    <th className={`${ui.thBase} w-[20%]`} style={ui.headBorderStyle}>
+                      Sucursal
+                    </th>
+
+                    <th
+                      className={`${ui.thBase} w-[15%]`}
+                      style={{
+                        ...ui.headBorderStyle,
+
+                        borderRight: ui.border,
+                      }}
+                    >
+                      Acción
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {manualPageData.map((jugador) => (
+                    <tr key={`MANUAL-${jugador.rut}`} className={ui.tr}>
+                      <td
+                        className={ui.tdBase}
+                        style={{
+                          ...ui.cellBorderStyle,
+
+                          borderLeft: ui.border,
+                        }}
+                      >
+                        {formatRutWithDV(jugador.rut)}
+                      </td>
+
+                      <td className={ui.tdBase} style={ui.cellBorderStyle}>
+                        {jugador.nombre}
+                      </td>
+
+                      <td className={ui.tdBase} style={ui.cellBorderStyle}>
+                        {jugador.categoria}
+                      </td>
+
+                      <td className={ui.tdBase} style={ui.cellBorderStyle}>
+                        {jugador.sucursal}
+                      </td>
+
+                      <td
+                        className={ui.tdBase}
+                        style={{
+                          ...ui.cellBorderStyle,
+
+                          borderRight: ui.border,
+                        }}
+                      >
+                        <button
+                          onClick={() => openManualPago(jugador.rut)}
+                          disabled={reloadBusy}
+                          className={ui.btnPrimary}
+                          style={ui.btnPrimaryStyle}
+                        >
+                          <CreditCard size={14} />
+                          Ingresar pago
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ===============================================
+                MANUAL MOBILE / TABLET
+            =============================================== */}
+
+            <div className="lg:hidden mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {manualPageData.map((jugador) => (
+                <article key={`MANUAL-MOBILE-${jugador.rut}`} className={ui.mobileCard}>
+                  <div className={ui.mobileLabel}>Jugador</div>
+
+                  <div className={`${ui.mobileValue} text-[14px]`}>{jugador.nombre}</div>
+
+                  <div className={`mt-0.5 text-[11px] ${ui.subtitle}`}>{formatRutWithDV(jugador.rut)}</div>
+
+                  <div
+                    className="my-3"
+                    style={{
+                      height: 1,
+
+                      background: ui.line,
+                    }}
+                  />
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <div className={ui.mobileLabel}>Categoría</div>
+
+                      <div className={ui.mobileValue}>{jugador.categoria}</div>
+                    </div>
+
+                    <div>
+                      <div className={ui.mobileLabel}>Sucursal</div>
+
+                      <div className={ui.mobileValue}>{jugador.sucursal}</div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => openManualPago(jugador.rut)}
+                    disabled={reloadBusy}
+                    className={`${ui.btnPrimary} w-full mt-4 py-2.5`}
+                    style={ui.btnPrimaryStyle}
+                  >
+                    <CreditCard size={15} />
+                    Ingresar pago
+                  </button>
+                </article>
+              ))}
+
+              {manualPageData.length === 0 && (
+                <div className={`${ui.mobileCard} sm:col-span-2 text-center ${ui.subtitle}`}>
+                  No hay jugadores que coincidan con el filtro.
+                </div>
+              )}
+            </div>
+
+            {/* ===============================================
+                PAGINACIÓN MANUAL
+            =============================================== */}
+
+            <div className="mt-4 flex flex-col items-center justify-center gap-2">
+              <div className="flex items-center justify-center gap-2 w-full sm:w-auto">
+                <button
+                  onClick={() => setManualPage((current) => Math.max(1, current - 1))}
+                  disabled={reloadBusy || manualPage <= 1}
+                  className={`${ui.btnSecondary} flex-1 sm:flex-none`}
+                >
+                  Anterior
+                </button>
+
+                <span className={ui.badge}>
+                  {manualPage}/{manualTotalPages}
+                </span>
+
+                <button
+                  onClick={() => setManualPage((current) => Math.min(manualTotalPages, current + 1))}
+                  disabled={reloadBusy || manualPage >= manualTotalPages}
+                  className={`${ui.btnSecondary} flex-1 sm:flex-none`}
+                >
+                  Siguiente
+                </button>
+              </div>
+
+              <div className={`text-[11px] ${ui.subtitle} text-center`}>
+                Mostrando <span className="font-semibold">{manualPageData.length}</span> de{" "}
+                <span className="font-semibold">{jugadoresManualRows.length}</span> jugadores filtrados.
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      {/* =================================================
+          MODAL
+
+          SE CONSERVA LA LÓGICA Y CONTRASTE.
+      ================================================= */}
+
+      {/* =================================================
+    MODAL PAGO
+================================================= */}
+
+      {editOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-2 sm:px-3 py-2 sm:py-4">
+          <div className={`${ui.modalCard} flex flex-col max-h-[94vh] sm:max-h-[92vh]`}>
+            {/* ===========================================
+          CABECERA
+      =========================================== */}
+
+            <div
+              className={`shrink-0 px-3 sm:px-4 py-2.5 sm:py-3 border-b flex items-start justify-between gap-3 ${
+                darkMode ? "border-white/15" : "border-[#c9b18d]"
+              }`}
+            >
+              <div className="min-w-0">
+                <h3
+                  className={`text-[12px] sm:text-[14px] font-extrabold leading-tight break-words ${
+                    darkMode ? "text-white" : "text-[#3f2d18]"
+                  }`}
+                >
+                  {editForm.create
+                    ? `Ingresar pago — ${formatRutWithDV(editForm.jugador_rut)}`
+                    : `Editar pago #${editForm.id}`}
+                </h3>
+
+                {editForm.create && (
+                  <p className={`hidden sm:block ${ui.modalHelp}`}>Selecciona el plan, tarifa y datos del pago.</p>
+                )}
+              </div>
+
               <button
-                className="p-1 rounded hover:bg-white/10 disabled:opacity-50"
+                type="button"
+                className={
+                  darkMode
+                    ? "shrink-0 p-1.5 rounded text-white hover:bg-white/10 disabled:opacity-50"
+                    : "shrink-0 p-1.5 rounded text-[#3f2d18] hover:bg-[#eadbc5] disabled:opacity-50"
+                }
                 onClick={closeEdit}
                 disabled={editBusy || reloadBusy}
                 title="Cerrar"
               >
-                <X size={16} />
+                <X size={18} />
               </button>
             </div>
 
-            <div className="p-4">
+            {/* ===========================================
+          CUERPO SCROLLABLE
+
+          Solo esta zona hace scroll.
+      =========================================== */}
+
+            <div className="flex-1 overflow-y-auto overscroll-contain px-3 sm:px-4 py-3">
               {editError && <div className={`mb-2 ${ui.warnBox}`}>{editError}</div>}
 
-              <form onSubmit={submitEdit} className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                <div>
-                  <label className={`block text-[11px] mb-1 ${ui.subtitle}`}>RUT Jugador</label>
+              <form id="pago-manual-form" onSubmit={submitEdit} className="grid grid-cols-2 gap-x-2 gap-y-2 sm:gap-3">
+                {/* =====================================
+              RUT
+          ===================================== */}
+
+                <div className="col-span-1">
+                  <label className={ui.modalLabel}>RUT</label>
+
                   <input
                     type="text"
                     value={formatRutWithDV(editForm.jugador_rut)}
-                    className={ui.controlBase}
+                    className={`${ui.controlBase} !h-8 sm:!h-10 !text-[11px] sm:!text-[12px]`}
                     disabled
                   />
                 </div>
 
-                <div>
-                  <label className={`block text-[11px] mb-1 ${ui.subtitle}`}>Monto (CLP)</label>
-                  <input
-                    type="number"
-                    value={editForm.monto}
-                    onChange={(e) => setEditForm((f) => ({ ...f, monto: e.target.value }))}
-                    className={ui.controlBase}
-                    required
-                    disabled={editBusy || reloadBusy}
-                  />
-                </div>
+                {/* =====================================
+              FECHA
+          ===================================== */}
 
-                <div>
-                  <label className={`block text-[11px] mb-1 ${ui.subtitle}`}>Fecha pago</label>
+                <div className="col-span-1">
+                  <label className={ui.modalLabel}>Fecha</label>
+
                   <input
                     type="date"
                     value={editForm.fecha_pago}
-                    onChange={(e) => setEditForm((f) => ({ ...f, fecha_pago: e.target.value }))}
-                    className={ui.controlBase}
+                    onChange={(event) =>
+                      setEditForm((form) => ({
+                        ...form,
+
+                        fecha_pago: event.target.value,
+                      }))
+                    }
+                    className={`${ui.controlBase} !h-8 sm:!h-10 !text-[11px] sm:!text-[12px]`}
                     required
                     disabled={editBusy || reloadBusy}
                   />
                 </div>
 
-                <div>
-                  <label className={`block text-[11px] mb-1 ${ui.subtitle}`}>Tipo de pago</label>
-                  <select
-                    value={editForm.tipo_pago_id}
-                    onChange={(e) => setEditForm((f) => ({ ...f, tipo_pago_id: e.target.value }))}
-                    className={ui.controlBase}
-                    required
-                    disabled={editForm.virtual || editBusy || reloadBusy}
-                  >
-                    <option value="">Seleccione…</option>
-                    {Array.from(tipoPagoMap, ([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+                {/* =====================================
+              PLAN
+          ===================================== */}
+
+                <div className="col-span-2 sm:col-span-1">
+                  <label className={ui.modalLabel}>Plan</label>
+
+                  {editForm.create ? (
+                    <select
+                      value={editForm.plan_id}
+                      onChange={handlePlanChange}
+                      className={`${ui.controlBase} !h-8 sm:!h-10 !text-[11px] sm:!text-[12px]`}
+                      required
+                      disabled={editBusy || reloadBusy}
+                    >
+                      <option value="">Selecciona plan…</option>
+
+                      {planesJugador.map((plan) => (
+                        <option key={plan.id} value={plan.id}>
+                          {plan.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={
+                        editForm.plan_id
+                          ? (planesMap.get(String(editForm.plan_id))?.nombre ?? `Plan #${editForm.plan_id}`)
+                          : "Sin plan"
+                      }
+                      className={`${ui.controlBase} !h-8 sm:!h-10 !text-[11px] sm:!text-[12px]`}
+                      disabled
+                    />
+                  )}
                 </div>
 
-                <div>
-                  <label className={`block text-[11px] mb-1 ${ui.subtitle}`}>Medio de pago</label>
-                  <select
-                    value={editForm.medio_pago_id}
-                    onChange={(e) => setEditForm((f) => ({ ...f, medio_pago_id: e.target.value }))}
-                    className={ui.controlBase}
+                {/* =====================================
+              TARIFA
+          ===================================== */}
+
+                <div className="col-span-2 sm:col-span-1">
+                  <label className={ui.modalLabel}>Tarifa</label>
+
+                  {editForm.create ? (
+                    <select
+                      value={editForm.tarifa_id}
+                      onChange={handleTarifaChange}
+                      className={`${ui.controlBase} !h-8 sm:!h-10 !text-[11px] sm:!text-[12px]`}
+                      required
+                      disabled={!editForm.plan_id || editBusy || reloadBusy}
+                    >
+                      <option value="">Selecciona tarifa…</option>
+
+                      {tarifasDisponibles.map((tarifa) => (
+                        <option key={tarifa.id} value={tarifa.id}>
+                          {tarifa.nombre}
+                          {" · "}
+                          {toCLP(tarifa.monto)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={
+                        editForm.tarifa_id
+                          ? (tarifasMap.get(String(editForm.tarifa_id))?.nombre ?? `Tarifa #${editForm.tarifa_id}`)
+                          : "Sin tarifa"
+                      }
+                      className={`${ui.controlBase} !h-8 sm:!h-10 !text-[11px] sm:!text-[12px]`}
+                      disabled
+                    />
+                  )}
+                </div>
+
+                {/* =====================================
+              CARGO
+
+              Solo creación.
+          ===================================== */}
+
+                {editForm.create && (
+                  <div className="col-span-2">
+                    <label className={ui.modalLabel}>Cargo pendiente</label>
+
+                    <select
+                      value={editForm.cargo_id}
+                      onChange={handleCargoChange}
+                      className={`${ui.controlBase} !h-8 sm:!h-10 !text-[11px] sm:!text-[12px]`}
+                      disabled={!editForm.plan_id || editBusy || reloadBusy}
+                    >
+                      <option value="">Sin cargo específico</option>
+
+                      {cargosDisponibles.map((cargo) => {
+                        const monto = cargo.saldo != null ? cargo.saldo : cargo.monto_total;
+
+                        return (
+                          <option key={cargo.id} value={cargo.id}>
+                            {cargo.descripcion}
+                            {" · "}
+                            {toCLP(monto)}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
+
+                {/* =====================================
+              MONTO
+          ===================================== */}
+
+                <div className="col-span-1">
+                  <label className={ui.modalLabel}>Monto</label>
+
+                  <input
+                    type="number"
+                    min="1"
+                    value={editForm.monto}
+                    onChange={(event) =>
+                      setEditForm((form) => ({
+                        ...form,
+
+                        monto: event.target.value,
+                      }))
+                    }
+                    className={`${ui.controlBase} !h-8 sm:!h-10 !text-[11px] sm:!text-[12px]`}
                     required
                     disabled={editBusy || reloadBusy}
-                  >
-                    <option value="">Seleccione…</option>
-                    {Array.from(medioPagoMap, ([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
 
-                <div>
-                  <label className={`block text-[11px] mb-1 ${ui.subtitle}`}>Situación</label>
+                {/* =====================================
+              TIPO
+          ===================================== */}
 
-                  {editForm.virtual ? (
-                    <>
-                      <input type="text" value="VENCIDO" className={ui.controlBase} disabled />
-                      <p className={`text-[10px] mt-1 ${ui.subtitle}`}>
-                        Esta fila es <span className="font-semibold">VENCIDA</span>. Al guardar se registrará como{" "}
-                        <span className="font-semibold">PAGADO</span>.
-                      </p>
-                    </>
+                <div className="col-span-1">
+                  <label className={ui.modalLabel}>Tipo</label>
+
+                  {editForm.create ? (
+                    <input
+                      type="text"
+                      value={
+                        editForm.tipo_pago_id
+                          ? (tipoPagoMap.get(String(editForm.tipo_pago_id)) ?? `Tipo #${editForm.tipo_pago_id}`)
+                          : "Por tarifa"
+                      }
+                      className={`${ui.controlBase} !h-8 sm:!h-10 !text-[11px] sm:!text-[12px]`}
+                      disabled
+                    />
                   ) : (
                     <select
-                      value={editForm.situacion_pago_id}
-                      onChange={(e) => setEditForm((f) => ({ ...f, situacion_pago_id: e.target.value }))}
-                      className={ui.controlBase}
+                      value={editForm.tipo_pago_id}
+                      onChange={(event) =>
+                        setEditForm((form) => ({
+                          ...form,
+
+                          tipo_pago_id: event.target.value,
+                        }))
+                      }
+                      className={`${ui.controlBase} !h-8 sm:!h-10 !text-[11px] sm:!text-[12px]`}
                       required
                       disabled={editBusy || reloadBusy}
                     >
                       <option value="">Seleccione…</option>
-                      {Array.from(situacionPagoMap, ([value, label]) => (
+
+                      {Array.from(tipoPagoMap, ([value, label]) => (
                         <option key={value} value={value}>
                           {label}
                         </option>
@@ -1776,51 +3015,143 @@ export default function ListarPagos() {
                   )}
                 </div>
 
-                <div className="md:col-span-2">
-                  <label className={`block text-[11px] mb-1 ${ui.subtitle}`}>Observaciones</label>
+                {/* =====================================
+              MEDIO
+          ===================================== */}
+
+                <div className="col-span-1">
+                  <label className={ui.modalLabel}>Medio</label>
+
+                  <select
+                    value={editForm.medio_pago_id}
+                    onChange={(event) =>
+                      setEditForm((form) => ({
+                        ...form,
+
+                        medio_pago_id: event.target.value,
+                      }))
+                    }
+                    className={`${ui.controlBase} !h-8 sm:!h-10 !text-[11px] sm:!text-[12px]`}
+                    required
+                    disabled={editBusy || reloadBusy}
+                  >
+                    <option value="">Seleccione…</option>
+
+                    {Array.from(medioPagoMap, ([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* =====================================
+              SITUACIÓN
+          ===================================== */}
+
+                <div className="col-span-1">
+                  <label className={ui.modalLabel}>Situación</label>
+
+                  <select
+                    value={editForm.situacion_pago_id}
+                    onChange={(event) =>
+                      setEditForm((form) => ({
+                        ...form,
+
+                        situacion_pago_id: event.target.value,
+                      }))
+                    }
+                    className={`${ui.controlBase} !h-8 sm:!h-10 !text-[11px] sm:!text-[12px]`}
+                    required
+                    disabled={editBusy || reloadBusy}
+                  >
+                    <option value="">Seleccione…</option>
+
+                    {Array.from(situacionPagoMap, ([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* =====================================
+              OBSERVACIONES
+
+              Más compacta en móvil.
+          ===================================== */}
+
+                <div className="col-span-2">
+                  <label className={ui.modalLabel}>Observaciones</label>
+
                   <textarea
                     value={editForm.observaciones}
-                    onChange={(e) => setEditForm((f) => ({ ...f, observaciones: e.target.value }))}
-                    className={ui.controlTextArea}
+                    onChange={(event) =>
+                      setEditForm((form) => ({
+                        ...form,
+
+                        observaciones: event.target.value,
+                      }))
+                    }
+                    className={`${ui.controlTextArea} !min-h-[54px] sm:!min-h-[76px] !text-[11px] sm:!text-[12px]`}
                     placeholder="Opcional"
                     disabled={editBusy || reloadBusy}
                   />
                 </div>
-
-                <div className="md:col-span-2 flex justify-end gap-2 mt-1.5">
-                  <button
-                    type="button"
-                    onClick={closeEdit}
-                    disabled={editBusy || reloadBusy}
-                    className={ui.btnSecondary}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={editBusy || reloadBusy}
-                    className={ui.btnPrimary}
-                    style={ui.btnPrimaryStyle}
-                  >
-                    {editBusy ? "Guardando…" : "Guardar"}
-                  </button>
-                </div>
               </form>
+            </div>
+
+            {/* ===========================================
+          FOOTER FIJO
+
+          Los botones quedan siempre visibles.
+      =========================================== */}
+
+            <div
+              className={`shrink-0 px-3 sm:px-4 py-2.5 border-t ${
+                darkMode ? "border-white/15 bg-[#111827]" : "border-[#c9b18d] bg-[#fffaf2]"
+              }`}
+            >
+              <div className="grid grid-cols-2 sm:flex sm:justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeEdit}
+                  disabled={editBusy || reloadBusy}
+                  className={`${ui.btnSecondary} w-full sm:w-auto !py-2`}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  form="pago-manual-form"
+                  disabled={editBusy || reloadBusy}
+                  className={`${ui.btnPrimary} w-full sm:w-auto !py-2`}
+                  style={ui.btnPrimaryStyle}
+                >
+                  {editBusy ? "Guardando…" : editForm.create ? "Ingresar pago" : "Guardar"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal de éxito */}
+      {/* =================================================
+          ÉXITO
+      ================================================= */}
+
       {successOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/65 px-3">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-3">
           <div className={ui.modalCard}>
             <div className="p-5 text-center">
               <div className="text-3xl mb-1">✅</div>
-              <h4 className={`text-[13px] font-extrabold mb-1 ${darkMode ? "text-white" : "text-ra-marron"}`}>
+
+              <h4 className={`text-[13px] font-extrabold mb-1 ${darkMode ? "text-white" : "text-[#3f2d18]"}`}>
                 {successMsg}
               </h4>
-              <p className={`text-[11px] ${ui.subtitle}`}>Actualizando información…</p>
+
+              <p className={ui.modalHelp}>Actualizando información…</p>
             </div>
           </div>
         </div>

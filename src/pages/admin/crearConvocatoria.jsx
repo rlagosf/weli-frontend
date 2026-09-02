@@ -49,9 +49,33 @@ const jugadorKey = (jugador, index) =>
   String(jugador?.rut_jugador ?? jugador?.rut ?? jugador?.rutJugador ?? jugador?.id ?? `tmp-${index}`);
 
 const dateOnly = (value) => {
-  const date = new Date(value);
+  if (!value) {
+    return null;
+  }
 
-  if (Number.isNaN(date.getTime())) return null;
+  /*
+   * DATE puro MySQL:
+   * YYYY-MM-DD
+   *
+   * Lo construimos en horario local para evitar
+   * desplazamientos por UTC.
+   */
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-").map(Number);
+
+    const localDate = new Date(year, month - 1, day);
+
+    return Number.isNaN(localDate.getTime()) ? null : localDate;
+  }
+
+  /*
+   * DATETIME / Date / timestamp.
+   */
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
 
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 };
@@ -291,7 +315,9 @@ const getList = async (basePath, signal) => {
     try {
       const response = await api.get(url, {
         signal,
-        meta: { isPublic: false },
+        meta: {
+          isPublic: false,
+        },
       });
 
       return toArray(response);
@@ -302,19 +328,41 @@ const getList = async (basePath, signal) => {
         return [];
       }
 
-      const status = error?.response?.status ?? error?.status;
+      const status = error?.response?.status ?? error?.status ?? 0;
 
+      /*
+       * Sesión/autorización:
+       * nunca hacemos fallback.
+       */
       if (status === 401 || status === 403) {
         throw error;
       }
+
+      /*
+       * Solo tiene sentido probar la variante
+       * con/sin slash cuando la ruta no existe.
+       */
+      if (status === 404 || status === 405) {
+        continue;
+      }
+
+      /*
+       * 400, 409, 422, 500, etc.
+       * son errores reales de la API.
+       */
+      throw error;
     }
   }
 
   if (import.meta.env.DEV && lastError) {
-    console.warn(`[WELI GET] No se pudo cargar ${basePath}`);
+    console.warn(`[WELI GET] No se pudo cargar ${basePath}`, {
+      status: lastError?.response?.status ?? lastError?.status,
+
+      message: lastError?.response?.data?.message ?? lastError?.message,
+    });
   }
 
-  return [];
+  throw lastError ?? new Error(`No se pudo cargar ${basePath}`);
 };
 
 /* =========================================================
@@ -329,24 +377,53 @@ const postWithFallback = async (path, body) => {
   for (const url of urls) {
     try {
       return await api.post(url, body, {
-        meta: { isPublic: false },
+        meta: {
+          isPublic: false,
+        },
       });
     } catch (error) {
       lastError = error;
 
-      const status = error?.response?.status ?? error?.status;
+      const status = error?.response?.status ?? error?.status ?? 0;
 
       /*
-       * Nunca hacemos fallback ante errores
-       * de autenticación/autorización.
+       * 401:
+       * error de sesión.
+       *
+       * 403:
+       * usuario autenticado pero sin permiso.
+       *
+       * Ninguno debe generar un segundo POST.
        */
       if (status === 401 || status === 403) {
         throw error;
       }
+
+      /*
+       * Solo probamos la variante de URL
+       * cuando Fastify informa que la ruta
+       * no existe o no acepta el método.
+       */
+      if (status === 404 || status === 405) {
+        continue;
+      }
+
+      /*
+       * No repetir POST ante:
+       *
+       * 400
+       * 409
+       * 422
+       * 500
+       * errores de red
+       * timeout
+       * etc.
+       */
+      throw error;
     }
   }
 
-  throw lastError ?? new Error("POST failed");
+  throw lastError ?? new Error(`No se pudo ejecutar POST ${path}`);
 };
 
 /* =========================================================

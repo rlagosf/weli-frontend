@@ -352,11 +352,20 @@ const isExpired = (decoded) => {
 };
 
 const extractRol = (decoded) => {
-  const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
+  const rawRol = decoded?.rol_id ?? decoded?.user?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol ?? 0;
+
   const parsed = Number(rawRol);
-  return Number.isFinite(parsed) ? parsed : 0;
+
+  return Number.isInteger(parsed) && [1, 2, 3].includes(parsed) ? parsed : 0;
 };
 
+const extractTokenAcademiaId = (decoded) => {
+  const academiaId = Number(decoded?.academia_id ?? decoded?.user?.academia_id ?? 0);
+
+  return Number.isInteger(academiaId) && academiaId > 0 ? academiaId : 0;
+};
+
+/* Exclusivamente para Superadmin. */
 const getAcademiaIdFromStorage = () => {
   try {
     const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
@@ -385,22 +394,36 @@ const buildHeadersFallback = (rol) => {
 
 const tryGetList = async (paths, { signal, headers } = {}) => {
   const variants = [];
+
   for (const p of paths) {
     variants.push(p.endsWith("/") ? p : `${p}/`);
     variants.push(p.endsWith("/") ? p.slice(0, -1) : p);
   }
+
   const uniq = [...new Set(variants)];
+  let lastErr = null;
 
   for (const url of uniq) {
     try {
       const r = await api.get(url, { signal, headers });
       return asList(r);
     } catch (e) {
-      const st = e?.status ?? e?.response?.status;
+      lastErr = e;
+
+      if (e?.name === "CanceledError" || e?.code === "ERR_CANCELED") {
+        return [];
+      }
+
+      const st = e?.status ?? e?.response?.status ?? 0;
+
       if (st === 401 || st === 403) throw e;
+      if (st === 404 || st === 405) continue;
+
+      throw e;
     }
   }
-  return [];
+
+  throw lastErr ?? new Error("GET list failed");
 };
 
 const getWithFallback = async (path, { signal, headers } = {}) => {
@@ -412,10 +435,20 @@ const getWithFallback = async (path, { signal, headers } = {}) => {
       return await api.get(url, { signal, headers });
     } catch (e) {
       lastErr = e;
-      const st = e?.status ?? e?.response?.status;
+
+      if (e?.name === "CanceledError" || e?.code === "ERR_CANCELED") {
+        throw e;
+      }
+
+      const st = e?.status ?? e?.response?.status ?? 0;
+
       if (st === 401 || st === 403) throw e;
+      if (st === 404 || st === 405) continue;
+
+      throw e;
     }
   }
+
   throw lastErr ?? new Error("GET failed");
 };
 
@@ -633,13 +666,42 @@ export default function DetalleJugador() {
         return;
       }
 
-      const a = getAcademiaIdFromStorage();
-      if (!a) {
-        if (rol === 3 && superTree) navigate("/super-dashboard", { replace: true });
-        else {
+      /*
+       * Admin / Staff:
+       * tenant exclusivamente desde academia_id firmada en JWT.
+       * Nunca dependen de weli_selected_academia.
+       */
+      if (rol === 1 || rol === 2) {
+        const academiaId = extractTokenAcademiaId(decoded);
+
+        if (!academiaId) {
           clearToken();
           navigate("/login", { replace: true });
+          return;
         }
+
+        if (superTree) {
+          navigate("/admin", { replace: true });
+          return;
+        }
+
+        setRolActual(rol);
+        return;
+      }
+
+      /*
+       * Superadmin:
+       * opera el árbol tenantizado solamente con academia seleccionada.
+       */
+      if (!superTree) {
+        navigate("/super-dashboard", { replace: true });
+        return;
+      }
+
+      const academiaId = getAcademiaIdFromStorage();
+
+      if (!academiaId) {
+        navigate("/super-dashboard", { replace: true });
         return;
       }
 
@@ -727,7 +789,13 @@ export default function DetalleJugador() {
               est = flat;
             }
           }
-        } catch {
+        } catch (statsError) {
+          const st = statsError?.status ?? statsError?.response?.status ?? 0;
+
+          if (st === 401 || st === 403) {
+            throw statsError;
+          }
+
           est = {};
         }
 
@@ -829,7 +897,7 @@ export default function DetalleJugador() {
         }
 
         if (st === 403) {
-          setErr("No tienes permisos para ver este jugador en la academia seleccionada.");
+          setErr("No tienes permisos para ver este jugador en esta academia.");
           setTimeout(() => {
             const backTo = parentPath || `${basePath}/listar-jugadores`;
             navigate(backTo, { replace: true, state: location.state || {} });
@@ -962,7 +1030,7 @@ export default function DetalleJugador() {
         clearToken();
         navigate("/login", { replace: true });
       } else if (st === 403) {
-        setErr("No tienes permisos para editar este jugador en la academia seleccionada.");
+        setErr("No tienes permisos para editar este jugador en esta academia.");
       } else {
         setErr(
           error?.response?.data?.detail || error?.response?.data?.message || error?.message || "❌ Error al actualizar"

@@ -141,22 +141,16 @@ const getAcademiaIdFromStorage = () => {
 };
 
 const extractRol = (decoded) => {
-  const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
+  const rawRol = decoded?.rol_id ?? decoded?.user?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol ?? 0;
+
   const n = Number(rawRol);
-  return Number.isFinite(n) ? n : 0;
+  return Number.isInteger(n) && [1, 2, 3].includes(n) ? n : 0;
 };
 
 const extractAcademiaFromToken = (decoded) => {
-  const raw =
-    decoded?.academia_id ??
-    decoded?.academy_id ??
-    decoded?.academiaId ??
-    decoded?.academyId ??
-    decoded?.academia ??
-    decoded?.academy ??
-    0;
+  const raw = decoded?.academia_id ?? decoded?.user?.academia_id ?? 0;
   const n = Number(raw);
-  return Number.isFinite(n) ? n : 0;
+  return Number.isInteger(n) && n > 0 ? n : 0;
 };
 
 const isExpired = (decoded) => {
@@ -188,17 +182,28 @@ const tryGetList = async (paths, { signal, headers }) => {
   }
   const uniq = [...new Set(variants)];
 
+  let lastErr = null;
+
   for (const url of uniq) {
     try {
       const r = await api.get(url, { signal, headers });
       return asList(r);
     } catch (e) {
+      lastErr = e;
+
       if (e?.name === "CanceledError" || e?.code === "ERR_CANCELED") return [];
-      const st = e?.status ?? e?.response?.status;
+
+      const st = e?.status ?? e?.response?.status ?? 0;
+
       if (st === 401 || st === 403) throw e;
+
+      if (st === 404 || st === 405) continue;
+
+      throw e;
     }
   }
-  return [];
+
+  throw lastErr ?? new Error("GET failed");
 };
 
 // POST robusto con headers + fallback slash
@@ -211,8 +216,13 @@ const postWithFallback = async (path, body, headers) => {
       return await api.post(url, body, { headers });
     } catch (e) {
       lastErr = e;
-      const st = e?.status ?? e?.response?.status;
+      const st = e?.status ?? e?.response?.status ?? 0;
+
       if (st === 401 || st === 403) throw e;
+
+      if (st === 404 || st === 405) continue;
+
+      throw e;
     }
   }
   throw lastErr ?? new Error("POST failed");
@@ -302,8 +312,14 @@ export default function FormJugador() {
       const tokenAcademia = extractAcademiaFromToken(decoded);
       const storedAcademia = getAcademiaIdFromStorage();
 
-      // Rol 1/2: no usamos x-academia-id.
-      if ((rol === 1 || rol === 2) && storedAcademia && tokenAcademia && storedAcademia !== tokenAcademia) {
+      // Rol 1/2: academia desde JWT; no usamos x-academia-id.
+      if ((rol === 1 || rol === 2) && !tokenAcademia) {
+        clearToken();
+        navigate("/login", { replace: true });
+        return;
+      }
+
+      if ((rol === 1 || rol === 2) && storedAcademia && storedAcademia !== tokenAcademia) {
         try {
           localStorage.removeItem(ACADEMIA_STORAGE_KEY);
         } catch {}
@@ -437,15 +453,18 @@ export default function FormJugador() {
       } catch (err) {
         const st = err?.status ?? err?.response?.status;
 
-        if (st === 401 || st === 403) {
-          if (rolActual === 3) {
-            setError("⚠️ Superadmin: falta x-academia-id o no tienes academia seleccionada.");
-            setIsLoading(false);
-            return;
-          }
-
+        if (st === 401) {
           clearToken();
           navigate("/login", { replace: true });
+          return;
+        }
+
+        if (st === 403) {
+          setError(
+            rolActual === 3
+              ? "⚠️ Superadmin: falta x-academia-id o no tienes permisos para esta academia."
+              : "No tienes permisos para cargar los datos de selección."
+          );
           return;
         }
 
@@ -626,13 +645,11 @@ export default function FormJugador() {
         }
 
         if (status === 403) {
-          if (rolActual === 3) {
-            setError("⚠️ Superadmin: falta x-academia-id o academia no autorizada.");
-            return;
-          }
-
-          clearToken();
-          navigate("/login", { replace: true });
+          setError(
+            rolActual === 3
+              ? "⚠️ Superadmin: falta x-academia-id o academia no autorizada."
+              : "No tienes permisos para consultar este apoderado."
+          );
           return;
         }
 
@@ -931,12 +948,11 @@ export default function FormJugador() {
       }
 
       if (st === 403) {
-        if (rolActual === 3) {
-          return setError("⚠️ Superadmin: falta x-academia-id o academia no autorizada.");
-        }
-
-        clearToken();
-        return navigate("/login", { replace: true });
+        return setError(
+          rolActual === 3
+            ? "⚠️ Superadmin: falta x-academia-id o academia no autorizada."
+            : "No tienes permisos para crear jugadores."
+        );
       }
 
       setError(String(msg || "❌ No se pudo guardar el jugador"));

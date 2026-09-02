@@ -1,21 +1,42 @@
 // src/pages/admin/crearUsuario.jsx
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+
 import { useNavigate } from "react-router-dom";
+
 import { jwtDecode } from "jwt-decode";
+
 import { useTheme } from "../../context/ThemeContext";
+
 import api, { ACADEMIA_STORAGE_KEY, clearToken, getToken } from "../../services/api";
+
 import IsLoading from "../../components/isLoading";
+
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
-/* ───────────────────────── Configuración ───────────────────────── */
+/* =========================================================
+   CONFIGURACIÓN
+========================================================= */
 
 const PANEL_TYPES = new Set(["admin", "user", "staff", "superadmin"]);
+
 const ALLOWED_CREATOR_ROLES = new Set([1, 3]);
 
 const ACCENT = "#aa5013";
 
-/* ───────────────────────── Helpers JWT ───────────────────────── */
+/* =========================================================
+   HELPERS JWT
+========================================================= */
+
+/**
+ * IMPORTANTE:
+ *
+ * jwtDecode en frontend NO valida criptográficamente
+ * la firma del token.
+ *
+ * La autorización efectiva continúa exclusivamente
+ * en backend.
+ */
 
 function decodeToken(token) {
   try {
@@ -25,14 +46,25 @@ function decodeToken(token) {
   }
 }
 
+/* ─────────────────────────────────────────────────────────
+   EXPIRACIÓN
+───────────────────────────────────────────────────────── */
+
 function isExpired(decoded) {
   const exp = Number(decoded?.exp ?? 0);
+
   const now = Math.floor(Date.now() / 1000);
 
-  if (!Number.isFinite(exp) || exp <= 0) return true;
+  if (!Number.isFinite(exp) || exp <= 0) {
+    return true;
+  }
 
   return now >= exp;
 }
+
+/* ─────────────────────────────────────────────────────────
+   TYPE
+───────────────────────────────────────────────────────── */
 
 function extractType(decoded) {
   return String(decoded?.type ?? decoded?.user?.type ?? "")
@@ -40,11 +72,21 @@ function extractType(decoded) {
     .toLowerCase();
 }
 
+/* ─────────────────────────────────────────────────────────
+   ROL
+───────────────────────────────────────────────────────── */
+
 function extractRol(decoded) {
   const rol = Number(decoded?.rol_id ?? decoded?.user?.rol_id ?? 0);
 
   return Number.isInteger(rol) && [1, 2, 3].includes(rol) ? rol : 0;
 }
+
+/* ─────────────────────────────────────────────────────────
+   ACADEMIA DESDE JWT
+
+   EXCLUSIVAMENTE ADMIN / STAFF
+───────────────────────────────────────────────────────── */
 
 function extractTokenAcademiaId(decoded) {
   const academiaId = Number(decoded?.academia_id ?? decoded?.user?.academia_id ?? 0);
@@ -52,17 +94,28 @@ function extractTokenAcademiaId(decoded) {
   return Number.isInteger(academiaId) && academiaId > 0 ? academiaId : 0;
 }
 
-/* ───────────────────────── Academia Superadmin ───────────────────────── */
+/* =========================================================
+   ACADEMIA SUPERADMIN
+========================================================= */
 
 /**
- * Esta función es EXCLUSIVAMENTE para Superadmin.
+ * EXCLUSIVAMENTE SUPERADMIN.
  *
- * Admin y Staff nunca deben obtener su academia desde localStorage.
+ * Admin y Staff nunca deben obtener academia
+ * desde localStorage.
  */
 function getSelectedAcademiaIdForSuperadmin() {
   try {
     const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
-    if (!raw) return 0;
+
+    if (!raw) {
+      return 0;
+    }
+
+    /* ─────────────────────────────────────────
+       Compatibilidad:
+       "12"
+    ───────────────────────────────────────── */
 
     const direct = Number(raw);
 
@@ -70,8 +123,16 @@ function getSelectedAcademiaIdForSuperadmin() {
       return direct;
     }
 
+    /* ─────────────────────────────────────────
+       Compatibilidad:
+       {
+         id: 12
+       }
+    ───────────────────────────────────────── */
+
     const parsed = JSON.parse(raw);
-    const academiaId = Number(parsed?.id ?? parsed?.academia_id ?? 0);
+
+    const academiaId = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academy_id ?? parsed?.academiaId ?? 0);
 
     return Number.isInteger(academiaId) && academiaId > 0 ? academiaId : 0;
   } catch {
@@ -79,14 +140,23 @@ function getSelectedAcademiaIdForSuperadmin() {
   }
 }
 
-/* ───────────────────────── Auth Guard ───────────────────────── */
+/* =========================================================
+   AUTH GUARD
+========================================================= */
 
 function ensureCreateUserAccess(navigate) {
   const token = getToken() || "";
 
+  /* ───────────────────────────────────────────────────────
+     SIN TOKEN
+  ─────────────────────────────────────────────────────── */
+
   if (!token) {
     clearToken();
-    navigate("/login", { replace: true });
+
+    navigate("/login", {
+      replace: true,
+    });
 
     return {
       ok: false,
@@ -98,9 +168,16 @@ function ensureCreateUserAccess(navigate) {
   try {
     const decoded = decodeToken(token);
 
+    /* ─────────────────────────────────────────────────────
+       TOKEN INVÁLIDO / EXPIRADO
+    ───────────────────────────────────────────────────── */
+
     if (!decoded || isExpired(decoded)) {
       clearToken();
-      navigate("/login", { replace: true });
+
+      navigate("/login", {
+        replace: true,
+      });
 
       return {
         ok: false,
@@ -110,11 +187,19 @@ function ensureCreateUserAccess(navigate) {
     }
 
     const type = extractType(decoded);
+
     const rol = extractRol(decoded);
+
+    /* ─────────────────────────────────────────────────────
+       TOKEN NO VÁLIDO PARA PANEL
+    ───────────────────────────────────────────────────── */
 
     if (!PANEL_TYPES.has(type) || !rol) {
       clearToken();
-      navigate("/login", { replace: true });
+
+      navigate("/login", {
+        replace: true,
+      });
 
       return {
         ok: false,
@@ -123,12 +208,22 @@ function ensureCreateUserAccess(navigate) {
       };
     }
 
-    /*
-     * Solo Admin y Superadmin pueden acceder
-     * al módulo de creación de usuarios.
-     */
+    /* =====================================================
+       ROLES CON ACCESO
+
+       1 Admin
+       3 Superadmin
+    ===================================================== */
+
     if (!ALLOWED_CREATOR_ROLES.has(rol)) {
-      navigate("/admin", { replace: true });
+      /*
+       * La sesión sigue siendo válida.
+       *
+       * NO se elimina token.
+       */
+      navigate("/admin", {
+        replace: true,
+      });
 
       return {
         ok: false,
@@ -137,18 +232,26 @@ function ensureCreateUserAccess(navigate) {
       };
     }
 
-    /*
-     * ADMIN rol 1:
-     *
-     * La academia proviene del JWT firmado.
-     * NO se consulta weli_selected_academia.
-     */
+    /* =====================================================
+       ADMIN — ROL 1
+
+       Academia exclusivamente desde JWT firmado.
+       NO se consulta localStorage.
+    ===================================================== */
+
     if (rol === 1) {
       const academiaId = extractTokenAcademiaId(decoded);
 
       if (!academiaId) {
+        /*
+         * Un token Admin vigente sin academia_id
+         * no cumple el contrato actual de sesión.
+         */
         clearToken();
-        navigate("/login", { replace: true });
+
+        navigate("/login", {
+          replace: true,
+        });
 
         return {
           ok: false,
@@ -164,15 +267,23 @@ function ensureCreateUserAccess(navigate) {
       };
     }
 
-    /*
-     * SUPERADMIN rol 3:
-     *
-     * Debe existir una academia objetivo seleccionada.
-     */
+    /* =====================================================
+       SUPERADMIN — ROL 3
+
+       Academia objetivo desde selector WELI.
+    ===================================================== */
+
     const academiaId = getSelectedAcademiaIdForSuperadmin();
 
     if (!academiaId) {
-      navigate("/super-dashboard", { replace: true });
+      /*
+       * Superadmin válido pero sin academia seleccionada.
+       *
+       * NO se destruye sesión.
+       */
+      navigate("/super-dashboard", {
+        replace: true,
+      });
 
       return {
         ok: false,
@@ -188,7 +299,10 @@ function ensureCreateUserAccess(navigate) {
     };
   } catch {
     clearToken();
-    navigate("/login", { replace: true });
+
+    navigate("/login", {
+      replace: true,
+    });
 
     return {
       ok: false,
@@ -198,20 +312,57 @@ function ensureCreateUserAccess(navigate) {
   }
 }
 
-/* ───────────────────────── Backend helpers ───────────────────────── */
+/* =========================================================
+   BACKEND HELPERS
+========================================================= */
 
 function asArrayRoles(response) {
   const data = response?.data ?? response;
 
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.results)) return data.results;
-  if (Array.isArray(data?.items)) return data.items;
-  if (Array.isArray(data?.roles)) return data.roles;
-  if (Array.isArray(data?.data?.roles)) return data.data.roles;
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (Array.isArray(data?.results)) {
+    return data.results;
+  }
+
+  if (Array.isArray(data?.items)) {
+    return data.items;
+  }
+
+  if (Array.isArray(data?.roles)) {
+    return data.roles;
+  }
+
+  if (Array.isArray(data?.data?.roles)) {
+    return data.data.roles;
+  }
+
+  if (Array.isArray(data?.data)) {
+    return data.data;
+  }
 
   return [];
 }
 
+/* =========================================================
+   GET CON FALLBACK CONTROLADO
+========================================================= */
+
+/**
+ * Puede probar rutas alternativas, por ejemplo:
+ *
+ * /roles
+ * /roles/
+ * /rol
+ * /rol/
+ *
+ * PERO únicamente cambia de ruta cuando el backend
+ * informa 404 o 405.
+ *
+ * Nunca ocultamos un 400, 409, 422, 500, etc.
+ */
 async function tryGetList(paths, { signal }) {
   const variants = [];
 
@@ -225,30 +376,80 @@ async function tryGetList(paths, { signal }) {
 
   const urls = [...new Set(variants)];
 
+  let lastError = null;
+
   for (const url of urls) {
     try {
       const response = await api.get(url, {
         signal,
-        meta: { isPublic: false },
+
+        meta: {
+          isPublic: false,
+        },
       });
 
       return asArrayRoles(response);
     } catch (error) {
+      lastError = error;
+
+      /* ─────────────────────────────────────────
+         CANCELACIÓN NORMAL
+      ───────────────────────────────────────── */
+
       if (error?.name === "CanceledError" || error?.code === "ERR_CANCELED") {
         return [];
       }
 
-      const status = error?.status ?? error?.response?.status;
+      const status = error?.status ?? error?.response?.status ?? 0;
+
+      /* ─────────────────────────────────────────
+         AUTH / AUTHZ
+      ───────────────────────────────────────── */
 
       if (status === 401 || status === 403) {
         throw error;
       }
+
+      /* ─────────────────────────────────────────
+         RUTA NO DISPONIBLE
+
+         Único caso donde probamos la siguiente.
+      ───────────────────────────────────────── */
+
+      if (status === 404 || status === 405) {
+        continue;
+      }
+
+      /* ─────────────────────────────────────────
+         ERROR REAL
+
+         400
+         409
+         422
+         500
+         etc.
+      ───────────────────────────────────────── */
+
+      throw error;
     }
   }
 
-  return [];
+  throw lastError ?? new Error("No fue posible cargar los roles");
 }
 
+/* =========================================================
+   POST CON FALLBACK CONTROLADO
+========================================================= */
+
+/**
+ * IMPORTANTE:
+ *
+ * No se debe repetir una escritura por un 400,
+ * 409, 422, 500, timeout, etc.
+ *
+ * Solo probamos variante de URL cuando la primera
+ * devuelve 404 o 405.
+ */
 async function postWithFallback(path, body) {
   const urls = path.endsWith("/") ? [path, path.slice(0, -1)] : [path, `${path}/`];
 
@@ -257,21 +458,47 @@ async function postWithFallback(path, body) {
   for (const url of urls) {
     try {
       return await api.post(url, body, {
-        meta: { isPublic: false },
+        meta: {
+          isPublic: false,
+        },
       });
     } catch (error) {
       lastError = error;
 
-      const status = error?.status ?? error?.response?.status;
+      const status = error?.status ?? error?.response?.status ?? 0;
+
+      /* ─────────────────────────────────────────
+         AUTH / AUTHZ
+      ───────────────────────────────────────── */
 
       if (status === 401 || status === 403) {
         throw error;
       }
+
+      /* ─────────────────────────────────────────
+         RUTA NO DISPONIBLE
+      ───────────────────────────────────────── */
+
+      if (status === 404 || status === 405) {
+        continue;
+      }
+
+      /* ─────────────────────────────────────────
+         ERROR REAL.
+
+         No repetimos el POST.
+      ───────────────────────────────────────── */
+
+      throw error;
     }
   }
 
-  throw lastError ?? new Error("POST failed");
+  throw lastError ?? new Error(`No fue posible ejecutar POST ${path}`);
 }
+
+/* =========================================================
+   MENSAJE BACKEND
+========================================================= */
 
 function pickBackendMessage(error) {
   const data = error?.response?.data ?? error?.data ?? null;
@@ -282,13 +509,34 @@ function pickBackendMessage(error) {
     return detail.trim();
   }
 
+  /* ───────────────────────────────────────────────────────
+     ERRORES ESTRUCTURADOS
+  ─────────────────────────────────────────────────────── */
+
   if (Array.isArray(data?.errors)) {
     const joined = data.errors
       .map((item) => item?.message ?? item?.msg ?? item?.detail ?? item?.path?.join?.(".") ?? "")
       .filter(Boolean)
       .join(" | ");
 
-    if (joined) return joined;
+    if (joined) {
+      return joined;
+    }
+  }
+
+  /*
+   * Zod/Fastify puede retornar directamente
+   * un array de problemas.
+   */
+  if (Array.isArray(data)) {
+    const joined = data
+      .map((item) => item?.message ?? item?.msg ?? item?.detail ?? "")
+      .filter(Boolean)
+      .join(" | ");
+
+    if (joined) {
+      return joined;
+    }
   }
 
   if (typeof data?.validation === "string" && data.validation.trim()) {
@@ -298,27 +546,58 @@ function pickBackendMessage(error) {
   return "";
 }
 
-/* ───────────────────────── Validation ───────────────────────── */
+/* =========================================================
+   VALIDATION
+========================================================= */
 
 function isValidRut(value) {
-  return /^[0-9]{7,8}$/.test(String(value || ""));
+  return /^[0-9]{7,8}$/.test(String(value ?? ""));
 }
 
+/* ─────────────────────────────────────────────────────────
+   USERNAME
+───────────────────────────────────────────────────────── */
+
 function isValidUsername(value) {
-  const username = String(value || "").trim();
+  const username = String(value ?? "").trim();
 
   return username.length >= 3 && username.length <= 80;
 }
+
+/* ─────────────────────────────────────────────────────────
+   EMAIL
+───────────────────────────────────────────────────────── */
+
+function isValidEmail(value) {
+  const email = String(value ?? "").trim();
+
+  /*
+   * Validación básica frontend.
+   * Backend sigue siendo autoridad.
+   */
+  return email.length > 0 && email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+/* ─────────────────────────────────────────────────────────
+   PASSWORD
+───────────────────────────────────────────────────────── */
 
 function isStrongPassword(value) {
   return typeof value === "string" && value.length >= 6 && value.length <= 200;
 }
 
-/* ───────────────────────── Component ───────────────────────── */
+/* =========================================================
+   COMPONENT
+========================================================= */
 
 export default function CrearUsuario() {
   const { darkMode } = useTheme();
+
   const navigate = useNavigate();
+
+  /* =======================================================
+     STATE
+  ======================================================= */
 
   const [rolActual, setRolActual] = useState(0);
 
@@ -332,35 +611,47 @@ export default function CrearUsuario() {
   });
 
   const [roles, setRoles] = useState([]);
+
   const [mensaje, setMensaje] = useState("");
+
   const [error, setError] = useState("");
+
   const [isLoading, setIsLoading] = useState(true);
+
   const [submitting, setSubmitting] = useState(false);
 
   useMobileAutoScrollTop();
 
-  /* ───────────────────────── Auth inicial ───────────────────────── */
+  /* =======================================================
+     AUTH INICIAL
+  ======================================================= */
 
   useEffect(() => {
     const guard = ensureCreateUserAccess(navigate);
 
     if (!guard.ok) {
       setIsLoading(false);
+
       return;
     }
 
     setRolActual(guard.rol);
   }, [navigate]);
 
-  /* ───────────────────────── Roles ───────────────────────── */
+  /* =======================================================
+     CARGAR ROLES
+  ======================================================= */
 
   useEffect(() => {
-    if (!rolActual) return;
+    if (!rolActual) {
+      return;
+    }
 
     const guard = ensureCreateUserAccess(navigate);
 
     if (!guard.ok) {
       setIsLoading(false);
+
       return;
     }
 
@@ -368,12 +659,17 @@ export default function CrearUsuario() {
 
     const loadRoles = async () => {
       setIsLoading(true);
+
       setError("");
 
       try {
         const rawRoles = await tryGetList(["/roles", "/rol"], {
           signal: abortController.signal,
         });
+
+        if (abortController.signal.aborted) {
+          return;
+        }
 
         const normalizedRoles = (Array.isArray(rawRoles) ? rawRoles : [])
           .map((item) => {
@@ -388,22 +684,33 @@ export default function CrearUsuario() {
           })
           .filter((item) => Number.isInteger(item.id) && item.id > 0 && item.nombre.length > 0);
 
-        /*
-         * Admin rol 1:
-         * no puede crear Superadmin rol 3.
-         *
-         * Superadmin rol 3:
-         * puede visualizar los roles permitidos por backend.
-         */
+        /* =================================================
+             REGLA DE ROLES
+
+             Admin:
+             no puede crear Superadmin.
+
+             Superadmin:
+             visualiza roles permitidos por backend.
+          ================================================= */
+
         const allowedRoles = guard.rol === 3 ? normalizedRoles : normalizedRoles.filter((item) => item.id !== 3);
 
         setRoles(allowedRoles);
+
+        /* =================================================
+             CONSERVAR / NORMALIZAR SELECCIÓN
+          ================================================= */
 
         setFormData((previous) => {
           const selectedRole = Number(previous.rol_id);
 
           const stillAllowed = allowedRoles.some((item) => item.id === selectedRole);
 
+          /*
+           * Rol previamente seleccionado
+           * ya no disponible.
+           */
           if (previous.rol_id && !stillAllowed) {
             return {
               ...previous,
@@ -411,9 +718,14 @@ export default function CrearUsuario() {
             };
           }
 
+          /*
+           * Solo existe un rol posible:
+           * lo seleccionamos automáticamente.
+           */
           if (!previous.rol_id && allowedRoles.length === 1) {
             return {
               ...previous,
+
               rol_id: String(allowedRoles[0].id),
             };
           }
@@ -427,8 +739,13 @@ export default function CrearUsuario() {
 
         const status = requestError?.status ?? requestError?.response?.status;
 
+        /* ─────────────────────────────────────
+             401
+          ───────────────────────────────────── */
+
         if (status === 401) {
           clearToken();
+
           navigate("/login", {
             replace: true,
           });
@@ -436,13 +753,25 @@ export default function CrearUsuario() {
           return;
         }
 
+        /* ─────────────────────────────────────
+             403
+
+             NO LOGOUT.
+          ───────────────────────────────────── */
+
         if (status === 403) {
           setError("No tienes permisos para listar roles.");
 
           return;
         }
 
-        setError("❌ No se pudieron cargar los roles.");
+        const detail = pickBackendMessage(requestError);
+
+        setError(detail ? `❌ No se pudieron cargar los roles: ${detail}` : "❌ No se pudieron cargar los roles.");
+
+        if (import.meta.env.DEV) {
+          console.error("[WELI ROLES]", requestError);
+        }
       } finally {
         if (!abortController.signal.aborted) {
           setIsLoading(false);
@@ -455,23 +784,34 @@ export default function CrearUsuario() {
     return () => abortController.abort();
   }, [navigate, rolActual]);
 
-  /* ───────────────────────── Inputs ───────────────────────── */
+  /* =======================================================
+     INPUTS
+  ======================================================= */
 
   const handleChange = useCallback((event) => {
     const { name, value } = event.target;
 
+    /* ─────────────────────────────────────────
+           RUT
+        ───────────────────────────────────────── */
+
     if (name === "rut_usuario") {
-      const digits = String(value || "")
+      const digits = String(value ?? "")
         .replace(/\D/g, "")
         .slice(0, 8);
 
       setFormData((previous) => ({
         ...previous,
+
         rut_usuario: digits,
       }));
 
       return;
     }
+
+    /* ─────────────────────────────────────────
+           RESTO
+        ───────────────────────────────────────── */
 
     setFormData((previous) => ({
       ...previous,
@@ -479,26 +819,48 @@ export default function CrearUsuario() {
     }));
   }, []);
 
-  /* ───────────────────────── Submit ───────────────────────── */
+  /* =======================================================
+     SUBMIT
+  ======================================================= */
 
   const enviarUsuario = useCallback(
     async (event) => {
       event.preventDefault();
 
-      if (submitting) return;
+      if (submitting) {
+        return;
+      }
 
       const guard = ensureCreateUserAccess(navigate);
 
-      if (!guard.ok) return;
+      if (!guard.ok) {
+        return;
+      }
 
       setMensaje("");
       setError("");
 
-      const nombreUsuario = String(formData.nombre_usuario || "").trim();
+      /* =================================================
+           NORMALIZACIÓN
+        ================================================= */
 
-      const rut = String(formData.rut_usuario || "");
+      const nombreUsuario = String(formData.nombre_usuario ?? "").trim();
+
+      const rut = String(formData.rut_usuario ?? "")
+        .replace(/\D/g, "")
+        .slice(0, 8);
+
+      const email = String(formData.email ?? "")
+        .trim()
+        .toLowerCase();
 
       const rolId = Number(formData.rol_id);
+
+      const estadoId = Number(formData.estado_id);
+
+      /* =================================================
+           VALIDAR USERNAME
+        ================================================= */
 
       if (!isValidUsername(nombreUsuario)) {
         setError("El nombre de usuario debe contener entre 3 y 80 caracteres.");
@@ -506,11 +868,29 @@ export default function CrearUsuario() {
         return;
       }
 
+      /* =================================================
+           VALIDAR RUT
+        ================================================= */
+
       if (!isValidRut(rut)) {
         setError("El RUT debe ser de 7 u 8 dígitos, sin puntos ni dígito verificador.");
 
         return;
       }
+
+      /* =================================================
+           VALIDAR EMAIL
+        ================================================= */
+
+      if (!isValidEmail(email)) {
+        setError("Ingresa un correo electrónico válido.");
+
+        return;
+      }
+
+      /* =================================================
+           VALIDAR ROL
+        ================================================= */
 
       if (!Number.isInteger(rolId) || rolId <= 0) {
         setError("Selecciona un rol válido.");
@@ -521,8 +901,7 @@ export default function CrearUsuario() {
       /*
        * Defensa frontend adicional.
        *
-       * La autorización real debe seguir
-       * ejecutándose también en backend.
+       * Backend sigue siendo autoridad.
        */
       if (rolId === 3 && guard.rol !== 3) {
         setError("No tienes permisos para crear usuarios superadmin.");
@@ -536,23 +915,36 @@ export default function CrearUsuario() {
         return;
       }
 
+      /* =================================================
+           PASSWORD
+        ================================================= */
+
       if (!isStrongPassword(formData.password)) {
         setError("La contraseña debe tener entre 6 y 200 caracteres.");
 
         return;
       }
 
-      /*
-       * ADMIN rol 1:
-       *
-       * NO enviamos academia_id.
-       * Backend debe derivarla del JWT/contexto autenticado.
-       *
-       * SUPERADMIN rol 3:
-       *
-       * enviamos explícitamente la academia target
-       * seleccionada.
-       */
+      /* =================================================
+           ESTADO
+        ================================================= */
+
+      if (!Number.isInteger(estadoId) || estadoId <= 0) {
+        setError("Estado de usuario inválido.");
+
+        return;
+      }
+
+      /* =================================================
+           TENANT
+
+           ADMIN:
+           NO academia_id en body.
+
+           SUPERADMIN:
+           academia target seleccionada.
+        ================================================= */
+
       let targetAcademiaId = 0;
 
       if (guard.rol === 3) {
@@ -565,13 +957,23 @@ export default function CrearUsuario() {
         }
       }
 
+      /* =================================================
+           PAYLOAD
+        ================================================= */
+
       const payload = {
         nombre_usuario: nombreUsuario,
+
         rut_usuario: Number(rut),
-        email: String(formData.email || "").trim(),
+
+        email,
+
         password: formData.password,
+
         rol_id: rolId,
-        estado_id: Number(formData.estado_id) || 1,
+
+        estado_id: estadoId,
+
         ...(guard.rol === 3
           ? {
               academia_id: targetAcademiaId,
@@ -586,16 +988,27 @@ export default function CrearUsuario() {
 
         setMensaje("✅ Usuario registrado correctamente");
 
+        /*
+         * Si hay solamente un rol disponible,
+         * mantenemos esa selección después
+         * de limpiar el formulario.
+         */
+        const defaultRole = roles.length === 1 ? String(roles[0].id) : "";
+
         setFormData({
           nombre_usuario: "",
           rut_usuario: "",
           email: "",
           password: "",
-          rol_id: "",
+          rol_id: defaultRole,
           estado_id: 1,
         });
       } catch (requestError) {
         const status = requestError?.status ?? requestError?.response?.status;
+
+        /* ─────────────────────────────────────
+             401
+          ───────────────────────────────────── */
 
         if (status === 401) {
           clearToken();
@@ -607,6 +1020,12 @@ export default function CrearUsuario() {
           return;
         }
 
+        /* ─────────────────────────────────────
+             403
+
+             NO LOGOUT.
+          ───────────────────────────────────── */
+
         if (status === 403) {
           setError("No tienes permisos para registrar usuarios.");
 
@@ -614,6 +1033,10 @@ export default function CrearUsuario() {
         }
 
         const backendMessage = pickBackendMessage(requestError);
+
+        if (import.meta.env.DEV) {
+          console.error("[WELI USUARIO]", requestError);
+        }
 
         setError(backendMessage || "❌ Error al registrar usuario");
       } finally {
@@ -623,7 +1046,9 @@ export default function CrearUsuario() {
     [formData, navigate, roles, submitting]
   );
 
-  /* ───────────────────────── UI ───────────────────────── */
+  /* =======================================================
+     UI
+  ======================================================= */
 
   const ui = useMemo(() => {
     const shell = darkMode
@@ -638,6 +1063,7 @@ export default function CrearUsuario() {
 
     const input = [
       "w-full rounded-2xl px-5 py-3 border outline-none transition",
+
       darkMode
         ? "bg-white/10 border-white/15 text-white placeholder-white/40 focus:border-white/30"
         : "bg-white/60 border-ra-marron/15 text-ra-marron placeholder-ra-marron/40 focus:border-ra-terracotta",
@@ -666,12 +1092,24 @@ export default function CrearUsuario() {
     };
   }, [darkMode]);
 
+  /* =======================================================
+     LOADING
+  ======================================================= */
+
   if (isLoading) {
     return <IsLoading />;
   }
 
+  /* =======================================================
+     RENDER
+  ======================================================= */
+
   return (
     <div className={`${ui.shell} min-h-screen font-sans`}>
+      {/* =================================================
+          HEADER
+      ================================================= */}
+
       <header className="px-6 pt-6">
         <h1 className="text-4xl font-extrabold tracking-tight text-center">Registrar Usuario</h1>
 
@@ -680,10 +1118,18 @@ export default function CrearUsuario() {
         </p>
       </header>
 
+      {/* =================================================
+          MAIN
+      ================================================= */}
+
       <main className="px-6 pb-20">
         <div className="mt-8">
           <div className={ui.card}>
             <form onSubmit={enviarUsuario} className="space-y-4" autoComplete="off">
+              {/* =========================================
+                  NOMBRE USUARIO
+              ========================================= */}
+
               <input
                 name="nombre_usuario"
                 type="text"
@@ -697,6 +1143,10 @@ export default function CrearUsuario() {
                 spellCheck={false}
                 required
               />
+
+              {/* =========================================
+                  RUT
+              ========================================= */}
 
               <input
                 name="rut_usuario"
@@ -712,6 +1162,10 @@ export default function CrearUsuario() {
                 required
               />
 
+              {/* =========================================
+                  EMAIL
+              ========================================= */}
+
               <input
                 name="email"
                 type="email"
@@ -721,8 +1175,14 @@ export default function CrearUsuario() {
                 className={ui.input}
                 maxLength={254}
                 autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
                 required
               />
+
+              {/* =========================================
+                  PASSWORD
+              ========================================= */}
 
               <input
                 name="password"
@@ -737,6 +1197,10 @@ export default function CrearUsuario() {
                 required
               />
 
+              {/* =========================================
+                  ROL
+              ========================================= */}
+
               <select name="rol_id" value={formData.rol_id} onChange={handleChange} className={ui.select} required>
                 <option value="">Selecciona un Rol</option>
 
@@ -746,6 +1210,10 @@ export default function CrearUsuario() {
                   </option>
                 ))}
               </select>
+
+              {/* =========================================
+                  SUBMIT
+              ========================================= */}
 
               <button
                 type="submit"
@@ -759,11 +1227,19 @@ export default function CrearUsuario() {
               </button>
             </form>
 
+            {/* =============================================
+                OK
+            ============================================= */}
+
             {mensaje && (
               <div className={`mt-6 text-center font-bold ${ui.msgOk}`} role="status">
                 {mensaje}
               </div>
             )}
+
+            {/* =============================================
+                ERROR
+            ============================================= */}
 
             {error && (
               <div className={ui.msgErr} role="alert">

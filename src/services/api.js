@@ -391,13 +391,20 @@ function safePathFromAxiosUrl(url = "") {
     if (/^https?:\/\//i.test(raw)) {
       path = new URL(raw).pathname || "/";
     } else {
-      path = raw.startsWith("/") ? raw : `/${raw}`;
+      /*
+       * Axios puede recibir rutas relativas con query/hash:
+       *
+       * /jugadores?include_inactivos=1
+       * /jugadores?estado_id=1#top
+       *
+       * Para decidir si una ruta es tenantizada solamente
+       * interesa el pathname.
+       */
+      const clean = raw.split("#")[0].split("?")[0];
+
+      path = clean.startsWith("/") ? clean : `/${clean}`;
     }
 
-    /*
-     * Por seguridad trabajamos siempre
-     * sobre path relativo al API.
-     */
     if (path === "/api") {
       return "/";
     }
@@ -406,9 +413,6 @@ function safePathFromAxiosUrl(url = "") {
       path = path.slice(4);
     }
 
-    /*
-     * Evita dobles slash.
-     */
     path = path.replace(/\/{2,}/g, "/");
 
     return path || "/";
@@ -829,13 +833,9 @@ apiPrivate.interceptors.response.use(
         status: normalized.status,
 
         path: normalized.path,
-
         code: normalized.code,
-
         message: normalized.message,
-
         hasAuth: normalized.requestHint.hasAuth,
-
         xAcademia: normalized.requestHint.xAcademia,
 
         isNetworkError:
@@ -848,7 +848,6 @@ apiPrivate.interceptors.response.use(
             .includes("failed to fetch"),
       });
     }
-
     return Promise.reject(normalized);
   }
 );
@@ -858,5 +857,4 @@ apiPrivate.interceptors.response.use(
 ========================================================= */
 
 export default api;
-
 export { decodeJwtPayload, extractRolFromToken, extractAcademiaIdFromToken };
