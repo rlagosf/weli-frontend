@@ -373,9 +373,6 @@ export default function TiposPago() {
       {/* Header tipo SuperDashboard */}
       <header className="px-6 pt-6 text-center">
         <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>Tipos de Pago</h1>
-        <p className={`text-sm mt-2 ${ui.subText}`}>
-          Catálogo de tipos de pago. Si lo duplicas, MySQL te mira feo (y con razón).
-        </p>
       </header>
 
       <main className="px-6 pb-20">

@@ -8,7 +8,6 @@ import {
   Check,
   CreditCard,
   Edit3,
-  Layers3,
   LogOut,
   MapPin,
   Moon,
@@ -25,16 +24,12 @@ import { useTheme } from "../../context/ThemeContext";
 
 const academiasPath = "/academias";
 const deportesPath = "/deportes";
-const tiposPagoPath = "/tipo-pago";
+const tiposPagoPath = "/tipo-pago/";
 
 const MAX_SUCURSALES = 50;
 const MAX_TIPOS_PAGO = 50;
-const MAX_PLANES = 20;
-const MAX_TARIFAS_PLAN = 20;
 const MAX_NOMBRE_ACADEMIA = 120;
 const MAX_NOMBRE_SUCURSAL = 100;
-const MAX_NOMBRE_PLAN = 120;
-const MAX_DESCRIPCION_PLAN = 500;
 
 const FORM_STEPS = [
   {
@@ -51,15 +46,9 @@ const FORM_STEPS = [
   },
   {
     id: 3,
-    title: "Tipos de pago",
-    description: "Conceptos",
+    title: "Tarifas",
+    description: "Conceptos y valores",
     icon: WalletCards,
-  },
-  {
-    id: 4,
-    title: "Planes",
-    description: "Planes y tarifas",
-    icon: Layers3,
   },
 ];
 
@@ -174,24 +163,6 @@ function normalizeTipoPagoCatalogo(item) {
   };
 }
 
-function createEmptyTarifa(tipoPagoId) {
-  return {
-    tipo_pago_id: Number(tipoPagoId),
-    monto: "",
-    sucursales: [],
-  };
-}
-
-function createEmptyPlan() {
-  return {
-    nombre: "",
-    descripcion: "",
-    estado_id: "1",
-    sucursales: [],
-    tarifas: [],
-  };
-}
-
 function createEmptyForm() {
   return {
     nombre: "",
@@ -199,16 +170,15 @@ function createEmptyForm() {
     deporte_id: "",
     estado_id: "1",
 
-    // Ambos comienzan realmente desde cero.
     sucursales: [],
     tipos_pago: [],
-    planes: [],
   };
 }
 
 function normalizeAcademiaForEdit(item, catalogoTiposPago = []) {
   const sucursales = (item?.sucursales ?? []).map((sucursal) => ({
     id: Number(sucursal?.id),
+
     nombre: normalizeText(sucursal?.nombre),
   }));
 
@@ -219,90 +189,48 @@ function normalizeAcademiaForEdit(item, catalogoTiposPago = []) {
       .map((tipo) => [Number(tipo.id), tipo])
   );
 
-  const tiposPago = (item?.tipos_pago ?? [])
+  const tipos_pago = (item?.tipos_pago ?? [])
     .map((tipo) => {
-      const id = Number(tipo?.id ?? tipo?.tipo_pago_id ?? tipo ?? 0);
+      const id = Number(tipo?.tipo_pago_id ?? tipo?.id ?? 0);
 
-      if (!Number.isInteger(id) || id <= 0) return null;
+      if (!Number.isInteger(id) || id <= 0) {
+        return null;
+      }
 
-      const fromCatalog = catalogoById.get(id);
+      const catalogo = catalogoById.get(id);
 
-      if (fromCatalog) return fromCatalog;
+      return {
+        ...(catalogo ?? {
+          id,
 
-      const fallback = normalizeTipoPagoCatalogo({
+          nombre: normalizeText(tipo?.tipo_pago_nombre ?? tipo?.nombre ?? `Tipo de pago #${id}`),
+
+          descripcion: tipo?.descripcion ?? null,
+
+          estado_id: Number(tipo?.estado_id ?? 1),
+        }),
+
         id,
-        nombre: tipo?.nombre ?? tipo?.tipo_pago_nombre ?? `Tipo de pago #${id}`,
-        descripcion: tipo?.descripcion ?? null,
-        estado_id: tipo?.estado_id ?? 1,
-      });
 
-      return fallback;
+        monto: tipo?.monto == null ? "" : String(tipo.monto),
+
+        tarifa_id: tipo?.tarifa_id == null ? null : Number(tipo.tarifa_id),
+      };
     })
     .filter(Boolean);
 
-  /*
-   * Una tarifa histórica puede referenciar un tipo global que no venga
-   * dentro de item.tipos_pago. Lo preservamos en edición para no perder
-   * la referencia existente.
-   */
-  const selectedById = new Map(tiposPago.map((tipo) => [Number(tipo.id), tipo]));
-
-  for (const plan of item?.planes ?? []) {
-    for (const tarifa of plan?.tarifas ?? []) {
-      const tipoPagoId = Number(tarifa?.tipo_pago_id ?? 0);
-
-      if (!Number.isInteger(tipoPagoId) || tipoPagoId <= 0 || selectedById.has(tipoPagoId)) {
-        continue;
-      }
-
-      const fromCatalog = catalogoById.get(tipoPagoId);
-
-      const fallback =
-        fromCatalog ??
-        normalizeTipoPagoCatalogo({
-          id: tipoPagoId,
-          nombre: tarifa?.tipo_pago_nombre ?? `Tipo de pago #${tipoPagoId}`,
-          estado_id: 1,
-        });
-
-      if (fallback) {
-        tiposPago.push(fallback);
-        selectedById.set(tipoPagoId, fallback);
-      }
-    }
-  }
-
-  const indexBySucursalId = new Map(sucursales.map((sucursal, index) => [Number(sucursal.id), index]));
-
-  const planes = (item?.planes ?? []).map((plan) => ({
-    id: Number(plan?.id),
-    nombre: normalizeText(plan?.nombre),
-    descripcion: String(plan?.descripcion ?? ""),
-    estado_id: String(plan?.estado_id ?? 1),
-
-    sucursales: (plan?.sucursales ?? [])
-      .map((id) => indexBySucursalId.get(Number(id)))
-      .filter((index) => Number.isInteger(index)),
-
-    tarifas: (plan?.tarifas ?? []).map((tarifa) => ({
-      id: Number(tarifa?.id),
-      tipo_pago_id: Number(tarifa?.tipo_pago_id ?? 0),
-      monto: String(tarifa?.monto ?? ""),
-
-      sucursales: (tarifa?.sucursales ?? [])
-        .map((id) => indexBySucursalId.get(Number(id)))
-        .filter((index) => Number.isInteger(index)),
-    })),
-  }));
-
   return {
     nombre: String(item?.nombre ?? ""),
+
     rut_academia: String(item?.rut_academia ?? ""),
+
     deporte_id: String(item?.deporte_id ?? ""),
+
     estado_id: String(item?.estado_id ?? 1),
+
     sucursales,
-    tipos_pago: tiposPago,
-    planes,
+
+    tipos_pago,
   };
 }
 
@@ -475,19 +403,24 @@ export default function SuperDashboard() {
       try {
         const res = await api.get(tiposPagoPath, {
           signal,
-          headers: { "Cache-Control": "no-cache" },
+          headers: {
+            "Cache-Control": "no-cache",
+          },
         });
 
         const raw = pickList(res?.data ?? {}, ["tipos_pago", "tipo_pago"]);
 
-        const normalized = (raw || [])
+        const normalized = (raw ?? [])
           .map(normalizeTipoPagoCatalogo)
           .filter(Boolean)
+          .filter((item) => Number(item.estado_id) === 1)
           .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
 
         setCatalogoTiposPago(normalized);
       } catch (err) {
-        if (signal?.aborted) return;
+        if (signal?.aborted) {
+          return;
+        }
 
         setCatalogoTiposPago([]);
 
@@ -495,7 +428,11 @@ export default function SuperDashboard() {
 
         if (status === 401) {
           clearToken();
-          navigate("/login", { replace: true });
+
+          navigate("/login", {
+            replace: true,
+          });
+
           return;
         }
 
@@ -508,7 +445,9 @@ export default function SuperDashboard() {
         setMsgType("error");
         setMsg(String(message));
       } finally {
-        if (!signal?.aborted) setTiposPagoReady(true);
+        if (!signal?.aborted) {
+          setTiposPagoReady(true);
+        }
       }
     },
     [navigate]
@@ -777,26 +716,7 @@ export default function SuperDashboard() {
     setForm((current) => ({
       ...current,
 
-      /*
-       * Ahora se puede eliminar incluso la última.
-       */
       sucursales: current.sucursales.filter((_, i) => i !== index),
-
-      planes: current.planes.map((plan) => ({
-        ...plan,
-
-        sucursales: plan.sucursales
-          .filter((sucursalIndex) => sucursalIndex !== index)
-          .map((sucursalIndex) => (sucursalIndex > index ? sucursalIndex - 1 : sucursalIndex)),
-
-        tarifas: plan.tarifas.map((tarifa) => ({
-          ...tarifa,
-
-          sucursales: tarifa.sucursales
-            .filter((sucursalIndex) => sucursalIndex !== index)
-            .map((sucursalIndex) => (sucursalIndex > index ? sucursalIndex - 1 : sucursalIndex)),
-        })),
-      })),
     }));
   };
 
@@ -807,40 +727,26 @@ export default function SuperDashboard() {
   const toggleTipoPago = (tipoPagoId) => {
     const id = Number(tipoPagoId);
 
-    if (!Number.isInteger(id) || id <= 0) return;
+    if (!Number.isInteger(id) || id <= 0) {
+      return;
+    }
 
     setForm((current) => {
       const selected = current.tipos_pago.some((tipo) => Number(tipo.id) === id);
 
       if (selected) {
-        const usedByPlan = current.planes.some((plan) =>
-          plan.tarifas.some((tarifa) => Number(tarifa.tipo_pago_id) === id)
-        );
-
-        if (usedByPlan) {
-          const tipo = current.tipos_pago.find((item) => Number(item.id) === id);
-
-          const confirmed = window.confirm(
-            `El tipo de pago "${tipo?.nombre ?? `#${id}`}" está utilizado por una o más tarifas. ` +
-              "Al deshabilitarlo también se retirarán esas tarifas. ¿Deseas continuar?"
-          );
-
-          if (!confirmed) return current;
-        }
-
         return {
           ...current,
+
           tipos_pago: current.tipos_pago.filter((tipo) => Number(tipo.id) !== id),
-          planes: current.planes.map((plan) => ({
-            ...plan,
-            tarifas: plan.tarifas.filter((tarifa) => Number(tarifa.tipo_pago_id) !== id),
-          })),
         };
       }
 
       if (current.tipos_pago.length >= MAX_TIPOS_PAGO) {
         setMsgType("error");
+
         setMsg(`No puedes habilitar más de ${MAX_TIPOS_PAGO} tipos de pago.`);
+
         return current;
       }
 
@@ -848,247 +754,42 @@ export default function SuperDashboard() {
 
       if (!tipoCatalogo) {
         setMsgType("error");
+
         setMsg("El tipo de pago seleccionado no existe en el catálogo global.");
+
         return current;
       }
 
       return {
         ...current,
-        tipos_pago: [...current.tipos_pago, tipoCatalogo].sort((a, b) => a.nombre.localeCompare(b.nombre, "es")),
+
+        tipos_pago: [
+          ...current.tipos_pago,
+
+          {
+            ...tipoCatalogo,
+            monto: "",
+          },
+        ].sort((a, b) => a.nombre.localeCompare(b.nombre, "es")),
       };
     });
   };
 
-  /* =========================================================
-     PLANES
-  ========================================================= */
-
-  const addPlan = () => {
-    setForm((current) => {
-      if (current.planes.length >= MAX_PLANES) return current;
-
-      return {
-        ...current,
-        planes: [...current.planes, createEmptyPlan()],
-      };
-    });
-  };
-
-  const updatePlan = (planIndex, field, value) => {
-    setForm((current) => ({
-      ...current,
-      planes: current.planes.map((plan, index) =>
-        index === planIndex
-          ? {
-              ...plan,
-              [field]: value,
-            }
-          : plan
-      ),
-    }));
-  };
-
-  const removePlan = (planIndex) => {
-    setForm((current) => ({
-      ...current,
-      planes: current.planes.filter((_, index) => index !== planIndex),
-    }));
-  };
-
-  const togglePlanSucursal = (planIndex, sucursalIndex) => {
-    setForm((current) => ({
-      ...current,
-
-      planes: current.planes.map((plan, index) => {
-        if (index !== planIndex) return plan;
-
-        const selected = plan.sucursales.includes(sucursalIndex);
-
-        const sucursales = selected
-          ? plan.sucursales.filter((value) => value !== sucursalIndex)
-          : [...plan.sucursales, sucursalIndex].sort((a, b) => a - b);
-
-        const tarifas = selected
-          ? plan.tarifas.map((tarifa) => ({
-              ...tarifa,
-              sucursales: tarifa.sucursales.filter((value) => value !== sucursalIndex),
-            }))
-          : plan.tarifas;
-
-        return {
-          ...plan,
-          sucursales,
-          tarifas,
-        };
-      }),
-    }));
-  };
-
-  const selectAllPlanSucursales = (planIndex) => {
-    setForm((current) => ({
-      ...current,
-
-      planes: current.planes.map((plan, index) =>
-        index === planIndex
-          ? {
-              ...plan,
-              sucursales: current.sucursales.map((_, sucursalIndex) => sucursalIndex),
-            }
-          : plan
-      ),
-    }));
-  };
-
-  const clearPlanSucursales = (planIndex) => {
-    setForm((current) => ({
-      ...current,
-
-      planes: current.planes.map((plan, index) =>
-        index === planIndex
-          ? {
-              ...plan,
-              sucursales: [],
-              tarifas: plan.tarifas.map((tarifa) => ({
-                ...tarifa,
-                sucursales: [],
-              })),
-            }
-          : plan
-      ),
-    }));
-  };
-
-  /* =========================================================
-     TARIFAS
-  ========================================================= */
-
-  const addTarifa = (planIndex, tipoPagoId) => {
-    setMsg("");
-    setMsgType("error");
-
+  const updateTipoPagoMonto = (tipoPagoId, value) => {
     const id = Number(tipoPagoId);
-    const tipo = form.tipos_pago.find((item) => Number(item.id) === id);
-
-    if (!tipo) {
-      setMsg("El tipo de pago seleccionado no está habilitado para esta academia.");
-      return;
-    }
 
     setForm((current) => ({
       ...current,
 
-      planes: current.planes.map((plan, index) => {
-        if (index !== planIndex) return plan;
-
-        if (plan.tarifas.length >= MAX_TARIFAS_PLAN) {
-          return plan;
-        }
-
-        const exists = plan.tarifas.some((tarifa) => Number(tarifa.tipo_pago_id) === id);
-
-        if (exists) return plan;
-
-        return {
-          ...plan,
-          tarifas: [...plan.tarifas, createEmptyTarifa(id)],
-        };
-      }),
-    }));
-  };
-
-  const updateTarifa = (planIndex, tarifaIndex, field, value) => {
-    setForm((current) => ({
-      ...current,
-
-      planes: current.planes.map((plan, index) =>
-        index === planIndex
+      tipos_pago: current.tipos_pago.map((tipo) =>
+        Number(tipo.id) === id
           ? {
-              ...plan,
-
-              tarifas: plan.tarifas.map((tarifa, indexTarifa) =>
-                indexTarifa === tarifaIndex
-                  ? {
-                      ...tarifa,
-                      [field]: value,
-                    }
-                  : tarifa
-              ),
+              ...tipo,
+              monto: value,
             }
-          : plan
+          : tipo
       ),
     }));
-  };
-
-  const removeTarifa = (planIndex, tarifaIndex) => {
-    setForm((current) => ({
-      ...current,
-
-      planes: current.planes.map((plan, index) =>
-        index === planIndex
-          ? {
-              ...plan,
-              tarifas: plan.tarifas.filter((_, indexTarifa) => indexTarifa !== tarifaIndex),
-            }
-          : plan
-      ),
-    }));
-  };
-
-  const toggleTarifaSucursal = (planIndex, tarifaIndex, sucursalIndex) => {
-    setForm((current) => ({
-      ...current,
-
-      planes: current.planes.map((plan, index) => {
-        if (index !== planIndex || !plan.sucursales.includes(sucursalIndex)) {
-          return plan;
-        }
-
-        return {
-          ...plan,
-
-          tarifas: plan.tarifas.map((tarifa, indexTarifa) => {
-            if (indexTarifa !== tarifaIndex) return tarifa;
-
-            const selected = tarifa.sucursales.includes(sucursalIndex);
-
-            return {
-              ...tarifa,
-
-              sucursales: selected
-                ? tarifa.sucursales.filter((value) => value !== sucursalIndex)
-                : [...tarifa.sucursales, sucursalIndex].sort((a, b) => a - b),
-            };
-          }),
-        };
-      }),
-    }));
-  };
-
-  const selectAllTarifaSucursales = (planIndex, tarifaIndex) => {
-    setForm((current) => ({
-      ...current,
-
-      planes: current.planes.map((plan, index) =>
-        index === planIndex
-          ? {
-              ...plan,
-
-              tarifas: plan.tarifas.map((tarifa, indexTarifa) =>
-                indexTarifa === tarifaIndex
-                  ? {
-                      ...tarifa,
-                      sucursales: [...plan.sucursales],
-                    }
-                  : tarifa
-              ),
-            }
-          : plan
-      ),
-    }));
-  };
-
-  const clearTarifaSucursales = (planIndex, tarifaIndex) => {
-    updateTarifa(planIndex, tarifaIndex, "sucursales", []);
   };
 
   /* =========================================================
@@ -1192,90 +893,6 @@ export default function SuperDashboard() {
     return true;
   };
 
-  const validatePlanesStep = () => {
-    if (!form.planes.length) {
-      throw new Error("Debes registrar al menos un plan para completar la academia.");
-    }
-
-    if (form.planes.length > MAX_PLANES) {
-      throw new Error(`No puedes registrar más de ${MAX_PLANES} planes.`);
-    }
-
-    const tiposPagoIds = new Set(form.tipos_pago.map((tipo) => Number(tipo.id)));
-
-    const nombresPlanes = [];
-
-    for (let planIndex = 0; planIndex < form.planes.length; planIndex += 1) {
-      const plan = form.planes[planIndex];
-      const nombrePlan = normalizeText(plan.nombre);
-
-      if (nombrePlan.length < 2) {
-        throw new Error(`El plan ${planIndex + 1} debe tener un nombre de al menos 2 caracteres.`);
-      }
-
-      if (nombrePlan.length > MAX_NOMBRE_PLAN) {
-        throw new Error(`El nombre del plan "${nombrePlan}" no puede superar los ${MAX_NOMBRE_PLAN} caracteres.`);
-      }
-
-      if (normalizeText(plan.descripcion).length > MAX_DESCRIPCION_PLAN) {
-        throw new Error(
-          `La descripción del plan "${nombrePlan}" no puede superar los ${MAX_DESCRIPCION_PLAN} caracteres.`
-        );
-      }
-
-      if (![1, 2].includes(Number(plan.estado_id))) {
-        throw new Error(`El plan "${nombrePlan}" tiene un estado inválido.`);
-      }
-
-      if (!plan.sucursales.length) {
-        throw new Error(`El plan "${nombrePlan}" debe estar disponible al menos en una sucursal.`);
-      }
-
-      if (!plan.tarifas.length) {
-        throw new Error(`El plan "${nombrePlan}" debe tener al menos una tarifa.`);
-      }
-
-      if (plan.tarifas.length > MAX_TARIFAS_PLAN) {
-        throw new Error(`El plan "${nombrePlan}" no puede contener más de ${MAX_TARIFAS_PLAN} tarifas.`);
-      }
-
-      for (let tarifaIndex = 0; tarifaIndex < plan.tarifas.length; tarifaIndex += 1) {
-        const tarifa = plan.tarifas[tarifaIndex];
-        const monto = Number(tarifa.monto);
-
-        const tipoPagoId = Number(tarifa.tipo_pago_id);
-
-        if (!Number.isInteger(tipoPagoId) || tipoPagoId <= 0 || !tiposPagoIds.has(tipoPagoId)) {
-          throw new Error(`La tarifa ${tarifaIndex + 1} del plan "${nombrePlan}" utiliza un tipo de pago inválido.`);
-        }
-
-        if (tarifa.monto === "" || !Number.isFinite(monto) || monto < 0) {
-          throw new Error(`La tarifa ${tarifaIndex + 1} del plan "${nombrePlan}" debe tener un monto válido.`);
-        }
-
-        if (!tarifa.sucursales.length) {
-          throw new Error(
-            `La tarifa ${tarifaIndex + 1} del plan "${nombrePlan}" debe aplicar al menos en una sucursal.`
-          );
-        }
-
-        const invalidSucursal = tarifa.sucursales.some((sucursalIndex) => !plan.sucursales.includes(sucursalIndex));
-
-        if (invalidSucursal) {
-          throw new Error(`Una tarifa del plan "${nombrePlan}" utiliza una sucursal donde el plan no está disponible.`);
-        }
-      }
-
-      nombresPlanes.push(normalizeComparable(nombrePlan));
-    }
-
-    if (new Set(nombresPlanes).size !== nombresPlanes.length) {
-      throw new Error("No puedes registrar planes con nombres duplicados.");
-    }
-
-    return true;
-  };
-
   /* =========================================================
      WIZARD
   ========================================================= */
@@ -1284,7 +901,6 @@ export default function SuperDashboard() {
     if (step === 1) return validateAcademiaStep();
     if (step === 2) return validateSucursalesStep();
     if (step === 3) return validateTiposPagoStep();
-    if (step === 4) return validatePlanesStep();
 
     return false;
   };
@@ -1351,53 +967,21 @@ export default function SuperDashboard() {
     validateAcademiaStep();
     validateSucursalesStep();
     validateTiposPagoStep();
-    validatePlanesStep();
 
     const nombre = normalizeText(form.nombre);
+
     const rut_academia = Number(normalizeRutAcademia(form.rut_academia));
+
     const deporte_id = Number(form.deporte_id);
+
     const estado_id = Number(form.estado_id);
 
-    const resolveSucursalRef = (index) => {
-      const sucursal = form.sucursales[index];
+    const tipos_pago = form.tipos_pago.map((tipo) => ({
+      tipo_pago_id: Number(tipo.id),
 
-      if (!sucursal) {
-        throw new Error("Existe una referencia inválida hacia una sucursal.");
-      }
+      monto: Number(tipo.monto),
 
-      if (formMode === "edit" && Number.isInteger(Number(sucursal.id)) && Number(sucursal.id) > 0) {
-        return Number(sucursal.id);
-      }
-
-      return normalizeText(sucursal.nombre);
-    };
-
-    const tipos_pago = form.tipos_pago.map((tipo) => Number(tipo.id));
-
-    const planes = form.planes.map((plan) => ({
-      ...(formMode === "edit" && Number(plan.id) > 0
-        ? {
-            id: Number(plan.id),
-          }
-        : {}),
-
-      nombre: normalizeText(plan.nombre),
-      descripcion: normalizeText(plan.descripcion) || null,
-      estado_id: Number(plan.estado_id),
-
-      sucursales: plan.sucursales.map(resolveSucursalRef),
-
-      tarifas: plan.tarifas.map((tarifa) => ({
-        ...(formMode === "edit" && Number(tarifa.id) > 0
-          ? {
-              id: Number(tarifa.id),
-            }
-          : {}),
-
-        tipo_pago_id: Number(tarifa.tipo_pago_id),
-        monto: Number(tarifa.monto),
-        sucursales: tarifa.sucursales.map(resolveSucursalRef),
-      })),
+      estado_id: 1,
     }));
 
     if (formMode === "create") {
@@ -1408,8 +992,10 @@ export default function SuperDashboard() {
         estado_id,
 
         sucursales: form.sucursales.map((sucursal) => normalizeText(sucursal.nombre)),
+
         tipos_pago,
-        planes,
+
+        planes: [],
       };
     }
 
@@ -1430,7 +1016,31 @@ export default function SuperDashboard() {
       })),
 
       tipos_pago,
-      planes,
+    };
+
+    return {
+      nombre,
+      rut_academia,
+      deporte_id,
+      estado_id,
+
+      sucursales: form.sucursales.map((sucursal) => ({
+        ...(Number(sucursal.id) > 0
+          ? {
+              id: Number(sucursal.id),
+            }
+          : {}),
+
+        nombre: normalizeText(sucursal.nombre),
+      })),
+
+      tipos_pago,
+
+      /*
+       * No administramos beneficios desde
+       * el SuperDashboard.
+       */
+      planes: [],
     };
   };
 
@@ -1914,7 +1524,7 @@ export default function SuperDashboard() {
           {/* INDICADOR */}
 
           <div className={`rounded-2xl border p-3 sm:p-4 ${sectionCard}`}>
-            <div className="grid grid-cols-4">
+            <div className="grid grid-cols-3">
               {FORM_STEPS.map((step, index) => {
                 const Icon = step.icon;
                 const completed = Boolean(stepCompleted[step.id]);
@@ -2295,389 +1905,6 @@ export default function SuperDashboard() {
                     })}
                   </div>
                 </>
-              )}
-            </section>
-          )}
-
-          {/* PASO 4: PLANES Y TARIFAS */}
-
-          {formStep === 4 && (
-            <section className={`mt-5 rounded-2xl border p-4 sm:p-5 ${sectionCard}`}>
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-ra-terracotta text-white shrink-0">
-                    <Layers3 size={20} />
-                  </div>
-
-                  <div>
-                    <h3 className="font-extrabold text-lg">Planes y tarifas</h3>
-
-                    <p className={`text-xs mt-1 ${helperText}`}>
-                      Relaciona planes, sucursales y los tipos de pago configurados.
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={addPlan}
-                  disabled={saving || form.planes.length >= MAX_PLANES}
-                  className={[
-                    "inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 border text-sm font-bold transition disabled:opacity-50",
-                    darkMode
-                      ? "bg-white/10 border-white/15 hover:bg-white/15 text-white"
-                      : "bg-white/60 border-ra-marron/15 hover:bg-white text-ra-marron",
-                  ].join(" ")}
-                >
-                  <Plus size={16} />
-                  Agregar plan
-                </button>
-              </div>
-
-              <div className={`mt-2 text-xs ${helperText}`}>
-                {form.planes.length} plan
-                {form.planes.length === 1 ? "" : "es"} configurado
-                {form.planes.length === 1 ? "" : "s"}
-              </div>
-
-              {form.planes.length === 0 && (
-                <div
-                  className={`mt-4 rounded-xl border border-dashed px-4 py-7 text-center ${
-                    darkMode ? "border-white/15 text-white/50" : "border-ra-marron/15 text-ra-marron/50"
-                  }`}
-                >
-                  <Layers3 size={26} className="mx-auto mb-2 opacity-50" />
-
-                  <div className="text-sm font-bold">0 planes</div>
-
-                  <div className="text-xs mt-1">Agrega un plan para comenzar.</div>
-                </div>
-              )}
-
-              <div className="mt-4 space-y-4">
-                {form.planes.map((plan, planIndex) => {
-                  const tiposDisponibles = form.tipos_pago.filter(
-                    (tipo) => !plan.tarifas.some((tarifa) => Number(tarifa.tipo_pago_id) === Number(tipo.id))
-                  );
-
-                  return (
-                    <div
-                      key={`plan-${plan.id ?? "new"}-${planIndex}`}
-                      className={`rounded-xl border p-3 sm:p-4 ${
-                        darkMode ? "bg-black/10 border-white/10" : "bg-white/50 border-ra-marron/10"
-                      }`}
-                    >
-                      {/* CABECERA COMPACTA */}
-
-                      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.35fr_160px_42px] gap-3 items-end">
-                        <div>
-                          <label className={`text-xs font-semibold ${labelText}`}>Nombre del plan</label>
-
-                          <input
-                            value={plan.nombre}
-                            onChange={(e) => updatePlan(planIndex, "nombre", e.target.value)}
-                            className={`mt-1 w-full rounded-lg px-3 py-2 border outline-none ${modalInput}`}
-                            placeholder="Ej: Plan Regular"
-                            maxLength={MAX_NOMBRE_PLAN}
-                            disabled={saving}
-                          />
-                        </div>
-
-                        <div>
-                          <label className={`text-xs font-semibold ${labelText}`}>Descripción</label>
-
-                          <input
-                            value={plan.descripcion}
-                            onChange={(e) => updatePlan(planIndex, "descripcion", e.target.value)}
-                            className={`mt-1 w-full rounded-lg px-3 py-2 border outline-none ${modalInput}`}
-                            placeholder="Descripción breve"
-                            maxLength={MAX_DESCRIPCION_PLAN}
-                            disabled={saving}
-                          />
-                        </div>
-
-                        <div>
-                          <label className={`text-xs font-semibold ${labelText}`}>Estado</label>
-
-                          <select
-                            value={plan.estado_id}
-                            onChange={(e) => updatePlan(planIndex, "estado_id", e.target.value)}
-                            className={`mt-1 !py-2 ${selectDark}`}
-                            disabled={saving}
-                          >
-                            <option value="1">Activado</option>
-
-                            <option value="2">Desactivado</option>
-                          </select>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => removePlan(planIndex)}
-                          disabled={saving}
-                          title="Eliminar plan"
-                          className={[
-                            "h-[42px] rounded-lg border flex items-center justify-center",
-                            darkMode
-                              ? "bg-red-500/10 border-red-300/20 text-red-200"
-                              : "bg-red-50 border-red-200 text-red-700",
-                          ].join(" ")}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-
-                      {/* SUCURSALES PLAN */}
-
-                      <div className="mt-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className={`text-xs font-bold ${labelText}`}>Sucursales del plan</div>
-
-                          <div className="flex gap-3">
-                            <button
-                              type="button"
-                              onClick={() => selectAllPlanSucursales(planIndex)}
-                              className={`text-[11px] font-bold underline ${labelText}`}
-                            >
-                              Todas
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => clearPlanSucursales(planIndex)}
-                              className={`text-[11px] font-bold underline ${helperText}`}
-                            >
-                              Ninguna
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {form.sucursales.map((sucursal, sucursalIndex) => {
-                            const checked = plan.sucursales.includes(sucursalIndex);
-
-                            return (
-                              <label
-                                key={`plan-${planIndex}-sucursal-${sucursalIndex}`}
-                                className={[
-                                  "inline-flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer text-xs font-semibold transition",
-                                  checked ? "border-ra-terracotta bg-ra-terracotta/10" : checkboxCard,
-                                ].join(" ")}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() => togglePlanSucursal(planIndex, sucursalIndex)}
-                                  disabled={saving}
-                                  className="w-4 h-4 accent-ra-terracotta"
-                                />
-
-                                {normalizeText(sucursal.nombre)}
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* TARIFAS */}
-
-                      <div className="mt-4 pt-4 border-t border-current/10">
-                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <WalletCards size={16} />
-
-                              <h4 className="text-sm font-extrabold">Tarifas</h4>
-                            </div>
-
-                            <p className={`text-[11px] mt-1 ${helperText}`}>
-                              Agrega directamente uno de los tipos de pago habilitados desde el catálogo global.
-                            </p>
-                          </div>
-
-                          {tiposDisponibles.length > 0 && (
-                            <div className="flex flex-wrap gap-2">
-                              {tiposDisponibles.map((tipo) => (
-                                <button
-                                  key={tipo.id}
-                                  type="button"
-                                  onClick={() => addTarifa(planIndex, tipo.id)}
-                                  disabled={saving || plan.tarifas.length >= MAX_TARIFAS_PLAN}
-                                  className={[
-                                    "inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition",
-                                    darkMode
-                                      ? "bg-white/10 border-white/15 hover:bg-white/15"
-                                      : "bg-white border-ra-marron/15 hover:bg-ra-cream",
-                                  ].join(" ")}
-                                >
-                                  <Plus size={13} />
-                                  {tipo.nombre}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        {plan.tarifas.length === 0 ? (
-                          <div
-                            className={`mt-3 rounded-lg border border-dashed px-3 py-4 text-xs text-center ${helperText}`}
-                          >
-                            El plan aún no tiene tarifas.
-                          </div>
-                        ) : (
-                          <div className="mt-3 space-y-3">
-                            {plan.tarifas.map((tarifa, tarifaIndex) => {
-                              const tipoPago = form.tipos_pago.find(
-                                (tipo) => Number(tipo.id) === Number(tarifa.tipo_pago_id)
-                              );
-
-                              return (
-                                <div
-                                  key={`tarifa-${tarifa.id ?? "new"}-${tarifa.tipo_pago_id}`}
-                                  className={`rounded-lg border p-3 ${tarifaCard}`}
-                                >
-                                  <div className="grid grid-cols-1 md:grid-cols-[minmax(150px,0.8fr)_minmax(160px,0.7fr)_42px] gap-3 items-end">
-                                    <div>
-                                      <div className={`text-[11px] font-semibold ${helperText}`}>Tipo de pago</div>
-
-                                      <div className="mt-1 min-h-[42px] rounded-lg border border-current/10 px-3 py-2 flex items-center gap-2 font-bold text-sm">
-                                        <WalletCards size={15} />
-                                        {tipoPago?.nombre ?? "Tipo de pago"}
-                                      </div>
-                                    </div>
-
-                                    <div>
-                                      <label className={`text-[11px] font-semibold ${helperText}`}>Monto</label>
-
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        step="1"
-                                        value={tarifa.monto}
-                                        onChange={(e) => updateTarifa(planIndex, tarifaIndex, "monto", e.target.value)}
-                                        className={`mt-1 w-full rounded-lg px-3 py-2 border outline-none ${modalInput}`}
-                                        placeholder="Ej: 50000"
-                                        disabled={saving}
-                                      />
-
-                                      {tarifa.monto !== "" && (
-                                        <div className={`text-[10px] mt-1 ${helperText}`}>
-                                          {formatCLP(tarifa.monto)}
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    <button
-                                      type="button"
-                                      onClick={() => removeTarifa(planIndex, tarifaIndex)}
-                                      className={[
-                                        "h-[42px] rounded-lg border flex items-center justify-center",
-                                        darkMode
-                                          ? "bg-red-500/10 border-red-300/20 text-red-200"
-                                          : "bg-red-50 border-red-200 text-red-700",
-                                      ].join(" ")}
-                                    >
-                                      <Trash2 size={15} />
-                                    </button>
-                                  </div>
-
-                                  <div className="mt-3">
-                                    <div className="flex items-center justify-between gap-3">
-                                      <div className={`text-[11px] font-semibold ${labelText}`}>
-                                        Sucursales donde aplica
-                                      </div>
-
-                                      <div className="flex gap-3">
-                                        <button
-                                          type="button"
-                                          onClick={() => selectAllTarifaSucursales(planIndex, tarifaIndex)}
-                                          className={`text-[10px] font-bold underline ${labelText}`}
-                                        >
-                                          Todas
-                                        </button>
-
-                                        <button
-                                          type="button"
-                                          onClick={() => clearTarifaSucursales(planIndex, tarifaIndex)}
-                                          className={`text-[10px] font-bold underline ${helperText}`}
-                                        >
-                                          Ninguna
-                                        </button>
-                                      </div>
-                                    </div>
-
-                                    <div className="mt-2 flex flex-wrap gap-2">
-                                      {form.sucursales.map((sucursal, sucursalIndex) => {
-                                        const disponible = plan.sucursales.includes(sucursalIndex);
-
-                                        const checked = tarifa.sucursales.includes(sucursalIndex);
-
-                                        return (
-                                          <label
-                                            key={`tarifa-${planIndex}-${tarifaIndex}-${sucursalIndex}`}
-                                            className={[
-                                              "inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition",
-                                              disponible
-                                                ? checked
-                                                  ? "cursor-pointer border-ra-terracotta bg-ra-terracotta/10"
-                                                  : `cursor-pointer ${checkboxCard}`
-                                                : "cursor-not-allowed opacity-35 border-current/10",
-                                            ].join(" ")}
-                                          >
-                                            <input
-                                              type="checkbox"
-                                              checked={checked}
-                                              onChange={() =>
-                                                toggleTarifaSucursal(planIndex, tarifaIndex, sucursalIndex)
-                                              }
-                                              disabled={saving || !disponible}
-                                              className="w-3.5 h-3.5 accent-ra-terracotta"
-                                            />
-
-                                            {normalizeText(sucursal.nombre)}
-                                          </label>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {form.planes.length > 0 && (
-                <div className={`mt-4 rounded-xl border px-4 py-3 ${sectionCard}`}>
-                  <div className="grid grid-cols-4 gap-2 text-center">
-                    <div>
-                      <div className="text-lg font-extrabold">{form.sucursales.length}</div>
-                      <div className={`text-[10px] ${helperText}`}>Sucursales</div>
-                    </div>
-
-                    <div>
-                      <div className="text-lg font-extrabold">{form.tipos_pago.length}</div>
-                      <div className={`text-[10px] ${helperText}`}>Tipos de pago</div>
-                    </div>
-
-                    <div>
-                      <div className="text-lg font-extrabold">{form.planes.length}</div>
-                      <div className={`text-[10px] ${helperText}`}>Planes</div>
-                    </div>
-
-                    <div>
-                      <div className="text-lg font-extrabold">
-                        {form.planes.reduce((total, plan) => total + plan.tarifas.length, 0)}
-                      </div>
-
-                      <div className={`text-[10px] ${helperText}`}>Tarifas</div>
-                    </div>
-                  </div>
-                </div>
               )}
             </section>
           )}
