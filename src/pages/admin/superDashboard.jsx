@@ -15,6 +15,7 @@ import {
   Power,
   PowerOff,
   Sun,
+  Tags,
   Trash2,
   WalletCards,
 } from "lucide-react";
@@ -24,18 +25,20 @@ import { useTheme } from "../../context/ThemeContext";
 
 const academiasPath = "/academias";
 const deportesPath = "/deportes";
-const tiposPagoPath = "/tipo-pago/";
+const tiposPagoPath = "/tipo-pago/catalogo";
 
 const MAX_SUCURSALES = 50;
+const MAX_CATEGORIAS = 50;
 const MAX_TIPOS_PAGO = 50;
 const MAX_NOMBRE_ACADEMIA = 120;
 const MAX_NOMBRE_SUCURSAL = 100;
+const MAX_NOMBRE_CATEGORIA = 50;
 
 const FORM_STEPS = [
   {
     id: 1,
-    title: "Academia",
-    description: "Antecedentes",
+    title: "Antecedentes",
+    description: "Datos principales",
     icon: Building2,
   },
   {
@@ -46,8 +49,14 @@ const FORM_STEPS = [
   },
   {
     id: 3,
-    title: "Tarifas",
-    description: "Conceptos y valores",
+    title: "Categorías",
+    description: "Divisiones formativas",
+    icon: Tags,
+  },
+  {
+    id: 4,
+    title: "Tipos de pago",
+    description: "Conceptos y tarifas",
     icon: WalletCards,
   },
 ];
@@ -171,6 +180,7 @@ function createEmptyForm() {
     estado_id: "1",
 
     sucursales: [],
+    categorias: [],
     tipos_pago: [],
   };
 }
@@ -188,6 +198,12 @@ function normalizeAcademiaForEdit(item, catalogoTiposPago = []) {
       .filter(Boolean)
       .map((tipo) => [Number(tipo.id), tipo])
   );
+
+  const categorias = (item?.categorias ?? []).map((categoria) => ({
+    id: Number(categoria?.id),
+
+    nombre: normalizeText(categoria?.nombre),
+  }));
 
   const tipos_pago = (item?.tipos_pago ?? [])
     .map((tipo) => {
@@ -229,6 +245,8 @@ function normalizeAcademiaForEdit(item, catalogoTiposPago = []) {
     estado_id: String(item?.estado_id ?? 1),
 
     sucursales,
+
+    categorias,
 
     tipos_pago,
   };
@@ -330,6 +348,8 @@ export default function SuperDashboard() {
    * Se limpian después de agregar cada registro.
    */
   const [sucursalDraft, setSucursalDraft] = useState("");
+
+  const [categoriaDraft, setCategoriaDraft] = useState("");
 
   const [form, setForm] = useState(createEmptyForm);
 
@@ -583,6 +603,7 @@ export default function SuperDashboard() {
   const resetFormUI = () => {
     setFormStep(1);
     setSucursalDraft("");
+    setCategoriaDraft("");
   };
 
   const openCreateModal = () => {
@@ -717,6 +738,74 @@ export default function SuperDashboard() {
       ...current,
 
       sucursales: current.sucursales.filter((_, i) => i !== index),
+    }));
+  };
+
+  /* =========================================================
+     CATEGORÍAS
+  ========================================================= */
+
+  const addCategoria = () => {
+    setMsg("");
+    setMsgType("error");
+
+    const nombre = normalizeText(categoriaDraft);
+
+    if (!nombre) {
+      setMsg("Ingresa un nombre de categoría.");
+      return;
+    }
+
+    if (nombre.length > MAX_NOMBRE_CATEGORIA) {
+      setMsg(`El nombre de la categoría no puede superar los ${MAX_NOMBRE_CATEGORIA} caracteres.`);
+      return;
+    }
+
+    if (form.categorias.length >= MAX_CATEGORIAS) {
+      setMsg(`No puedes registrar más de ${MAX_CATEGORIAS} categorías.`);
+      return;
+    }
+
+    const exists = form.categorias.some(
+      (categoria) => normalizeComparable(categoria.nombre) === normalizeComparable(nombre)
+    );
+
+    if (exists) {
+      setMsg("Ya existe una categoría con ese nombre.");
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      categorias: [
+        ...current.categorias,
+        {
+          nombre,
+        },
+      ],
+    }));
+
+    setCategoriaDraft("");
+  };
+
+  const updateCategoria = (index, value) => {
+    setForm((current) => ({
+      ...current,
+      categorias: current.categorias.map((categoria, i) =>
+        i === index
+          ? {
+              ...categoria,
+              nombre: value,
+            }
+          : categoria
+      ),
+    }));
+  };
+
+  const removeCategoria = (index) => {
+    setForm((current) => ({
+      ...current,
+      categorias: current.categorias.filter((_, i) => i !== index),
     }));
   };
 
@@ -857,6 +946,34 @@ export default function SuperDashboard() {
     return true;
   };
 
+  const validateCategoriasStep = () => {
+    if (!form.categorias.length) {
+      throw new Error("Debes agregar al menos una categoría antes de continuar.");
+    }
+
+    if (form.categorias.length > MAX_CATEGORIAS) {
+      throw new Error(`No puedes registrar más de ${MAX_CATEGORIAS} categorías.`);
+    }
+
+    const nombres = form.categorias.map((categoria) => normalizeText(categoria.nombre));
+
+    if (nombres.some((nombre) => !nombre)) {
+      throw new Error("Todas las categorías deben tener un nombre.");
+    }
+
+    if (nombres.some((nombre) => nombre.length > MAX_NOMBRE_CATEGORIA)) {
+      throw new Error(`El nombre de una categoría no puede superar los ${MAX_NOMBRE_CATEGORIA} caracteres.`);
+    }
+
+    const comparables = nombres.map(normalizeComparable);
+
+    if (new Set(comparables).size !== comparables.length) {
+      throw new Error("No puedes registrar categorías duplicadas.");
+    }
+
+    return true;
+  };
+
   const validateTiposPagoStep = () => {
     if (!tiposPagoReady) {
       throw new Error("El catálogo global de tipos de pago todavía no está disponible.");
@@ -890,6 +1007,20 @@ export default function SuperDashboard() {
       throw new Error("Uno o más tipos de pago ya no existen en el catálogo global.");
     }
 
+    for (const tipo of form.tipos_pago) {
+      const rawMonto = String(tipo?.monto ?? "").trim();
+
+      if (!rawMonto) {
+        throw new Error(`Debes ingresar la tarifa inicial para "${tipo?.nombre ?? "el tipo de pago seleccionado"}".`);
+      }
+
+      const monto = Number(rawMonto);
+
+      if (!Number.isFinite(monto) || monto < 0 || monto > 999999999.99) {
+        throw new Error(`La tarifa de "${tipo?.nombre ?? "un tipo de pago"}" no es válida.`);
+      }
+    }
+
     return true;
   };
 
@@ -900,7 +1031,8 @@ export default function SuperDashboard() {
   const validateStep = (step) => {
     if (step === 1) return validateAcademiaStep();
     if (step === 2) return validateSucursalesStep();
-    if (step === 3) return validateTiposPagoStep();
+    if (step === 3) return validateCategoriasStep();
+    if (step === 4) return validateTiposPagoStep();
 
     return false;
   };
@@ -966,6 +1098,7 @@ export default function SuperDashboard() {
   const buildPayload = () => {
     validateAcademiaStep();
     validateSucursalesStep();
+    validateCategoriasStep();
     validateTiposPagoStep();
 
     const nombre = normalizeText(form.nombre);
@@ -993,9 +1126,9 @@ export default function SuperDashboard() {
 
         sucursales: form.sucursales.map((sucursal) => normalizeText(sucursal.nombre)),
 
-        tipos_pago,
+        categorias: form.categorias.map((categoria) => normalizeText(categoria.nombre)),
 
-        planes: [],
+        tipos_pago,
       };
     }
 
@@ -1015,32 +1148,17 @@ export default function SuperDashboard() {
         nombre: normalizeText(sucursal.nombre),
       })),
 
-      tipos_pago,
-    };
-
-    return {
-      nombre,
-      rut_academia,
-      deporte_id,
-      estado_id,
-
-      sucursales: form.sucursales.map((sucursal) => ({
-        ...(Number(sucursal.id) > 0
+      categorias: form.categorias.map((categoria) => ({
+        ...(Number(categoria.id) > 0
           ? {
-              id: Number(sucursal.id),
+              id: Number(categoria.id),
             }
           : {}),
 
-        nombre: normalizeText(sucursal.nombre),
+        nombre: normalizeText(categoria.nombre),
       })),
 
       tipos_pago,
-
-      /*
-       * No administramos beneficios desde
-       * el SuperDashboard.
-       */
-      planes: [],
     };
   };
 
@@ -1516,7 +1634,7 @@ export default function SuperDashboard() {
         subtitle={
           formMode === "edit"
             ? "Actualiza la configuración de la academia paso a paso."
-            : "Completa antecedentes, sucursales, conceptos de pago, planes y tarifas."
+            : "Completa antecedentes, sucursales, categorías y tipos de pago con sus tarifas iniciales."
         }
         darkMode={darkMode}
       >
@@ -1524,7 +1642,7 @@ export default function SuperDashboard() {
           {/* INDICADOR */}
 
           <div className={`rounded-2xl border p-3 sm:p-4 ${sectionCard}`}>
-            <div className="grid grid-cols-3">
+            <div className="grid grid-cols-4">
               {FORM_STEPS.map((step, index) => {
                 const Icon = step.icon;
                 const completed = Boolean(stepCompleted[step.id]);
@@ -1584,7 +1702,7 @@ export default function SuperDashboard() {
             </div>
           </div>
 
-          {/* PASO 1: ACADEMIA */}
+          {/* PASO 1: ANTECEDENTES */}
 
           {formStep === 1 && (
             <section className={`mt-5 rounded-2xl border p-4 sm:p-5 ${sectionCard}`}>
@@ -1824,9 +1942,123 @@ export default function SuperDashboard() {
             </section>
           )}
 
-          {/* PASO 3: TIPOS DE PAGO */}
+          {/* PASO 3: CATEGORÍAS */}
 
           {formStep === 3 && (
+            <section className={`mt-5 rounded-2xl border p-4 sm:p-5 ${sectionCard}`}>
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-ra-terracotta text-white shrink-0">
+                  <Tags size={20} />
+                </div>
+
+                <div>
+                  <h3 className="font-extrabold text-lg">Categorías</h3>
+
+                  <p className={`text-xs mt-1 ${helperText}`}>
+                    Agrega las categorías que utilizará inicialmente esta academia. El administrador podrá modificarlas
+                    después.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className={`mt-5 rounded-xl border p-3 sm:p-4 ${
+                  darkMode ? "border-white/10 bg-black/10" : "border-ra-marron/10 bg-white/50"
+                }`}
+              >
+                <label className={`text-xs font-semibold ${labelText}`}>Nueva categoría</label>
+
+                <div className="mt-2 flex flex-col sm:flex-row gap-2">
+                  <input
+                    value={categoriaDraft}
+                    onChange={(e) => setCategoriaDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addCategoria();
+                      }
+                    }}
+                    className={`flex-1 rounded-xl px-4 py-2.5 border outline-none transition ${modalInput}`}
+                    placeholder="Ej: Sub 10"
+                    maxLength={MAX_NOMBRE_CATEGORIA}
+                    disabled={saving}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={addCategoria}
+                    disabled={saving || form.categorias.length >= MAX_CATEGORIAS}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white bg-ra-terracotta hover:opacity-90 disabled:opacity-50"
+                  >
+                    <Plus size={16} />
+                    Agregar
+                  </button>
+                </div>
+
+                <div className={`mt-2 text-xs ${helperText}`}>
+                  {form.categorias.length} categoría
+                  {form.categorias.length === 1 ? "" : "s"} agregada
+                  {form.categorias.length === 1 ? "" : "s"}
+                </div>
+              </div>
+
+              {form.categorias.length === 0 ? (
+                <div
+                  className={`mt-4 rounded-xl border border-dashed px-4 py-7 text-center ${
+                    darkMode ? "border-white/15 text-white/50" : "border-ra-marron/15 text-ra-marron/50"
+                  }`}
+                >
+                  <Tags size={26} className="mx-auto mb-2 opacity-50" />
+                  <div className="text-sm font-bold">0 categorías</div>
+
+                  <div className="text-xs mt-1">Agrega una categoría para continuar.</div>
+                </div>
+              ) : (
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {form.categorias.map((categoria, index) => (
+                    <div
+                      key={`categoria-${categoria.id ?? "new"}-${index}`}
+                      className={`rounded-xl border p-3 ${
+                        darkMode ? "bg-black/10 border-white/10" : "bg-white/50 border-ra-marron/10"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 min-w-0">
+                          <label className={`text-[11px] font-semibold ${helperText}`}>Categoría {index + 1}</label>
+
+                          <input
+                            value={categoria.nombre}
+                            onChange={(e) => updateCategoria(index, e.target.value)}
+                            className={`mt-1 w-full rounded-lg px-3 py-2 border outline-none ${modalInput}`}
+                            maxLength={MAX_NOMBRE_CATEGORIA}
+                            disabled={saving}
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => removeCategoria(index)}
+                          disabled={saving}
+                          className={[
+                            "shrink-0 mt-4 rounded-lg p-2 border transition",
+                            darkMode
+                              ? "bg-red-500/10 border-red-300/20 text-red-200"
+                              : "bg-red-50 border-red-200 text-red-700",
+                          ].join(" ")}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* PASO 4: TIPOS DE PAGO */}
+
+          {formStep === 4 && (
             <section className={`mt-5 rounded-2xl border p-4 sm:p-5 ${sectionCard}`}>
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-ra-terracotta text-white shrink-0">
@@ -1897,6 +2129,46 @@ export default function SuperDashboard() {
 
                               {tipo.descripcion ? (
                                 <p className={`text-xs mt-1 ${helperText}`}>{tipo.descripcion}</p>
+                              ) : null}
+
+                              {checked ? (
+                                <div
+                                  className={`mt-3 rounded-lg border p-3 ${tarifaCard}`}
+                                  onClick={(e) => e.preventDefault()}
+                                >
+                                  <label className={`text-[11px] font-bold ${labelText}`}>Tarifa inicial</label>
+
+                                  <div className="mt-1 flex items-center gap-2">
+                                    <span className={`text-sm font-extrabold ${labelText}`}>$</span>
+
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      value={
+                                        form.tipos_pago.find((selected) => Number(selected.id) === Number(tipo.id))
+                                          ?.monto ?? ""
+                                      }
+                                      onChange={(e) => updateTipoPagoMonto(tipo.id, e.target.value)}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className={`w-full rounded-lg px-3 py-2 border outline-none ${modalInput}`}
+                                      placeholder="Ej: 30000"
+                                      disabled={saving}
+                                    />
+                                  </div>
+
+                                  {String(
+                                    form.tipos_pago.find((selected) => Number(selected.id) === Number(tipo.id))
+                                      ?.monto ?? ""
+                                  ).trim() ? (
+                                    <div className={`mt-1 text-[11px] ${helperText}`}>
+                                      {formatCLP(
+                                        form.tipos_pago.find((selected) => Number(selected.id) === Number(tipo.id))
+                                          ?.monto
+                                      )}
+                                    </div>
+                                  ) : null}
+                                </div>
                               ) : null}
                             </div>
                           </div>
