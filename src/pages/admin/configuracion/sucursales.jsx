@@ -1,23 +1,40 @@
 // src/pages/admin/config/Sucursales.jsx
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
-import api, { getToken, clearToken } from "../../../services/api";
+import { Building2, MapPin, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2 } from "lucide-react";
+
+import api, { clearToken, getToken } from "../../../services/api";
 import { useTheme } from "../../../context/ThemeContext";
 import Modal from "../../../components/modal";
 import { useMobileAutoScrollTop } from "../../../hooks/useMobileScrollTop";
 
-/* =======================
-   🎨 Conjunto X (SuperDashboard vibe)
-======================= */
-const PALETTE_X = {
-  copper: "#aa5013",
-  brown: "#6d5829",
-  gold: "#b79f69",
-  cream: "#e8dac4",
-  sand: "#ffdda1",
-  caramel: "#dda272",
-  terracotta: "#e2773b",
+/* =========================================================
+   WELI - SUCURSALES
+
+   IMPORTANTE:
+   Las sucursales NO son un catálogo global como Categorías,
+   Posiciones o Previsión Médica.
+
+   Son estructura propia de cada academia, por lo que el Admin
+   mantiene la capacidad de crear, editar y eliminar sucursales
+   de SU academia.
+
+   Este componente moderniza la presentación visual sin cambiar
+   esa responsabilidad funcional.
+========================================================= */
+
+const asList = (response) => {
+  const data = response?.data ?? response;
+
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.results)) return data.results;
+  if (Array.isArray(data?.rows)) return data.rows;
+  if (Array.isArray(data?.data)) return data.data;
+
+  return [];
 };
 
 export default function Sucursales() {
@@ -25,541 +42,873 @@ export default function Sucursales() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  useMobileAutoScrollTop();
+
+  const [rolActual, setRolActual] = useState(0);
+
   const [sucursales, setSucursales] = useState([]);
+
   const [nuevo, setNuevo] = useState("");
   const [editarId, setEditarId] = useState(null);
   const [editarNombre, setEditarNombre] = useState("");
+
+  const [filtroTexto, setFiltroTexto] = useState("");
+
+  const [seleccionado, setSeleccionado] = useState(null);
+  const [mostrarModal, setMostrarModal] = useState(false);
+
+  const [loading, setLoading] = useState(true);
+  const [reloadBusy, setReloadBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState("");
+  const [busyId, setBusyId] = useState(null);
+
   const [mensaje, setMensaje] = useState("");
   const [error, setError] = useState("");
-  const [mostrarModal, setMostrarModal] = useState(false);
-  const [seleccionado, setSeleccionado] = useState(null);
-  const [busy, setBusy] = useState(false);
 
-  useMobileAutoScrollTop();
+  const breadcrumbBootRef = useRef(false);
 
-  // ✅ Estrategia dorada: detecta árbol actual (SIN hardcodear /admin)
+  /* =======================================================
+     NAVEGACIÓN
+  ======================================================= */
+
   const dashboardBase = useMemo(() => {
-    const p = location.pathname || "";
-    return p.startsWith("/super-dashboard/admin/dashboard") ? "/super-dashboard/admin/dashboard" : "/admin";
+    const path = location.pathname || "";
+
+    return path.startsWith("/super-dashboard/admin/dashboard") ? "/super-dashboard/admin/dashboard" : "/admin";
   }, [location.pathname]);
 
   const configPath = useMemo(() => `${dashboardBase}/configuracion`, [dashboardBase]);
 
-  // Guards
-  const breadcrumbBootRef = useRef(false);
+  /* =======================================================
+     ERRORES
+  ======================================================= */
 
-  const abreviar = useCallback((txt) => {
-    if (!txt) return "";
-    const isMobile = typeof window !== "undefined" ? window.innerWidth <= 640 : false;
-    if (!isMobile) return txt;
-    if (txt.length <= 14) return txt;
-    return txt
-      .split(" ")
-      .map((p) => (p.length > 6 ? p.slice(0, 6) + "." : p))
-      .join(" ");
-  }, []);
+  const getErrStatus = useCallback((err) => err?.status ?? err?.response?.status ?? 0, []);
 
-  // 🧭 Breadcrumb (ANTI-LOOP) — respeta ruta real
-  useEffect(() => {
-    if (breadcrumbBootRef.current) return;
+  const getErrData = useCallback((err) => err?.data ?? err?.response?.data ?? null, []);
 
-    const currentPath = location.pathname;
-    const bc = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : [];
-    const last = bc[bc.length - 1];
+  const prettyError = useCallback(
+    (err, fallback) => {
+      const status = getErrStatus(err);
+      const data = getErrData(err);
 
-    const label = "Sucursales";
-    if (!last || last.label !== label) {
-      breadcrumbBootRef.current = true;
-      navigate(currentPath, {
-        replace: true,
-        state: {
-          ...(location.state || {}),
-          breadcrumb: [
-            { label: abreviar("Configuración"), to: configPath },
-            { label: abreviar(label), to: currentPath },
-          ],
-        },
-      });
-    } else {
-      breadcrumbBootRef.current = true;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, location.search, configPath, abreviar]);
+      const backendMsg = data?.message ?? data?.detail ?? data?.error ?? err?.message ?? null;
 
-  // 🔐 Auth (admin=1 o superadmin=3)
-  useEffect(() => {
-    try {
-      const token = getToken();
-      if (!token) throw new Error("no-token");
-
-      const decoded = jwtDecode(token);
-      const now = Math.floor(Date.now() / 1000);
-      if (!decoded?.exp || decoded.exp <= now) throw new Error("expired");
-
-      const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
-      const rol = Number.isFinite(Number(rawRol)) ? Number(rawRol) : 0;
-
-      if (![1, 3].includes(rol)) {
-        navigate(dashboardBase, { replace: true });
-        return;
+      if (status === 401) {
+        return "Sesión expirada. Vuelve a iniciar sesión.";
       }
-    } catch {
-      clearToken();
-      navigate("/login", { replace: true });
-    }
-  }, [navigate, dashboardBase]);
 
-  // ───────── Utils ─────────
-  const sanitizar = (texto) =>
-    String(texto || "")
-      .replace(/[<>;"']/g, "")
-      .replace(/[^a-zA-Z0-9 áéíóúÁÉÍÓÚñÑ-]/g, "")
-      .trim();
+      if (status === 403) {
+        return backendMsg || "No tienes permisos para realizar esta acción.";
+      }
 
-  const flash = useCallback((okMsg, errMsg) => {
-    if (okMsg) setMensaje(okMsg);
-    if (errMsg) setError(errMsg);
+      if (status === 400) {
+        return backendMsg || "Los datos enviados no son válidos.";
+      }
+
+      if (status === 404) {
+        return backendMsg || "La sucursal ya no se encuentra disponible.";
+      }
+
+      if (status === 409) {
+        return backendMsg || "No fue posible completar la acción debido a una restricción del sistema.";
+      }
+
+      return backendMsg || fallback || "Ocurrió un error inesperado.";
+    },
+    [getErrStatus, getErrData]
+  );
+
+  const flash = useCallback((okMessage = "", errorMessage = "") => {
+    setMensaje(okMessage);
+    setError(errorMessage);
+
     window.setTimeout(() => {
       setMensaje("");
       setError("");
-    }, 2500);
+    }, 2800);
   }, []);
-
-  const toArray = (resp) => {
-    const d = resp?.data ?? resp;
-    if (Array.isArray(d)) return d;
-    if (Array.isArray(d?.items)) return d.items;
-    if (Array.isArray(d?.results)) return d.results;
-    if (Array.isArray(d?.rows)) return d.rows;
-    return [];
-  };
-
-  // ✅ error normalizado por tu api.js
-  const getErrStatus = (err) => err?.status ?? err?.response?.status ?? 0;
-  const getErrData = (err) => err?.data ?? err?.response?.data ?? null;
-
-  // ✅ Mensajes específicos (FK/DUP aunque vengan como 500)
-  const prettyError = (err, fallback) => {
-    const st = getErrStatus(err);
-    const data = getErrData(err);
-    const backendMsg = data?.message || data?.detail || data?.error || err?.message || null;
-
-    if (st === 401 || st === 403) return "🔒 Sesión expirada o sin permisos. Vuelve a iniciar sesión.";
-    if (st === 400) return backendMsg || "⚠️ Datos inválidos. Revisa el nombre.";
-    if (st === 404) return backendMsg || "⚠️ No encontrado (puede que ya haya sido eliminado).";
-
-    if (st === 409) {
-      if (data?.errno === 1451 || data?.code === "ER_ROW_IS_REFERENCED_2") {
-        return "⚠️ No se puede eliminar: la sucursal está siendo usada por registros asociados.";
-      }
-      if (data?.errno === 1062 || data?.code === "ER_DUP_ENTRY") {
-        return "⚠️ Ya existe una sucursal con ese nombre.";
-      }
-      return backendMsg || "⚠️ Conflicto: no se pudo completar la acción.";
-    }
-
-    if (data?.errno === 1451 || data?.code === "ER_ROW_IS_REFERENCED_2") {
-      return "⚠️ No se puede eliminar: la sucursal está siendo usada por registros asociados.";
-    }
-    if (data?.errno === 1062 || data?.code === "ER_DUP_ENTRY") {
-      return "⚠️ Ya existe una sucursal con ese nombre.";
-    }
-
-    return backendMsg || fallback || "❌ Error inesperado.";
-  };
 
   const handleAuth = useCallback(() => {
     clearToken();
     navigate("/login", { replace: true });
   }, [navigate]);
 
-  // ✅ apiOps estable (NO cambia por render)
-  const apiOps = useMemo(() => {
-    const withVariants =
-      (fn) =>
-      async (base, ...args) => {
-        const urls = base.endsWith("/") ? [base, base.slice(0, -1)] : [base, `${base}/`];
-        let lastErr = null;
-
-        for (const u of urls) {
-          try {
-            return await fn(u, ...args);
-          } catch (e) {
-            lastErr = e;
-            const st = getErrStatus(e);
-            if (st === 401 || st === 403) throw e;
-          }
-        }
-        throw lastErr || new Error("ENDPOINT_VARIANTS_FAILED");
-      };
-
-    return {
-      getVar: withVariants((u, c) => api.get(u, c)),
-      postVar: withVariants((u, p, c) => api.post(u, p, c)),
-      putVar: withVariants((u, p, c) => api.put(u, p, c)),
-      delVar: withVariants((u, c) => api.delete(u, c)),
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const sanitizar = useCallback((texto) => {
+    return String(texto || "")
+      .replace(/[<>;"']/g, "")
+      .replace(/[^a-zA-Z0-9 áéíóúÁÉÍÓÚñÑ-]/g, "")
+      .trim();
   }, []);
 
-  // ───────── Fetch (sin loop) ─────────
+  /* =======================================================
+     BREADCRUMB
+  ======================================================= */
+
+  useEffect(() => {
+    if (breadcrumbBootRef.current) return;
+
+    const currentPath = location.pathname;
+    const breadcrumb = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : [];
+
+    const last = breadcrumb[breadcrumb.length - 1];
+    const label = "Sucursales";
+
+    if (!last || last.label !== label) {
+      breadcrumbBootRef.current = true;
+
+      navigate(currentPath, {
+        replace: true,
+        state: {
+          ...(location.state || {}),
+          breadcrumb: [
+            {
+              label: "Configuración",
+              to: configPath,
+            },
+            {
+              label,
+              to: currentPath,
+            },
+          ],
+        },
+      });
+    } else {
+      breadcrumbBootRef.current = true;
+    }
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, location.search, configPath]);
+
+  /* =======================================================
+     AUTH
+  ======================================================= */
+
+  useEffect(() => {
+    try {
+      const token = getToken();
+
+      if (!token) {
+        throw new Error("no-token");
+      }
+
+      const decoded = jwtDecode(token);
+      const now = Math.floor(Date.now() / 1000);
+
+      if (!decoded?.exp || Number(decoded.exp) <= now) {
+        throw new Error("expired");
+      }
+
+      const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
+
+      const rol = Number(rawRol);
+
+      if (![1, 3].includes(rol)) {
+        navigate(dashboardBase, {
+          replace: true,
+        });
+        return;
+      }
+
+      setRolActual(rol);
+    } catch {
+      handleAuth();
+    }
+  }, [dashboardBase, handleAuth, navigate]);
+
+  /* =======================================================
+     API
+  ======================================================= */
+
   const fetchSucursales = useCallback(
-    async (signal) => {
+    async ({ signal } = {}) => {
       try {
-        const res = await apiOps.getVar("/sucursales-real", { signal });
+        const response = await api.get("/sucursales-real", {
+          signal,
+        });
+
         if (signal?.aborted) return;
-        setSucursales(toArray(res));
+
+        setSucursales(asList(response));
       } catch (err) {
         if (signal?.aborted) return;
-        const st = getErrStatus(err);
-        if (st === 401 || st === 403) return handleAuth();
-        setError(prettyError(err, "❌ Error al obtener sucursales"));
+
+        const status = getErrStatus(err);
+
+        if (status === 401) {
+          handleAuth();
+          return;
+        }
+
+        setError(prettyError(err, "No fue posible cargar las sucursales."));
       }
     },
-    [apiOps, handleAuth]
+    [getErrStatus, handleAuth, prettyError]
   );
 
   useEffect(() => {
+    if (!rolActual) return;
+
     const abort = new AbortController();
-    fetchSucursales(abort.signal);
+
+    (async () => {
+      try {
+        setLoading(true);
+
+        await fetchSucursales({
+          signal: abort.signal,
+        });
+      } finally {
+        if (!abort.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    })();
+
     return () => abort.abort();
+  }, [rolActual, fetchSucursales]);
+
+  const refresh = useCallback(async () => {
+    setReloadBusy(true);
+    setError("");
+
+    try {
+      await fetchSucursales();
+    } finally {
+      setReloadBusy(false);
+    }
   }, [fetchSucursales]);
 
-  // ───────── Crear ─────────
+  /* =======================================================
+     CRUD
+  ======================================================= */
+
   const crear = async () => {
     const nombre = sanitizar(nuevo);
-    if (nombre.length < 3) return setError("⚠️ El nombre debe tener al menos 3 caracteres.");
 
-    setBusy(true);
+    if (nombre.length < 3) {
+      setError("El nombre debe tener al menos 3 caracteres.");
+      return;
+    }
+
+    setBusyAction("create");
+    setError("");
+    setMensaje("");
+
     try {
-      await apiOps.postVar("/sucursales-real", { nombre });
+      await api.post("/sucursales-real", {
+        nombre,
+      });
+
       setNuevo("");
-      flash("✅ Sucursal creada");
+
+      flash("Sucursal creada correctamente.");
+
       await fetchSucursales();
     } catch (err) {
-      const st = getErrStatus(err);
-      if (st === 401 || st === 403) return handleAuth();
-      setError(prettyError(err, "❌ No se pudo crear la sucursal."));
+      const status = getErrStatus(err);
+
+      if (status === 401) {
+        handleAuth();
+        return;
+      }
+
+      setError(prettyError(err, "No fue posible crear la sucursal."));
     } finally {
-      setBusy(false);
+      setBusyAction("");
     }
   };
 
-  // ───────── Actualizar ─────────
-  const actualizar = async () => {
-    if (!editarId) return setError("⚠️ Debes seleccionar una sucursal.");
-    const nombre = sanitizar(editarNombre);
-    if (nombre.length < 3) return setError("⚠️ El nombre debe tener al menos 3 caracteres.");
+  const iniciarEdicion = (sucursal) => {
+    setEditarId(Number(sucursal?.id));
+    setEditarNombre(String(sucursal?.nombre ?? ""));
+    setError("");
+    setMensaje("");
+  };
 
-    setBusy(true);
+  const cancelarEdicion = () => {
+    setEditarId(null);
+    setEditarNombre("");
+  };
+
+  const actualizar = async () => {
+    const id = Number(editarId);
+    const nombre = sanitizar(editarNombre);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      setError("Debes seleccionar una sucursal válida.");
+      return;
+    }
+
+    if (nombre.length < 3) {
+      setError("El nombre debe tener al menos 3 caracteres.");
+      return;
+    }
+
+    setBusyAction("edit");
+    setBusyId(id);
+    setError("");
+    setMensaje("");
+
     try {
-      await apiOps.putVar(`/sucursales-real/${editarId}`, { nombre });
+      await api.put(`/sucursales-real/${id}`, {
+        nombre,
+      });
+
       setEditarId(null);
       setEditarNombre("");
-      flash("✅ Actualizado");
+
+      flash("Sucursal actualizada correctamente.");
+
       await fetchSucursales();
     } catch (err) {
-      const st = getErrStatus(err);
-      if (st === 401 || st === 403) return handleAuth();
-      setError(prettyError(err, "❌ No se pudo actualizar la sucursal."));
+      const status = getErrStatus(err);
+
+      if (status === 401) {
+        handleAuth();
+        return;
+      }
+
+      setError(prettyError(err, "No fue posible actualizar la sucursal."));
     } finally {
-      setBusy(false);
+      setBusyAction("");
+      setBusyId(null);
     }
   };
 
-  // ───────── Eliminar ─────────
-  const eliminar = async () => {
-    if (!seleccionado?.id) return setMostrarModal(false);
+  const solicitarEliminar = (sucursal) => {
+    setSeleccionado(sucursal);
+    setMostrarModal(true);
+    setError("");
+    setMensaje("");
+  };
 
-    setBusy(true);
+  const eliminar = async () => {
+    const id = Number(seleccionado?.id);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      setMostrarModal(false);
+      setSeleccionado(null);
+      return;
+    }
+
+    setBusyAction("delete");
+    setBusyId(id);
+    setError("");
+    setMensaje("");
+
     try {
-      await apiOps.delVar(`/sucursales-real/${seleccionado.id}`);
-      flash("✅ Eliminado");
+      await api.delete(`/sucursales-real/${id}`);
+
+      if (Number(editarId) === id) {
+        cancelarEdicion();
+      }
+
+      flash("Sucursal eliminada correctamente.");
+
       await fetchSucursales();
     } catch (err) {
-      const st = getErrStatus(err);
-      if (st === 401 || st === 403) return handleAuth();
-      setError(prettyError(err, "❌ No se pudo eliminar la sucursal."));
+      const status = getErrStatus(err);
+
+      if (status === 401) {
+        handleAuth();
+        return;
+      }
+
+      setError(prettyError(err, "No fue posible eliminar la sucursal."));
     } finally {
-      setBusy(false);
+      setBusyAction("");
+      setBusyId(null);
       setMostrarModal(false);
       setSeleccionado(null);
     }
   };
 
-  /* =======================
-     UI estilo SuperDashboard
-  ======================= */
+  /* =======================================================
+     NORMALIZACIÓN / FILTROS
+  ======================================================= */
+
+  const sucursalesNormalizadas = useMemo(
+    () =>
+      (Array.isArray(sucursales) ? sucursales : [])
+        .map((item) => ({
+          ...item,
+          id: Number(item?.id ?? 0),
+          nombre: String(item?.nombre ?? item?.descripcion ?? `Sucursal #${item?.id ?? ""}`).trim(),
+        }))
+        .filter((item) => Number.isInteger(item.id) && item.id > 0)
+        .sort((a, b) =>
+          a.nombre.localeCompare(b.nombre, "es", {
+            sensitivity: "base",
+          })
+        ),
+    [sucursales]
+  );
+
+  const sucursalesFiltradas = useMemo(() => {
+    const texto = String(filtroTexto || "")
+      .trim()
+      .toLowerCase();
+
+    return sucursalesNormalizadas.filter((item) => {
+      if (!texto) return true;
+
+      return item.nombre.toLowerCase().includes(texto) || String(item.id).includes(texto);
+    });
+  }, [sucursalesNormalizadas, filtroTexto]);
+
+  /* =======================================================
+     UI
+  ======================================================= */
+
   const ui = useMemo(() => {
     const shell = darkMode
       ? "bg-[#111827] text-white"
       : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
 
     const titleMain = darkMode ? "text-white" : "text-ra-marron";
-    const subText = darkMode ? "text-white/70" : "text-ra-marron/70";
+
+    const subText = darkMode ? "text-white/65" : "text-ra-marron/65";
 
     const card =
-      "rounded-2xl border shadow-lg transition " +
-      (darkMode ? "bg-white/10 border-white/15" : "bg-white/60 border-ra-marron/15");
+      "rounded-2xl border shadow-[0_14px_42px_rgba(0,0,0,0.10)] " +
+      (darkMode ? "bg-white/[0.07] border-white/10" : "bg-white/65 border-ra-marron/15");
 
-    const sectionTitle = darkMode ? "text-white/90" : "text-ra-marron";
-
-    const input =
-      "w-full p-2 rounded-xl outline-none border text-sm " +
-      "focus:ring-2 focus:ring-[rgba(170,80,19,0.25)] focus:border-[rgba(170,80,19,0.35)] " +
+    const control =
+      "w-full h-11 sm:h-12 px-3.5 rounded-xl text-[14px] sm:text-[15px] font-medium outline-none transition " +
       (darkMode
-        ? "bg-black/25 text-white border-white/10 placeholder-white/45"
-        : "bg-white/70 text-ra-marron border-ra-marron/15 placeholder-ra-marron/45");
+        ? "border border-white/15 bg-[#111827] text-white placeholder:text-white/40 focus:border-[#ffdda1] focus:ring-2 focus:ring-[#ffdda1]/15"
+        : "border border-ra-marron/20 bg-white/80 text-ra-marron placeholder:text-ra-marron/45 focus:border-[#aa5013] focus:ring-2 focus:ring-[#aa5013]/10");
 
-    const select = input + " appearance-none";
-
-    const btn =
-      "w-full py-2 rounded-xl font-extrabold transition shadow-sm " +
-      "disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.99]";
-
-    const btnPrimaryStyle = busy
-      ? { backgroundColor: "rgba(255,255,255,0.18)", color: "rgba(255,255,255,0.85)" }
-      : {
-          background: `linear-gradient(135deg, ${PALETTE_X.copper}, ${PALETTE_X.terracotta})`,
-          color: "#fff",
-        };
-
-    const btnWarnStyle =
-      busy || !editarId
-        ? { backgroundColor: "rgba(255,255,255,0.18)", color: "rgba(255,255,255,0.85)" }
-        : { backgroundColor: "#f59e0b", color: "#1a1208" };
-
-    const btnDangerStyle =
-      !seleccionado || busy
-        ? { backgroundColor: "rgba(255,255,255,0.18)", color: "rgba(255,255,255,0.85)" }
-        : { backgroundColor: "#dc2626", color: "#fff" };
-
-    const danger =
-      "rounded-2xl border px-5 py-4 font-semibold " +
-      (darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
+    const secondaryButton =
+      "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] font-bold transition disabled:opacity-50 disabled:cursor-not-allowed " +
+      (darkMode ? "border-white/15 text-white hover:bg-white/10" : "border-ra-marron/20 text-ra-marron hover:bg-white");
 
     const ok =
-      "rounded-2xl border px-5 py-4 font-semibold " +
+      "rounded-2xl border px-4 py-3 text-[14px] font-semibold " +
       (darkMode
         ? "border-emerald-200/20 bg-emerald-500/10 text-emerald-100"
         : "border-emerald-200 bg-emerald-50 text-emerald-900");
 
-    const listItem =
-      "flex items-center justify-between gap-3 py-2 border-b last:border-b-0 " +
-      (darkMode ? "border-white/10" : "border-ra-marron/12");
-
-    const pill =
-      "inline-flex items-center px-2 py-1 rounded-full text-xs font-bold border " +
-      (darkMode ? "bg-black/20 border-white/15 text-white/75" : "bg-white/60 border-ra-marron/15 text-ra-marron/70");
+    const danger =
+      "rounded-2xl border px-4 py-3 text-[14px] font-semibold " +
+      (darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
 
     return {
       shell,
       titleMain,
       subText,
       card,
-      sectionTitle,
-      input,
-      select,
-      btn,
-      btnPrimaryStyle,
-      btnWarnStyle,
-      btnDangerStyle,
-      danger,
+      control,
+      secondaryButton,
       ok,
-      listItem,
-      pill,
+      danger,
     };
-  }, [darkMode, busy, editarId, seleccionado]);
+  }, [darkMode]);
+
+  if (loading) {
+    return (
+      <div className={`${ui.shell} min-h-screen font-sans`}>
+        <div className="min-h-[70vh] flex items-center justify-center">
+          <div className={`text-sm font-semibold ${ui.subText}`}>Cargando sucursales…</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`${ui.shell} min-h-screen font-sans`}>
-      {/* Header tipo SuperDashboard */}
-      <header className="px-6 pt-6 text-center">
-        <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>Sucursales</h1>
-        <p className={`text-sm mt-2 ${ui.subText}`}>
-          Admin / SuperAdmin. Mantén las sucursales ordenadas (y sin duplicados… porque después lloran los FKs).
-        </p>
+      <header className="px-4 sm:px-6 lg:px-8 pt-6 text-center">
+        <div className="mx-auto max-w-4xl">
+          <div
+            className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border ${
+              darkMode
+                ? "border-white/10 bg-white/[0.06] text-[#ffdda1]"
+                : "border-ra-marron/15 bg-white/60 text-[#aa5013]"
+            }`}
+          >
+            <Building2 className="h-6 w-6" />
+          </div>
+
+          <h1 className={`text-3xl sm:text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>Sucursales</h1>
+
+          <p className={`mx-auto mt-2 max-w-3xl text-[14px] sm:text-[15px] leading-relaxed ${ui.subText}`}>
+            Administra las sedes operativas de tu academia y mantén su estructura organizada para jugadores, staff y
+            procesos internos.
+          </p>
+        </div>
       </header>
 
-      <main className="px-6 pb-20">
-        <div className="max-w-6xl mx-auto mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Listado (2 columnas en desktop) */}
-          <section className={`${ui.card} p-6 lg:col-span-2`}>
-            <div className="flex items-baseline justify-between gap-3 mb-4">
-              <h2 className={`text-lg font-extrabold ${ui.sectionTitle}`}>📋 Listado</h2>
-              <span className={ui.pill}>
-                {sucursales.length} sucursal{sucursales.length !== 1 ? "es" : ""}
-              </span>
-            </div>
+      <main className="px-4 sm:px-6 lg:px-8 pb-20">
+        {/* RESUMEN */}
 
-            {sucursales.length === 0 ? (
-              <p className={ui.subText}>Sin registros.</p>
-            ) : (
-              <div className="max-h-[520px] overflow-auto pr-1">
-                {sucursales.map((s) => {
-                  const nombre = s?.nombre ?? `#${s?.id}`;
-                  return (
-                    <div key={s.id} className={ui.listItem}>
-                      <div className="min-w-0">
-                        <p className="font-extrabold truncate">{nombre}</p>
-                        <p className={ui.subText}>ID: {s.id}</p>
-                      </div>
+        <section className="mx-auto mt-7 max-w-7xl grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <SummaryCard
+            darkMode={darkMode}
+            label="Sucursales registradas"
+            value={sucursalesNormalizadas.length}
+            type="total"
+          />
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          type="button"
-                          className="px-3 py-1 rounded-lg text-xs font-extrabold border transition hover:brightness-110"
-                          style={{
-                            borderColor: darkMode ? "rgba(255,255,255,0.18)" : "rgba(109,88,41,0.18)",
-                            background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.65)",
-                          }}
-                          onClick={() => {
-                            setError("");
-                            setMensaje("");
-                            setEditarId(Number(s.id));
-                            setEditarNombre(String(s.nombre ?? ""));
-                            setSeleccionado(s);
-                          }}
-                          disabled={busy}
-                          title="Seleccionar"
-                        >
-                          Seleccionar
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
+          <SummaryCard
+            darkMode={darkMode}
+            label="Resultados visibles"
+            value={sucursalesFiltradas.length}
+            type="visible"
+          />
+        </section>
 
-          {/* Acciones */}
-          <aside className="lg:col-span-1 space-y-6">
-            {/* Crear */}
-            <section className={`${ui.card} p-6`}>
-              <h2 className={`text-lg font-extrabold mb-3 ${ui.sectionTitle}`}>➕ Crear</h2>
-              <input
-                value={nuevo}
-                onChange={(e) => {
-                  setNuevo(e.target.value);
-                  setError("");
-                  setMensaje("");
-                }}
-                placeholder="Nombre (mín. 3)"
-                className={ui.input}
-                disabled={busy}
-              />
-              <button
-                type="button"
-                onClick={crear}
-                disabled={busy}
-                className={`${ui.btn} mt-3`}
-                style={ui.btnPrimaryStyle}
-                title={busy ? "Procesando..." : "Crear sucursal"}
-              >
-                {busy ? "Procesando..." : "Guardar"}
-              </button>
-            </section>
-
-            {/* Editar */}
-            <section className={`${ui.card} p-6`}>
-              <h2 className={`text-lg font-extrabold mb-3 ${ui.sectionTitle}`}>✏️ Editar</h2>
-
-              <select
-                value={editarId || ""}
-                onChange={(e) => {
-                  const id = Number(e.target.value);
-                  setEditarId(id || null);
-                  const sel = sucursales.find((x) => Number(x.id) === id);
-                  setEditarNombre(sel?.nombre ?? "");
-                  setSeleccionado(sel || null);
-                  setError("");
-                  setMensaje("");
-                }}
-                className={ui.select}
-                disabled={busy}
-              >
-                <option value="">Selecciona</option>
-                {sucursales.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.nombre ?? `#${s.id}`}
-                  </option>
-                ))}
-              </select>
-
-              <input
-                value={editarNombre}
-                onChange={(e) => {
-                  setEditarNombre(e.target.value);
-                  setError("");
-                  setMensaje("");
-                }}
-                placeholder="Nuevo nombre (mín. 3)"
-                className={`${ui.input} mt-3`}
-                disabled={busy || !editarId}
-              />
-
-              <button
-                type="button"
-                onClick={actualizar}
-                disabled={busy || !editarId}
-                className={`${ui.btn} mt-3`}
-                style={ui.btnWarnStyle}
-                title={!editarId ? "Selecciona una sucursal primero" : busy ? "Procesando..." : "Actualizar"}
-              >
-                {busy ? "Procesando..." : "Actualizar"}
-              </button>
-            </section>
-
-            {/* Eliminar */}
-            <section className={`${ui.card} p-6`}>
-              <h2 className={`text-lg font-extrabold mb-3 ${ui.sectionTitle}`}>🗑️ Eliminar</h2>
-
-              <select
-                value={seleccionado?.id || ""}
-                onChange={(e) => {
-                  const id = Number(e.target.value);
-                  const sel = sucursales.find((x) => Number(x.id) === id);
-                  setSeleccionado(sel || null);
-                  setError("");
-                  setMensaje("");
-                }}
-                className={ui.select}
-                disabled={busy}
-              >
-                <option value="">Selecciona</option>
-                {sucursales.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.nombre ?? `#${s.id}`}
-                  </option>
-                ))}
-              </select>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (busy || !seleccionado) return;
-                  setMostrarModal(true);
-                }}
-                disabled={!seleccionado || busy}
-                className={`${ui.btn} mt-3`}
-                style={ui.btnDangerStyle}
-                title={!seleccionado ? "Selecciona una sucursal" : busy ? "Procesando..." : "Eliminar"}
-              >
-                {busy ? "Procesando..." : "Eliminar"}
-              </button>
-            </section>
-          </aside>
-        </div>
-
-        {/* Alerts */}
-        <div className="max-w-6xl mx-auto mt-6 space-y-3">
+        <div className="mx-auto mt-4 max-w-7xl space-y-3">
           {!!mensaje && <div className={ui.ok}>{mensaje}</div>}
           {!!error && <div className={ui.danger}>{error}</div>}
         </div>
 
-        <Modal visible={mostrarModal} onConfirm={eliminar} onCancel={() => setMostrarModal(false)} />
+        {/* GOBERNANZA */}
+
+        <section className={`${ui.card} mx-auto mt-4 max-w-7xl p-4 sm:p-5`}>
+          <div className="flex items-start gap-3">
+            <div
+              className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                darkMode ? "bg-[#ffdda1]/10 text-[#ffdda1]" : "bg-[#aa5013]/10 text-[#aa5013]"
+              }`}
+            >
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+
+            <div>
+              <h2 className={`text-[15px] sm:text-base font-extrabold ${ui.titleMain}`}>
+                Estructura propia de la academia
+              </h2>
+
+              <p className={`mt-1 text-[13px] sm:text-sm leading-relaxed ${ui.subText}`}>
+                Las sucursales pertenecen a la estructura operativa de cada academia. A diferencia de los catálogos
+                globales, el administrador puede crear, editar y eliminar las sucursales correspondientes a su propia
+                organización.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* CREACIÓN + FILTRO */}
+
+        <section className={`${ui.card} mx-auto mt-4 max-w-7xl p-4 sm:p-5`}>
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr_auto] gap-3 lg:items-end">
+            <div>
+              <label className={`block mb-1.5 text-[13px] sm:text-sm font-extrabold ${ui.titleMain}`}>
+                Nueva sucursal
+              </label>
+
+              <input
+                type="text"
+                value={nuevo}
+                onChange={(event) => {
+                  setNuevo(event.target.value);
+                  setError("");
+                  setMensaje("");
+                }}
+                placeholder="Nombre de la sucursal"
+                className={ui.control}
+                disabled={busyAction === "create"}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={crear}
+              disabled={busyAction === "create"}
+              className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] font-extrabold transition disabled:opacity-50 disabled:cursor-not-allowed ${
+                darkMode
+                  ? "border-[#ffdda1]/25 bg-[#ffdda1]/10 text-[#ffdda1] hover:bg-[#ffdda1]/15"
+                  : "border-[#aa5013]/20 bg-[#aa5013] text-white hover:brightness-105"
+              }`}
+            >
+              <Plus className="h-4 w-4" />
+              {busyAction === "create" ? "Guardando…" : "Crear sucursal"}
+            </button>
+
+            <div>
+              <label className={`block mb-1.5 text-[13px] sm:text-sm font-extrabold ${ui.titleMain}`}>
+                Buscar sucursal
+              </label>
+
+              <div className="relative">
+                <Search
+                  className={`absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 ${
+                    darkMode ? "text-white/40" : "text-ra-marron/45"
+                  }`}
+                />
+
+                <input
+                  type="text"
+                  value={filtroTexto}
+                  onChange={(event) => setFiltroTexto(event.target.value)}
+                  placeholder="Nombre o ID"
+                  className={`${ui.control} !pl-10`}
+                />
+              </div>
+            </div>
+
+            <button type="button" onClick={refresh} disabled={reloadBusy} className={ui.secondaryButton}>
+              <RefreshCw className={`h-4 w-4 ${reloadBusy ? "animate-spin" : ""}`} />
+              Actualizar
+            </button>
+          </div>
+        </section>
+
+        {/* EDICIÓN ACTIVA */}
+
+        {editarId && (
+          <section className={`${ui.card} mx-auto mt-4 max-w-7xl p-4 sm:p-5`}>
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto] gap-3 lg:items-end">
+              <div>
+                <label className={`block mb-1.5 text-[13px] sm:text-sm font-extrabold ${ui.titleMain}`}>
+                  Editando sucursal ID {editarId}
+                </label>
+
+                <input
+                  type="text"
+                  value={editarNombre}
+                  onChange={(event) => {
+                    setEditarNombre(event.target.value);
+                    setError("");
+                    setMensaje("");
+                  }}
+                  className={ui.control}
+                  disabled={busyAction === "edit"}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={actualizar}
+                disabled={busyAction === "edit"}
+                className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] font-extrabold transition disabled:opacity-50 ${
+                  darkMode
+                    ? "border-amber-300/20 bg-amber-500/10 text-amber-100"
+                    : "border-amber-200 bg-amber-50 text-amber-800"
+                }`}
+              >
+                <Pencil className="h-4 w-4" />
+                {busyAction === "edit" ? "Guardando…" : "Guardar cambios"}
+              </button>
+
+              <button
+                type="button"
+                onClick={cancelarEdicion}
+                disabled={busyAction === "edit"}
+                className={ui.secondaryButton}
+              >
+                Cancelar
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* TABLA */}
+
+        <section className={`${ui.card} mx-auto mt-4 max-w-7xl overflow-hidden`}>
+          <div
+            className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b px-4 sm:px-5 py-4 ${
+              darkMode ? "border-white/10" : "border-ra-marron/10"
+            }`}
+          >
+            <div>
+              <h2 className={`text-lg sm:text-xl font-extrabold ${ui.titleMain}`}>Directorio de sucursales</h2>
+
+              <p className={`mt-1 text-[13px] sm:text-sm ${ui.subText}`}>
+                {sucursalesFiltradas.length} de {sucursalesNormalizadas.length} sucursales mostradas.
+              </p>
+            </div>
+          </div>
+
+          {/* DESKTOP */}
+
+          <div className="hidden lg:block overflow-x-auto">
+            <table className="w-full text-[14px]">
+              <thead className={darkMode ? "bg-black/20 text-[#ffdda1]" : "bg-[#f7ead4] text-[#6d5829]"}>
+                <tr>
+                  <th className="px-5 py-3 text-center font-extrabold">Sucursal</th>
+
+                  <th className="px-5 py-3 text-center font-extrabold">Identificador</th>
+
+                  <th className="px-5 py-3 text-center font-extrabold">Acciones</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {sucursalesFiltradas.map((item) => {
+                  const procesando = busyId === item.id;
+
+                  return (
+                    <tr
+                      key={item.id}
+                      className={`border-t ${
+                        darkMode ? "border-white/10 hover:bg-white/[0.04]" : "border-ra-marron/10 hover:bg-white/50"
+                      }`}
+                    >
+                      <td className="px-5 py-4 text-center">
+                        <div
+                          className={`inline-flex items-center justify-center gap-2 font-extrabold ${
+                            darkMode ? "text-white" : "text-ra-marron"
+                          }`}
+                        >
+                          <MapPin className="h-4 w-4 opacity-60" />
+                          {item.nombre}
+                        </div>
+                      </td>
+
+                      <td className={`px-5 py-4 text-center font-semibold ${ui.subText}`}>ID {item.id}</td>
+
+                      <td className="px-5 py-4">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => iniciarEdicion(item)}
+                            disabled={procesando}
+                            className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-4 py-2 text-[13px] font-extrabold transition disabled:opacity-50 ${
+                              darkMode
+                                ? "border-amber-300/20 bg-amber-500/10 text-amber-100 hover:bg-amber-500/15"
+                                : "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                            }`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                            Editar
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => solicitarEliminar(item)}
+                            disabled={procesando}
+                            className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-4 py-2 text-[13px] font-extrabold transition disabled:opacity-50 ${
+                              darkMode
+                                ? "border-red-300/20 bg-red-500/10 text-red-100 hover:bg-red-500/15"
+                                : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                            }`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            {procesando && busyAction === "delete" ? "Eliminando…" : "Eliminar"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {!sucursalesFiltradas.length && (
+                  <tr>
+                    <td colSpan={3} className={`px-6 py-12 text-center text-[14px] ${ui.subText}`}>
+                      No existen sucursales para la búsqueda seleccionada.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* MOBILE / TABLET */}
+
+          <div className="lg:hidden p-3 sm:p-4 space-y-3">
+            {sucursalesFiltradas.map((item) => {
+              const procesando = busyId === item.id;
+
+              return (
+                <article
+                  key={item.id}
+                  className={`rounded-2xl border p-4 ${
+                    darkMode ? "border-white/10 bg-black/10" : "border-ra-marron/10 bg-white/45"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                        darkMode ? "bg-white/[0.06] text-[#ffdda1]" : "bg-[#aa5013]/10 text-[#aa5013]"
+                      }`}
+                    >
+                      <MapPin className="h-4 w-4" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <h3 className={`text-base font-extrabold break-words ${ui.titleMain}`}>{item.nombre}</h3>
+
+                      <p className={`mt-1 text-[12px] ${ui.subText}`}>ID {item.id}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => iniciarEdicion(item)}
+                      disabled={procesando}
+                      className={`min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-[14px] font-extrabold transition disabled:opacity-50 ${
+                        darkMode
+                          ? "border-amber-300/20 bg-amber-500/10 text-amber-100"
+                          : "border-amber-200 bg-amber-50 text-amber-800"
+                      }`}
+                    >
+                      <Pencil className="h-4 w-4" />
+                      Editar
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => solicitarEliminar(item)}
+                      disabled={procesando}
+                      className={`min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-[14px] font-extrabold transition disabled:opacity-50 ${
+                        darkMode
+                          ? "border-red-300/20 bg-red-500/10 text-red-100"
+                          : "border-red-200 bg-red-50 text-red-700"
+                      }`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      {procesando && busyAction === "delete" ? "Eliminando…" : "Eliminar"}
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+
+            {!sucursalesFiltradas.length && (
+              <div className={`py-10 text-center text-[14px] ${ui.subText}`}>
+                No existen sucursales para la búsqueda seleccionada.
+              </div>
+            )}
+          </div>
+        </section>
+
+        <Modal
+          visible={mostrarModal}
+          onConfirm={eliminar}
+          onCancel={() => {
+            if (busyAction === "delete") return;
+            setMostrarModal(false);
+            setSeleccionado(null);
+          }}
+        />
       </main>
+    </div>
+  );
+}
+
+function SummaryCard({ darkMode, label, value, type }) {
+  const icon = type === "visible" ? <Search className="h-5 w-5" /> : <Building2 className="h-5 w-5" />;
+
+  return (
+    <div
+      className={`rounded-2xl border p-4 sm:p-5 shadow-[0_12px_34px_rgba(0,0,0,0.08)] ${
+        darkMode ? "bg-white/[0.07] border-white/10" : "bg-white/65 border-ra-marron/15"
+      }`}
+    >
+      <div className={`flex items-center justify-between gap-3 ${darkMode ? "text-white/60" : "text-ra-marron/60"}`}>
+        <span className="text-[11px] sm:text-[12px] uppercase tracking-[0.08em] font-extrabold">{label}</span>
+
+        {icon}
+      </div>
+
+      <strong
+        className={`mt-2 block text-2xl sm:text-3xl font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}
+      >
+        {value}
+      </strong>
     </div>
   );
 }

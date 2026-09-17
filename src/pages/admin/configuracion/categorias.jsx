@@ -1,23 +1,31 @@
 // src/pages/admin/config/Categorias.jsx
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
-import api, { getToken, clearToken } from "../../../services/api";
+import { CheckCircle2, Layers3, Power, RefreshCw, Search, ShieldCheck, XCircle } from "lucide-react";
+
+import api, { clearToken, getToken } from "../../../services/api";
 import { useTheme } from "../../../context/ThemeContext";
-import Modal from "../../../components/modal";
 import { useMobileAutoScrollTop } from "../../../hooks/useMobileScrollTop";
 
-/* =======================
-   🎨 Conjunto X
-======================= */
-const PALETTE_X = {
-  copper: "#aa5013",
-  brown: "#6d5829",
-  gold: "#b79f69",
-  cream: "#e8dac4",
-  sand: "#ffdda1",
-  caramel: "#dda272",
-  terracotta: "#e2773b",
+const ESTADO_ACTIVO = 1;
+const ESTADO_INACTIVO = 0;
+
+const asList = (response) => {
+  const data = response?.data ?? response;
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.results)) return data.results;
+  if (Array.isArray(data?.rows)) return data.rows;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
+};
+
+const getCategoriaEstado = (categoria) => {
+  const raw = categoria?.estado_id ?? categoria?.estadoId ?? categoria?.estado ?? ESTADO_ACTIVO;
+
+  return Number(raw) === ESTADO_ACTIVO ? ESTADO_ACTIVO : ESTADO_INACTIVO;
 };
 
 export default function Categorias() {
@@ -25,98 +33,80 @@ export default function Categorias() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [categorias, setCategorias] = useState([]);
-  const [nuevaCategoria, setNuevaCategoria] = useState("");
-  const [editarId, setEditarId] = useState(null);
-  const [editarNombre, setEditarNombre] = useState("");
-  const [mensaje, setMensaje] = useState("");
-  const [error, setError] = useState("");
-  const [mostrarModal, setMostrarModal] = useState(false);
-  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState(null);
-  const [busy, setBusy] = useState(false);
-
-  const bootRef = useRef(false);
-
   useMobileAutoScrollTop();
 
-  // ✅ Estrategia dorada: detecta árbol actual (admin vs super-admin canal)
+  const [rolActual, setRolActual] = useState(0);
+  const [categorias, setCategorias] = useState([]);
+
+  const [filtroTexto, setFiltroTexto] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState("");
+
+  const [loading, setLoading] = useState(true);
+  const [reloadBusy, setReloadBusy] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+
+  const [mensaje, setMensaje] = useState("");
+  const [error, setError] = useState("");
+
+  const breadcrumbBootRef = useRef(false);
+
   const dashboardBase = useMemo(() => {
-    const p = location.pathname || "";
-    return p.startsWith("/super-dashboard/admin/dashboard") ? "/super-dashboard/admin/dashboard" : "/admin";
+    const path = location.pathname || "";
+    return path.startsWith("/super-dashboard/admin/dashboard") ? "/super-dashboard/admin/dashboard" : "/admin";
   }, [location.pathname]);
 
   const configPath = useMemo(() => `${dashboardBase}/configuracion`, [dashboardBase]);
 
-  // ───────── Utils ─────────
-  const limpiarTexto = useCallback(
-    (texto) =>
-      String(texto || "")
-        .replace(/[<>;"']/g, "")
-        .replace(/[^a-zA-Z0-9 áéíóúÁÉÍÓÚñÑ-]/g, "")
-        .trim(),
-    []
-  );
-
-  const flash = useCallback((okMsg, errMsg) => {
-    if (okMsg) setMensaje(okMsg);
-    if (errMsg) setError(errMsg);
-
-    window.setTimeout(() => {
-      setMensaje("");
-      setError("");
-    }, 2500);
-  }, []);
-
-  // ✅ Con tu api.js: el error ya viene normalizado (status/data/message)
   const getErrStatus = useCallback((err) => err?.status ?? err?.response?.status ?? 0, []);
+
   const getErrData = useCallback((err) => err?.data ?? err?.response?.data ?? null, []);
 
   const prettyError = useCallback(
     (err, fallback) => {
-      const st = getErrStatus(err);
+      const status = getErrStatus(err);
       const data = getErrData(err);
 
-      const backendMsg = data?.message || data?.detail || data?.error || err?.message || null;
+      const backendMsg = data?.message ?? data?.detail ?? data?.error ?? err?.message ?? null;
 
-      if (st === 401 || st === 403) {
-        return "🔒 Sesión expirada o sin permisos. Vuelve a iniciar sesión.";
+      if (status === 401) return "Sesión expirada. Vuelve a iniciar sesión.";
+      if (status === 403) return backendMsg || "No tienes permisos para realizar esta acción.";
+      if (status === 400) return backendMsg || "No fue posible actualizar la categoría.";
+      if (status === 404) return backendMsg || "La categoría ya no se encuentra disponible.";
+      if (status === 409) {
+        return backendMsg || "La categoría no puede cambiar de estado por una restricción del sistema.";
       }
 
-      if (st === 400) {
-        return backendMsg || "⚠️ Datos inválidos. Revisa el nombre.";
-      }
-
-      if (st === 409) {
-        if (data?.errno === 1451 || data?.code === "ER_ROW_IS_REFERENCED_2") {
-          return "⚠️ No se puede eliminar: la categoría está en uso por otros registros.";
-        }
-        if (data?.errno === 1062 || data?.code === "ER_DUP_ENTRY") {
-          return "⚠️ Ya existe una categoría con ese nombre.";
-        }
-        return backendMsg || "⚠️ No se pudo completar la acción por una restricción del sistema.";
-      }
-
-      if (st === 404) {
-        return backendMsg || "⚠️ Registro no encontrado (puede que ya haya sido eliminado).";
-      }
-
-      return backendMsg || fallback || "❌ Error inesperado.";
+      return backendMsg || fallback || "Ocurrió un error inesperado.";
     },
     [getErrStatus, getErrData]
   );
+
+  const flash = useCallback((okMessage = "", errorMessage = "") => {
+    setMensaje(okMessage);
+    setError(errorMessage);
+
+    window.setTimeout(() => {
+      setMensaje("");
+      setError("");
+    }, 2800);
+  }, []);
 
   const handleAuth = useCallback(() => {
     clearToken();
     navigate("/login", { replace: true });
   }, [navigate]);
 
-  // ───────── Breadcrumb (dorado: sin hardcode /admin) ─────────
   useEffect(() => {
+    if (breadcrumbBootRef.current) return;
+
     const currentPath = location.pathname;
-    const bc = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : [];
-    const last = bc[bc.length - 1];
+    const breadcrumb = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : [];
+
+    const last = breadcrumb[breadcrumb.length - 1];
 
     if (!last || last.label !== "Categorías") {
+      breadcrumbBootRef.current = true;
+
       navigate(currentPath, {
         replace: true,
         state: {
@@ -127,440 +117,521 @@ export default function Categorias() {
           ],
         },
       });
+    } else {
+      breadcrumbBootRef.current = true;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, location.search, configPath, navigate]);
 
-  // ───────── Auth (ajusta aquí si quieres SOLO rol 1) ─────────
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, location.search, configPath]);
+
   useEffect(() => {
     try {
       const token = getToken();
+
       if (!token) throw new Error("no-token");
 
       const decoded = jwtDecode(token);
       const now = Math.floor(Date.now() / 1000);
 
-      if (!decoded?.exp || decoded.exp <= now) throw new Error("expired");
+      if (!decoded?.exp || Number(decoded.exp) <= now) {
+        throw new Error("expired");
+      }
 
-      const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
-      const rol = Number.isFinite(Number(rawRol)) ? Number(rawRol) : 0;
+      const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
 
-      // ✅ por defecto: rol 1 (admin) y rol 3 (superadmin)
+      const rol = Number(rawRol);
+
       if (![1, 3].includes(rol)) {
         navigate(dashboardBase, { replace: true });
         return;
       }
+
+      setRolActual(rol);
     } catch {
-      clearToken();
-      navigate("/login", { replace: true });
+      handleAuth();
     }
-  }, [navigate, dashboardBase]);
+  }, [dashboardBase, handleAuth, navigate]);
 
-  // ───────── Helpers endpoints tolerantes (slash final) ─────────
-  const withVariants = useCallback(
-    (fn) =>
-      async (base, ...args) => {
-        const urls = base.endsWith("/") ? [base, base.slice(0, -1)] : [base, `${base}/`];
-        let lastErr = null;
-
-        for (const u of urls) {
-          try {
-            return await fn(u, ...args);
-          } catch (e) {
-            lastErr = e;
-            const st = getErrStatus(e);
-            if (st === 401 || st === 403) throw e;
-          }
-        }
-        throw lastErr || new Error("ENDPOINT_VARIANTS_FAILED");
-      },
-    [getErrStatus]
-  );
-
-  const getVar = useMemo(() => withVariants((u, c) => api.get(u, c)), [withVariants]);
-  const postVar = useMemo(() => withVariants((u, p, c) => api.post(u, p, c)), [withVariants]);
-  const putVar = useMemo(() => withVariants((u, p, c) => api.put(u, p, c)), [withVariants]);
-  const delVar = useMemo(() => withVariants((u, c) => api.delete(u, c)), [withVariants]);
-
-  // ───────── Fetch ─────────
   const fetchCategorias = useCallback(
-    async (signal) => {
+    async ({ signal } = {}) => {
       try {
-        const res = await getVar("/categorias", { signal });
-        const d = res?.data;
-
-        const lista = Array.isArray(d)
-          ? d
-          : Array.isArray(d?.items)
-            ? d.items
-            : Array.isArray(d?.results)
-              ? d.results
-              : [];
-
-        setCategorias(lista);
+        const response = await api.get("/categorias", { signal });
+        setCategorias(asList(response));
       } catch (err) {
         if (signal?.aborted) return;
 
-        const st = getErrStatus(err);
-        if (st === 401 || st === 403) return handleAuth();
-        setError(prettyError(err, "❌ Error al obtener categorías"));
+        const status = getErrStatus(err);
+
+        if (status === 401 || status === 403) {
+          handleAuth();
+          return;
+        }
+
+        setError(prettyError(err, "No fue posible cargar las categorías de la academia."));
       }
     },
-    [getVar, getErrStatus, handleAuth, prettyError]
+    [getErrStatus, handleAuth, prettyError]
   );
 
   useEffect(() => {
+    if (!rolActual) return;
+
     const abort = new AbortController();
-    fetchCategorias(abort.signal);
+
+    (async () => {
+      setLoading(true);
+
+      try {
+        await fetchCategorias({ signal: abort.signal });
+      } finally {
+        if (!abort.signal.aborted) setLoading(false);
+      }
+    })();
+
     return () => abort.abort();
+  }, [rolActual, fetchCategorias]);
+
+  const refresh = useCallback(async () => {
+    setReloadBusy(true);
+    setError("");
+
+    try {
+      await fetchCategorias();
+    } finally {
+      setReloadBusy(false);
+    }
   }, [fetchCategorias]);
 
-  // ───────── Crear ─────────
-  const crearCategoria = async () => {
-    const nombre = limpiarTexto(nuevaCategoria);
-    if (nombre.length < 3) return setError("⚠️ El nombre debe tener al menos 3 caracteres.");
+  const cambiarEstadoCategoria = async (categoria) => {
+    const categoriaId = Number(categoria?.id);
 
-    setBusy(true);
-    try {
-      await postVar("/categorias", { nombre });
-      setNuevaCategoria("");
-      flash("✅ Categoría creada");
-      await fetchCategorias();
-    } catch (err) {
-      const st = getErrStatus(err);
-      if (st === 401 || st === 403) return handleAuth();
-      setError(prettyError(err, "❌ No se pudo crear la categoría."));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // ───────── Actualizar ─────────
-  const actualizarCategoria = async () => {
-    if (!editarId) return setError("⚠️ Debes seleccionar una categoría.");
-    const nombre = limpiarTexto(editarNombre);
-    if (nombre.length < 3) return setError("⚠️ El nombre debe tener al menos 3 caracteres.");
-
-    setBusy(true);
-    try {
-      await putVar(`/categorias/${editarId}`, { nombre });
-      setEditarId(null);
-      setEditarNombre("");
-      flash("✅ Categoría actualizada");
-      await fetchCategorias();
-    } catch (err) {
-      const st = getErrStatus(err);
-      if (st === 401 || st === 403) return handleAuth();
-      setError(prettyError(err, "❌ No se pudo actualizar la categoría."));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // ───────── Eliminar ─────────
-  const confirmarEliminacion = async () => {
-    if (!categoriaSeleccionada?.id) {
-      setMostrarModal(false);
+    if (!Number.isInteger(categoriaId) || categoriaId <= 0) {
+      setError("Categoría inválida.");
       return;
     }
 
-    setBusy(true);
+    const estadoActual = getCategoriaEstado(categoria);
+    const nuevoEstado = estadoActual === ESTADO_ACTIVO ? ESTADO_INACTIVO : ESTADO_ACTIVO;
+
+    setBusyId(categoriaId);
+    setError("");
+    setMensaje("");
+
     try {
-      await delVar(`/categorias/${categoriaSeleccionada.id}`);
-      flash("✅ Categoría eliminada");
-      await fetchCategorias();
+      await api.put(`/categorias/${categoriaId}`, {
+        estado_id: nuevoEstado,
+      });
+
+      setCategorias((prev) =>
+        prev.map((item) => (Number(item?.id) === categoriaId ? { ...item, estado_id: nuevoEstado } : item))
+      );
+
+      flash(
+        nuevoEstado === ESTADO_ACTIVO ? "Categoría activada correctamente." : "Categoría desactivada correctamente."
+      );
     } catch (err) {
-      const st = getErrStatus(err);
-      if (st === 401 || st === 403) return handleAuth();
-      setError(prettyError(err, "❌ No se pudo eliminar la categoría."));
+      const status = getErrStatus(err);
+
+      if (status === 401) {
+        handleAuth();
+        return;
+      }
+
+      setError(prettyError(err, "No fue posible cambiar el estado de la categoría."));
     } finally {
-      setBusy(false);
-      setMostrarModal(false);
-      setCategoriaSeleccionada(null);
+      setBusyId(null);
     }
   };
 
-  /* =======================
-     UI estilo SuperDashboard.jsx
-  ======================= */
+  const categoriasNormalizadas = useMemo(
+    () =>
+      (Array.isArray(categorias) ? categorias : [])
+        .map((categoria) => ({
+          ...categoria,
+          id: Number(categoria?.id ?? 0),
+          nombre: String(categoria?.nombre ?? categoria?.descripcion ?? `Categoría #${categoria?.id ?? ""}`).trim(),
+          estado_id: getCategoriaEstado(categoria),
+        }))
+        .filter((categoria) => Number.isInteger(categoria.id) && categoria.id > 0)
+        .sort((a, b) => a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" })),
+    [categorias]
+  );
+
+  const categoriasFiltradas = useMemo(() => {
+    const texto = String(filtroTexto ?? "")
+      .trim()
+      .toLowerCase();
+
+    return categoriasNormalizadas.filter((categoria) => {
+      const matchTexto =
+        !texto || categoria.nombre.toLowerCase().includes(texto) || String(categoria.id).includes(texto);
+
+      const matchEstado = !filtroEstado || String(categoria.estado_id) === filtroEstado;
+
+      return matchTexto && matchEstado;
+    });
+  }, [categoriasNormalizadas, filtroTexto, filtroEstado]);
+
+  const resumen = useMemo(() => {
+    const activas = categoriasNormalizadas.filter((categoria) => categoria.estado_id === ESTADO_ACTIVO).length;
+
+    return {
+      total: categoriasNormalizadas.length,
+      activas,
+      inactivas: categoriasNormalizadas.length - activas,
+    };
+  }, [categoriasNormalizadas]);
+
   const ui = useMemo(() => {
     const shell = darkMode
       ? "bg-[#111827] text-white"
       : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
 
     const titleMain = darkMode ? "text-white" : "text-ra-marron";
-    const subText = darkMode ? "text-white/70" : "text-ra-marron/70";
+    const subText = darkMode ? "text-white/65" : "text-ra-marron/65";
 
     const card =
-      "rounded-2xl border shadow-lg transition " +
-      (darkMode ? "bg-white/10 border-white/15" : "bg-white/60 border-ra-marron/15");
+      "rounded-2xl border shadow-[0_14px_42px_rgba(0,0,0,0.10)] " +
+      (darkMode ? "bg-white/[0.07] border-white/10" : "bg-white/65 border-ra-marron/15");
 
-    const sectionTitle = darkMode ? "text-white/90" : "text-ra-marron";
-
-    const input =
-      "w-full p-2 rounded-xl outline-none border text-sm " +
-      "focus:ring-2 focus:ring-[rgba(170,80,19,0.25)] focus:border-[rgba(170,80,19,0.35)] " +
+    const control =
+      "w-full h-11 sm:h-12 px-3.5 rounded-xl text-[14px] sm:text-[15px] font-medium outline-none transition " +
       (darkMode
-        ? "bg-black/25 text-white border-white/10 placeholder-white/45"
-        : "bg-white/70 text-ra-marron border-ra-marron/15 placeholder-ra-marron/45");
+        ? "border border-white/15 bg-[#111827] text-white placeholder:text-white/40 focus:border-[#ffdda1] focus:ring-2 focus:ring-[#ffdda1]/15"
+        : "border border-ra-marron/20 bg-white/80 text-ra-marron placeholder:text-ra-marron/45 focus:border-[#aa5013] focus:ring-2 focus:ring-[#aa5013]/10");
 
-    const select = input + " appearance-none";
-
-    const btn =
-      "w-full py-2 rounded-xl font-extrabold transition shadow-sm " +
-      "disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.99]";
-
-    const btnPrimaryStyle = busy
-      ? { backgroundColor: "rgba(255,255,255,0.18)", color: "rgba(255,255,255,0.85)" }
-      : {
-          background: `linear-gradient(135deg, ${PALETTE_X.copper}, ${PALETTE_X.terracotta})`,
-          color: "#fff",
-        };
-
-    const btnWarnStyle =
-      busy || !editarId
-        ? { backgroundColor: "rgba(255,255,255,0.18)", color: "rgba(255,255,255,0.85)" }
-        : { backgroundColor: "#f59e0b", color: "#1a1208" };
-
-    const btnDangerStyle =
-      !categoriaSeleccionada || busy
-        ? { backgroundColor: "rgba(255,255,255,0.18)", color: "rgba(255,255,255,0.85)" }
-        : { backgroundColor: "#dc2626", color: "#fff" };
-
-    const warn =
-      "rounded-2xl border px-5 py-4 font-semibold " +
-      (darkMode
-        ? "border-amber-300/20 bg-amber-500/10 text-amber-100"
-        : "border-amber-300/60 bg-amber-50 text-amber-900");
-
-    const danger =
-      "rounded-2xl border px-5 py-4 font-semibold " +
-      (darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
+    const secondaryButton =
+      "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] font-bold transition disabled:opacity-50 disabled:cursor-not-allowed " +
+      (darkMode ? "border-white/15 text-white hover:bg-white/10" : "border-ra-marron/20 text-ra-marron hover:bg-white");
 
     const ok =
-      "rounded-2xl border px-5 py-4 font-semibold " +
+      "rounded-2xl border px-4 py-3 text-[14px] font-semibold " +
       (darkMode
         ? "border-emerald-200/20 bg-emerald-500/10 text-emerald-100"
         : "border-emerald-200 bg-emerald-50 text-emerald-900");
 
-    const listItem =
-      "flex items-center justify-between gap-3 py-2 border-b last:border-b-0 " +
-      (darkMode ? "border-white/10" : "border-ra-marron/12");
-
-    const pill =
-      "inline-flex items-center px-2 py-1 rounded-full text-xs font-bold border " +
-      (darkMode ? "bg-black/20 border-white/15 text-white/75" : "bg-white/60 border-ra-marron/15 text-ra-marron/70");
+    const danger =
+      "rounded-2xl border px-4 py-3 text-[14px] font-semibold " +
+      (darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
 
     return {
       shell,
       titleMain,
       subText,
       card,
-      sectionTitle,
-      input,
-      select,
-      btn,
-      btnPrimaryStyle,
-      btnWarnStyle,
-      btnDangerStyle,
-      warn,
-      danger,
+      control,
+      secondaryButton,
       ok,
-      listItem,
-      pill,
+      danger,
     };
-  }, [darkMode, busy, editarId, categoriaSeleccionada]);
+  }, [darkMode]);
+
+  if (loading) {
+    return (
+      <div className={`${ui.shell} min-h-screen font-sans`}>
+        <div className="min-h-[70vh] flex items-center justify-center">
+          <div className={`text-sm font-semibold ${ui.subText}`}>Cargando categorías…</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`${ui.shell} min-h-screen font-sans`}>
-      {/* Header centrado tipo SuperDashboard */}
-      <header className="px-6 pt-6 text-center">
-        <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>Categorías</h1>
-        <p className={`text-sm mt-2 ${ui.subText}`}>Administra el catálogo de categorías (crear, editar, eliminar).</p>
+      <header className="px-4 sm:px-6 lg:px-8 pt-6 text-center">
+        <div className="mx-auto max-w-4xl">
+          <div
+            className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border ${
+              darkMode
+                ? "border-white/10 bg-white/[0.06] text-[#ffdda1]"
+                : "border-ra-marron/15 bg-white/60 text-[#aa5013]"
+            }`}
+          >
+            <Layers3 className="h-6 w-6" />
+          </div>
+
+          <h1 className={`text-3xl sm:text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>
+            Categorías de la Academia
+          </h1>
+
+          <p className={`mx-auto mt-2 max-w-3xl text-[14px] sm:text-[15px] leading-relaxed ${ui.subText}`}>
+            Habilita o deshabilita las categorías previamente configuradas para tu academia. La creación, modificación y
+            eliminación del catálogo se administra de forma centralizada.
+          </p>
+        </div>
       </header>
 
-      <main className="px-6 pb-20">
-        <div className="max-w-6xl mx-auto mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Listado (2 columnas en desktop) */}
-          <section className={`${ui.card} p-6 lg:col-span-2`}>
-            <div className="flex items-baseline justify-between gap-3 mb-4">
-              <h2 className={`text-lg font-extrabold ${ui.sectionTitle}`}>📋 Listado</h2>
-              <span className={ui.pill}>
-                {categorias.length} categoría{categorias.length !== 1 ? "s" : ""}
-              </span>
-            </div>
+      <main className="px-4 sm:px-6 lg:px-8 pb-20">
+        <section className="mx-auto mt-7 max-w-6xl grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <SummaryCard darkMode={darkMode} label="Categorías configuradas" value={resumen.total} type="total" />
 
-            {categorias.length === 0 ? (
-              <p className={ui.subText}>Sin categorías registradas.</p>
-            ) : (
-              <div className="max-h-[520px] overflow-auto pr-1">
-                {categorias.map((cat) => {
-                  const nombre = cat.nombre ?? cat.descripcion ?? `#${cat.id}`;
-                  return (
-                    <div key={cat.id} className={ui.listItem}>
-                      <div className="min-w-0">
-                        <p className="font-extrabold truncate">{nombre}</p>
-                        <p className={ui.subText}>ID: {cat.id}</p>
-                      </div>
+          <SummaryCard darkMode={darkMode} label="Activas" value={resumen.activas} type="active" />
 
-                      {/* selector rápido para editar/eliminar */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          type="button"
-                          className="px-3 py-1 rounded-lg text-xs font-extrabold border transition hover:brightness-110"
-                          style={{
-                            borderColor: darkMode ? "rgba(255,255,255,0.18)" : "rgba(109,88,41,0.18)",
-                            background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.65)",
-                          }}
-                          onClick={() => {
-                            setError("");
-                            setMensaje("");
-                            setEditarId(Number(cat.id));
-                            setEditarNombre(String(cat.nombre ?? cat.descripcion ?? ""));
-                            // también selecciona para eliminar, por UX
-                            setCategoriaSeleccionada(cat);
-                          }}
-                          disabled={busy}
-                          title="Seleccionar"
-                        >
-                          Seleccionar
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
+          <SummaryCard darkMode={darkMode} label="Inactivas" value={resumen.inactivas} type="inactive" />
+        </section>
 
-          {/* Acciones */}
-          <aside className="lg:col-span-1 space-y-6">
-            {/* Crear */}
-            <section className={`${ui.card} p-6`}>
-              <h2 className={`text-lg font-extrabold mb-3 ${ui.sectionTitle}`}>➕ Crear</h2>
-              <input
-                type="text"
-                value={nuevaCategoria}
-                onChange={(e) => {
-                  setError("");
-                  setMensaje("");
-                  setNuevaCategoria(e.target.value);
-                }}
-                placeholder="Nombre categoría (mín. 3)"
-                className={ui.input}
-                disabled={busy}
-              />
-              <button
-                type="button"
-                onClick={crearCategoria}
-                disabled={busy}
-                className={`${ui.btn} mt-3`}
-                style={ui.btnPrimaryStyle}
-                title={busy ? "Procesando..." : "Crear categoría"}
-              >
-                {busy ? "Procesando..." : "Guardar"}
-              </button>
-            </section>
-
-            {/* Editar */}
-            <section className={`${ui.card} p-6`}>
-              <h2 className={`text-lg font-extrabold mb-3 ${ui.sectionTitle}`}>✏️ Editar</h2>
-
-              <select
-                value={editarId || ""}
-                onChange={(e) => {
-                  setError("");
-                  setMensaje("");
-                  const id = parseInt(e.target.value, 10);
-                  setEditarId(id || null);
-                  const cat = categorias.find((c) => Number(c.id) === id);
-                  setEditarNombre(cat?.nombre ?? cat?.descripcion ?? "");
-                }}
-                className={ui.select}
-                disabled={busy}
-              >
-                <option value="">Selecciona categoría</option>
-                {categorias.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.nombre ?? cat.descripcion}
-                  </option>
-                ))}
-              </select>
-
-              <input
-                type="text"
-                value={editarNombre}
-                onChange={(e) => {
-                  setError("");
-                  setMensaje("");
-                  setEditarNombre(e.target.value);
-                }}
-                placeholder="Nuevo nombre (mín. 3)"
-                className={`${ui.input} mt-3`}
-                disabled={busy || !editarId}
-              />
-
-              <button
-                type="button"
-                onClick={actualizarCategoria}
-                disabled={busy || !editarId}
-                className={`${ui.btn} mt-3`}
-                style={ui.btnWarnStyle}
-                title={!editarId ? "Selecciona una categoría primero" : busy ? "Procesando..." : "Actualizar"}
-              >
-                {busy ? "Procesando..." : "Actualizar"}
-              </button>
-            </section>
-
-            {/* Eliminar */}
-            <section className={`${ui.card} p-6`}>
-              <h2 className={`text-lg font-extrabold mb-3 ${ui.sectionTitle}`}>🗑️ Eliminar</h2>
-
-              <select
-                value={categoriaSeleccionada?.id || ""}
-                onChange={(e) => {
-                  const id = parseInt(e.target.value, 10);
-                  const seleccionada = categorias.find((cat) => Number(cat.id) === id);
-                  setCategoriaSeleccionada(seleccionada || null);
-                  setError("");
-                  setMensaje("");
-                }}
-                className={ui.select}
-                disabled={busy}
-              >
-                <option value="">Selecciona categoría</option>
-                {categorias.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.nombre ?? cat.descripcion}
-                  </option>
-                ))}
-              </select>
-
-              <button
-                type="button"
-                disabled={!categoriaSeleccionada || busy}
-                onClick={() => {
-                  if (busy || !categoriaSeleccionada) return;
-                  setMostrarModal(true);
-                }}
-                className={`${ui.btn} mt-3`}
-                style={ui.btnDangerStyle}
-                title={!categoriaSeleccionada ? "Selecciona una categoría" : busy ? "Procesando..." : "Eliminar"}
-              >
-                {busy ? "Procesando..." : "Eliminar"}
-              </button>
-            </section>
-          </aside>
-        </div>
-
-        {/* Mensajes */}
-        <div className="max-w-6xl mx-auto mt-6 space-y-3">
+        <div className="mx-auto mt-4 max-w-6xl space-y-3">
           {!!mensaje && <div className={ui.ok}>{mensaje}</div>}
           {!!error && <div className={ui.danger}>{error}</div>}
         </div>
 
-        <Modal visible={mostrarModal} onConfirm={confirmarEliminacion} onCancel={() => setMostrarModal(false)} />
+        <section className={`${ui.card} mx-auto mt-4 max-w-6xl p-4 sm:p-5`}>
+          <div className="flex items-start gap-3">
+            <div
+              className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                darkMode ? "bg-[#ffdda1]/10 text-[#ffdda1]" : "bg-[#aa5013]/10 text-[#aa5013]"
+              }`}
+            >
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+
+            <div>
+              <h2 className={`text-[15px] sm:text-base font-extrabold ${ui.titleMain}`}>
+                Catálogo administrado centralmente
+              </h2>
+
+              <p className={`mt-1 text-[13px] sm:text-sm leading-relaxed ${ui.subText}`}>
+                Esta pantalla no permite crear, renombrar ni eliminar categorías. El administrador de academia
+                únicamente define cuáles de las categorías configuradas estarán disponibles para su operación.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className={`${ui.card} mx-auto mt-4 max-w-6xl p-4 sm:p-5`}>
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_220px_auto] gap-3 lg:items-end">
+            <div>
+              <label className={`block mb-1.5 text-[13px] sm:text-sm font-extrabold ${ui.titleMain}`}>
+                Buscar categoría
+              </label>
+
+              <div className="relative">
+                <Search
+                  className={`absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 ${
+                    darkMode ? "text-white/40" : "text-ra-marron/45"
+                  }`}
+                />
+
+                <input
+                  type="text"
+                  value={filtroTexto}
+                  onChange={(event) => setFiltroTexto(event.target.value)}
+                  placeholder="Nombre o ID de categoría"
+                  className={`${ui.control} !pl-10`}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className={`block mb-1.5 text-[13px] sm:text-sm font-extrabold ${ui.titleMain}`}>Estado</label>
+
+              <select
+                value={filtroEstado}
+                onChange={(event) => setFiltroEstado(event.target.value)}
+                className={ui.control}
+              >
+                <option value="">Todas</option>
+                <option value="1">Activas</option>
+                <option value="0">Inactivas</option>
+              </select>
+            </div>
+
+            <button type="button" onClick={refresh} disabled={reloadBusy} className={ui.secondaryButton}>
+              <RefreshCw className={`h-4 w-4 ${reloadBusy ? "animate-spin" : ""}`} />
+              Actualizar
+            </button>
+          </div>
+        </section>
+
+        <section className={`${ui.card} mx-auto mt-4 max-w-6xl overflow-hidden`}>
+          <div
+            className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b px-4 sm:px-5 py-4 ${
+              darkMode ? "border-white/10" : "border-ra-marron/10"
+            }`}
+          >
+            <div>
+              <h2 className={`text-lg sm:text-xl font-extrabold ${ui.titleMain}`}>Categorías disponibles</h2>
+
+              <p className={`mt-1 text-[13px] sm:text-sm ${ui.subText}`}>
+                {categoriasFiltradas.length} categoría
+                {categoriasFiltradas.length !== 1 ? "s" : ""} visible
+                {categoriasFiltradas.length !== 1 ? "s" : ""}.
+              </p>
+            </div>
+          </div>
+
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-[14px]">
+              <thead className={darkMode ? "bg-black/20 text-[#ffdda1]" : "bg-[#f7ead4] text-[#6d5829]"}>
+                <tr>
+                  <th className="px-5 py-3 text-center font-extrabold">Categoría</th>
+                  <th className="px-5 py-3 text-center font-extrabold">Estado</th>
+                  <th className="px-5 py-3 text-center font-extrabold">Disponibilidad</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {categoriasFiltradas.map((categoria) => {
+                  const activa = categoria.estado_id === ESTADO_ACTIVO;
+                  const procesando = busyId === categoria.id;
+
+                  return (
+                    <tr
+                      key={categoria.id}
+                      className={`border-t ${
+                        darkMode ? "border-white/10 hover:bg-white/[0.04]" : "border-ra-marron/10 hover:bg-white/50"
+                      }`}
+                    >
+                      <td className="px-5 py-4 text-center">
+                        <div className={`font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}>
+                          {categoria.nombre}
+                        </div>
+
+                        <div className={`mt-0.5 text-[12px] ${ui.subText}`}>ID {categoria.id}</div>
+                      </td>
+
+                      <td className="px-5 py-4 text-center">
+                        <StatusPill darkMode={darkMode} active={activa} />
+                      </td>
+
+                      <td className="px-5 py-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() => cambiarEstadoCategoria(categoria)}
+                          disabled={procesando}
+                          className={`inline-flex min-h-10 min-w-[150px] items-center justify-center gap-2 rounded-xl border px-4 py-2 text-[13px] font-extrabold transition disabled:opacity-50 disabled:cursor-not-allowed ${
+                            activa
+                              ? darkMode
+                                ? "border-red-300/20 bg-red-500/10 text-red-100 hover:bg-red-500/15"
+                                : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                              : darkMode
+                                ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/15"
+                                : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                          }`}
+                        >
+                          <Power className="h-4 w-4" />
+
+                          {procesando ? "Procesando…" : activa ? "Desactivar" : "Activar"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {!categoriasFiltradas.length && (
+                  <tr>
+                    <td colSpan={3} className={`px-6 py-12 text-center text-[14px] ${ui.subText}`}>
+                      No existen categorías para los filtros seleccionados.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="md:hidden p-3 space-y-3">
+            {categoriasFiltradas.map((categoria) => {
+              const activa = categoria.estado_id === ESTADO_ACTIVO;
+              const procesando = busyId === categoria.id;
+
+              return (
+                <article
+                  key={categoria.id}
+                  className={`rounded-2xl border p-4 ${
+                    darkMode ? "border-white/10 bg-black/10" : "border-ra-marron/10 bg-white/45"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className={`text-base font-extrabold break-words ${ui.titleMain}`}>{categoria.nombre}</h3>
+
+                      <p className={`mt-1 text-[12px] ${ui.subText}`}>ID {categoria.id}</p>
+                    </div>
+
+                    <StatusPill darkMode={darkMode} active={activa} />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => cambiarEstadoCategoria(categoria)}
+                    disabled={procesando}
+                    className={`mt-4 w-full min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] font-extrabold transition disabled:opacity-50 ${
+                      activa
+                        ? darkMode
+                          ? "border-red-300/20 bg-red-500/10 text-red-100"
+                          : "border-red-200 bg-red-50 text-red-700"
+                        : darkMode
+                          ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    }`}
+                  >
+                    <Power className="h-4 w-4" />
+
+                    {procesando ? "Procesando…" : activa ? "Desactivar categoría" : "Activar categoría"}
+                  </button>
+                </article>
+              );
+            })}
+
+            {!categoriasFiltradas.length && (
+              <div className={`py-10 text-center text-[14px] ${ui.subText}`}>
+                No existen categorías para los filtros seleccionados.
+              </div>
+            )}
+          </div>
+        </section>
       </main>
+    </div>
+  );
+}
+
+function StatusPill({ darkMode, active }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-extrabold ${
+        active
+          ? darkMode
+            ? "border-emerald-300/20 bg-emerald-500/15 text-emerald-100"
+            : "border-emerald-200 bg-emerald-100 text-emerald-800"
+          : darkMode
+            ? "border-white/15 bg-white/[0.06] text-white/60"
+            : "border-ra-marron/15 bg-white/60 text-ra-marron/60"
+      }`}
+    >
+      {active ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+
+      {active ? "Activa" : "Inactiva"}
+    </span>
+  );
+}
+
+function SummaryCard({ darkMode, label, value, type }) {
+  const icon =
+    type === "active" ? (
+      <CheckCircle2 className="h-5 w-5" />
+    ) : type === "inactive" ? (
+      <XCircle className="h-5 w-5" />
+    ) : (
+      <Layers3 className="h-5 w-5" />
+    );
+
+  return (
+    <div
+      className={`rounded-2xl border p-4 sm:p-5 shadow-[0_12px_34px_rgba(0,0,0,0.08)] ${
+        darkMode ? "bg-white/[0.07] border-white/10" : "bg-white/65 border-ra-marron/15"
+      }`}
+    >
+      <div className={`flex items-center justify-between gap-3 ${darkMode ? "text-white/60" : "text-ra-marron/60"}`}>
+        <span className="text-[12px] sm:text-[13px] uppercase tracking-[0.08em] font-extrabold">{label}</span>
+
+        {icon}
+      </div>
+
+      <strong
+        className={`mt-2 block text-2xl sm:text-3xl font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}
+      >
+        {value}
+      </strong>
     </div>
   );
 }

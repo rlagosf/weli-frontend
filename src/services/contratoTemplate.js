@@ -1,139 +1,209 @@
 // src/services/contratoTemplate.js
-export const CONTRATO_TEMPLATE = `
-CONTRATO DE PRESTACIÓN DE SERVICIOS DE ENSEÑANZA DEPORTIVA ESPECIALIZADA EN FÚTBOL
 
-En Santiago, a <<fecha_contrato>>, comparecen, por una parte, la SOCIEDAD DEPORTIVA Y EDUCACIONAL REAL ACADEMY SPA, institución de enseñanza deportiva especializada en fútbol y acondicionamiento físico, RUT N° 78.161.873-K, domiciliado para estos efectos en Avenida Los Pajaritos 4155, comuna de Maipú, ciudad de Santiago, en adelante, "la academia"; y, por la otra parte, don/ña <<nombre_apoderado>>, cédula de identidad N° <<rut_apoderado>>, en calidad de padre/madre y/o apoderado legal del menor <<nombre_jugador>> , cédula de identidad N° <<rut_jugador>> nacido/a el <<fecha_nacimiento>> , ambos domiciliados en <<dirección>>, comuna de <<comuna_id>>, ciudad de Santiago, en adelante, "el apoderado" y "el alumno", respectivamente.
-Ambas partes, en adelante denominadas conjuntamente como "las partes", acuerdan celebrar el presente contrato de prestación de servicios, sujeto a los términos y condiciones que se detallan en el presente instrumento.
+export const CONTRATO_TEMPLATE = `
+CONTRATO DE PRESTACIÓN DE SERVICIOS DE ENSEÑANZA DEPORTIVA
+
+En <<ciudad_contrato>>, a <<fecha_contrato>>, comparecen, por una parte, <<nombre_academia>>, RUT N° <<rut_academia>>, institución dedicada a la enseñanza y formación deportiva en <<deporte>>, domiciliada para estos efectos en <<direccion_academia>>, comuna de <<comuna_academia>>, ciudad de <<ciudad_academia>>, <<region_academia>>, en adelante, "la academia"; y, por la otra parte, don/ña <<nombre_apoderado>>, cédula de identidad N° <<rut_apoderado>>, en calidad de padre, madre y/o apoderado legal del menor <<nombre_jugador>>, cédula de identidad N° <<rut_jugador>>, nacido/a el <<fecha_nacimiento>>, domiciliado/a en <<direccion_jugador>>, comuna de <<comuna_jugador>>, en adelante, "el apoderado" y "el alumno", respectivamente.
+
+Ambas partes, en adelante denominadas conjuntamente como "las partes", acuerdan celebrar el presente contrato de prestación de servicios de enseñanza deportiva, sujeto a los términos y condiciones que se detallan en el presente instrumento.
 
 OBJETO DEL CONTRATO
-Por medio del presente contrato, la academia inscribe al alumno en la categoría infantil-formativo, otorgándole la calidad de alumno regular.
 
-MATRÍCULA
-Todo alumno, sea nuevo o antiguo, deberá abonar una matrícula anual, exigible una vez por cada año calendario, cuyos valores vigentes son los siguientes:
-Alumnos nuevos $35.000\tAlumnos antiguos $15.000
+Por medio del presente contrato, la academia inscribe al alumno en sus actividades de formación deportiva correspondientes a <<deporte>>, en la categoría <<categoria_jugador>>, otorgándole la calidad de alumno regular conforme a la organización interna y planificación deportiva de la academia.
 
-En el caso de los alumnos nuevos, la matrícula incluye un kit de bienvenida y el uniforme de entrenamiento, el cual será confeccionado conforme a la información entregada por el apoderado, siendo su responsabilidad verificar correctamente las tallas del alumno.
-Este pago anual, tanto para alumnos nuevos como antiguos, contribuye además al sostenimiento general de la academia, incluyendo la renovación periódica de implementación deportiva y otros elementos necesarios para el desarrollo regular de las actividades.
+CONDICIONES ECONÓMICAS
 
-PLANES DEL CONTRATO
-SEGÚN DIAS X SEMANA Y SUCURSAL
+Los conceptos y tarifas aplicables al alumno al momento de formalizar su inscripción son los siguientes:
 
-FECHAS DE PAGO
-El pago deberá realizarse de forma anticipada, hasta el quinto día hábil de cada mes, a través de los medios oficiales informados por la academia.
-En casos especiales, el apoderado podrá solicitar una fecha de pago distinta, la cual deberá ser informada al comenzar el contrato y contar con la aprobación de la academia.
+<<detalle_tarifas>>
 
-CAMBIO DE PLAN
-El apoderado podrá solicitar un cambio de plan, notificando su decisión con al menos 7 días hábiles de anticipación al inicio del próximo período de facturación.
+Total base: <<total_base>>
+Descuentos y/o beneficios aplicados: <<total_descuento>>
+Total aplicable al momento de la inscripción: <<total_final>>
 
-BENEFICIOS PROMOCIONALES
-•\tDESCUENTO POR GRUPO FAMILIAR
-Se otorgará un descuento de $3.500 sobre la mensualidad de cada alumno, independiente del plan contratado, para miembros de un mismo grupo familiar bajo la responsabilidad del mismo apoderado.
-Para mantener este beneficio vigente, el apoderado deberá mantener al día los pagos de todos los alumnos beneficiados. En caso de incumplimiento reglamentario, la academia se reserva el derecho de revocar el beneficio para todos los alumnos asociados al mismo apoderado.
+Detalle de beneficios y/o condiciones comerciales aplicadas:
+<<detalle_beneficios>>
 
-•\tDESCUENTO POR ALUMNOS REFERIDOS
-Cada alumno inscrito contará con un (1) Pase VIP mensual, el cual le permitirá invitar a un (1) amigo a participar en una (1) clase previamente coordinada.
-Si el referido se inscribe y realiza el pago correspondiente a matrícula y mensualidad, el alumno que lo refirió obtendrá un descuento único de $5.000, aplicable al valor de su mensualidad del mes siguiente.
-Este beneficio será válido por cada nuevo referido matriculado, pero no será acumulable dentro de un mismo mes.
-La vigencia, condiciones y posibles modificaciones de este beneficio quedarán sujetas a decisión exclusiva de la administración.
+Las tarifas, descuentos y beneficios indicados en este contrato corresponden a las condiciones vigentes y aceptadas al momento de la inscripción del alumno.
+
+Cualquier modificación posterior de las tarifas, beneficios o condiciones comerciales de la academia no alterará retroactivamente los valores consignados en este instrumento.
+
+Las nuevas tarifas o condiciones serán aplicables únicamente a futuras renovaciones, nuevos servicios, cambios de plan o nuevas contrataciones, cuando corresponda.
+
+PLAN O MODALIDAD CONTRATADA
+
+La modalidad, plan o combinación de servicios seleccionada para el alumno corresponde a:
+
+<<detalle_plan>>
+
+Cuando la prestación contratada contemple una periodicidad, número de sesiones, días de asistencia, sucursales u otras condiciones particulares, estas se entenderán incorporadas al presente contrato conforme a la configuración registrada por la academia al momento de la inscripción.
+
+FECHAS Y MEDIOS DE PAGO
+
+Los pagos deberán efectuarse dentro de los plazos y mediante los medios oficiales informados por la academia.
+
+Cualquier condición especial de pago deberá ser solicitada por el apoderado y contar con la aprobación expresa de la academia.
+
+CAMBIO DE PLAN O MODALIDAD
+
+El apoderado podrá solicitar cambios en el plan, modalidad o servicios contratados conforme a las condiciones administrativas vigentes de la academia.
+
+La aceptación de dichas modificaciones estará sujeta a disponibilidad, tarifas, beneficios y reglas aplicables al momento en que el cambio sea solicitado.
+
+BENEFICIOS Y DESCUENTOS
+
+Los beneficios, descuentos o condiciones promocionales aplicables al alumno serán exclusivamente aquellos registrados y aceptados al momento de la contratación, conforme al detalle económico incorporado en este contrato.
+
+La continuidad, renovación o modificación de dichos beneficios se sujetará a las condiciones establecidas por la academia y a los requisitos asociados a cada beneficio.
 
 CONTRAPRESTACIÓN
-La academia se compromete a prestar servicios de enseñanza deportiva especializada en fútbol mediante sesiones de entrenamiento grupales de 60 minutos, impartidas cada sábado en el complejo deportivo ARENA SOCCER, ubicado en Avenida Los Pajaritos 4155, Comuna de Maipú. Estas sesiones podrán complementarse o sustituirse eventualmente por encuentros deportivos, actividades recreativas o formativas sin que ello altere la naturaleza ni el valor del servicio contratado.
+
+La academia se compromete a prestar servicios de enseñanza y formación deportiva en <<deporte>>, mediante actividades de carácter técnico, físico, táctico, recreativo y/o formativo, de acuerdo con la planificación definida por la academia para la categoría y modalidad contratada.
+
+Las actividades se desarrollarán en las sucursales, recintos, días y horarios oficialmente informados por la academia.
+
+La planificación podrá considerar entrenamientos, encuentros deportivos, actividades recreativas, formativas u otras instancias relacionadas con el proceso deportivo del alumno, sin que ello altere la naturaleza general del servicio contratado.
+
+Sucursal o sucursales asociadas al alumno:
+
+<<detalle_sucursales>>
 
 COSTOS ADICIONALES
-La participación del alumno en encuentros amistosos, torneos u otras actividades externas a los entrenamientos regulares podrá implicar costos adicionales, tales como: árbitros, inscripciones, traslados y otros cargos logísticos necesarios para la realización de la actividad.
-Estos costos serán debidamente informados a través del grupo de WhatsApp de cada categoría y deberán ser pagados de forma anticipada como requisito para la participación. En general, los montos asociados a actividades externas son abonados a terceros y los cupos son personales, intransferibles y no reembolsables, debido a la imposibilidad de recuperar los fondos comprometidos.
-Al inscribir al alumno en una actividad externa, el apoderado acepta expresamente estas condiciones.
+
+La participación del alumno en encuentros amistosos, torneos, viajes, actividades especiales u otras instancias externas a los servicios regulares contratados podrá implicar costos adicionales, tales como arbitrajes, inscripciones, traslados, entradas, equipamiento u otros gastos logísticos.
+
+Estos costos deberán ser informados previamente por la academia y, cuando corresponda, pagados de forma anticipada como requisito para la participación del alumno.
 
 POLÍTICA DE ASISTENCIA
-El apoderado declara conocer y aceptar que el valor de la mensualidad no varía en base a la asistencia efectiva del alumno, ya que este pago cubre la disponibilidad del servicio contratado, independientemente de su uso. Por lo tanto, la inasistencia del alumno no generará derecho a devolución, abono ni compensación de ningún tipo, dado que corresponde a una situación atribuible exclusivamente al apoderado o al alumno.
+
+El apoderado declara conocer y aceptar que el valor de los servicios contratados corresponde a la disponibilidad y prestación del servicio por parte de la academia.
+
+La inasistencia del alumno por causas atribuibles a este o a su apoderado no generará automáticamente derecho a devolución, abono ni compensación.
 
 SUSPENSIÓN TEMPORAL DEL SERVICIO
-El apoderado podrá solicitar la suspensión temporal del servicio únicamente por causas fundadas, de carácter excepcional o de fuerza mayor. Dicha solicitud deberá ser enviada por escrito al correo realacademyfc@gmail.com, acompañada de la documentación que respalde y justifique la situación expuesta.
-La academia evaluará los antecedentes y comunicará al apoderado la aprobación o rechazo de la solicitud, indicando, si corresponde, el monto a reembolsar o abonar. Esta respuesta será emitida en un plazo máximo de 7 días hábiles, contados desde la recepción completa de la información requerida.
-En caso de ser aprobada, se aplicarán los siguientes criterios, según el plan contratado:
-•\tPlan mensual: El valor proporcional del período no utilizado será abonado automáticamente al mes siguiente, debiendo el apoderado cubrir únicamente la diferencia restante. En situaciones especiales, la academia podrá autorizar un reembolso directo.
-•\tPlan trimestral: Si la suspensión es de carácter breve, el monto proporcional correspondiente al período no utilizado será reembolsado mediante transferencia bancaria a la cuenta del apoderado, independientemente del medio de pago utilizado al momento de la contratación o renovación del servicio.
-En casos en que el plan trimestral haya sido contratado o renovado con tarjeta de crédito en 3 cuotas sin interés y la suspensión sea de carácter prolongado, afectando uno o más períodos futuros, la academia informará oportunamente el procedimiento aplicable, de acuerdo con las políticas del proveedor del servicio de pago.
-No se considerarán causales válidas de suspensión aquellas situaciones ajenas a la participación directa del alumno, tales como medidas disciplinarias internas del hogar, compromisos familiares o sociales, u otras circunstancias personales que no representen un impedimento objetivo para asistir a las actividades programadas por la academia.
-Asimismo, la academia se reserva el derecho de rechazar solicitudes de suspensión que se presenten de forma reiterada, sin fundamento razonable, o que puedan interpretarse como intentos de eludir compromisos contractuales, en resguardo del orden administrativo, la adecuada planificación deportiva y la equidad entre todos los participantes.
+
+El apoderado podrá solicitar la suspensión temporal del servicio por causas fundadas, excepcionales o de fuerza mayor.
+
+La solicitud deberá ser presentada por escrito a través del correo institucional <<email_academia>> o por los canales oficiales definidos por la academia, acompañando los antecedentes que correspondan.
+
+La academia evaluará cada solicitud conforme a las condiciones del servicio contratado, antecedentes presentados, período involucrado y demás circunstancias aplicables.
+
+La academia comunicará al apoderado su resolución y, cuando proceda, las condiciones de abono, reprogramación, crédito o reembolso.
+
+No se considerarán automáticamente como causales de suspensión aquellas situaciones personales que no representen un impedimento objetivo para la participación del alumno.
+
+La academia podrá rechazar solicitudes reiteradas o carentes de fundamento suficiente, procurando resguardar la planificación deportiva, administrativa y financiera del servicio.
 
 SUSPENSIÓN POR RENDIMIENTO ACADÉMICO
-El apoderado podrá solicitar la suspensión temporal del servicio cuando el alumno presente un promedio de notas inferior a 5.5 en educación básica o inferior a 5.0 en educación media, con el fin de priorizar su desempeño escolar. Para ello, deberá enviar una solicitud por escrito al correo realacademyfc@gmail.com, adjuntando el informe de notas actualizado que respalde la situación.
-La academia se compromete a reservar el cupo del alumno por un período máximo de dos meses a contar desde la fecha de inicio de la suspensión, eximiéndolo del pago de reincorporación en caso de retorno posterior, siempre que se evidencien mejoras en su rendimiento escolar y se cumplan los requisitos mínimos establecidos para su participación en la academia.
-No obstante, esta suspensión no dará derecho a reembolsos, ya que la matrícula en la academia implica un compromiso formativo integral conforme a lo establecido en el Reglamento Interno, cuyo objetivo es fomentar la responsabilidad del alumno y la comprensión de las consecuencias de sus actos.
-En casos excepcionales y previa evaluación, la academia podrá otorgar un crédito parcial aplicable a futuras mensualidades, considerando la fecha de suspensión, el plan contratado, la mejora significativa del rendimiento académico, la trayectoria del alumno y el nivel de compromiso demostrado por el apoderado.
-La academia se reserva el derecho de expulsar al alumno en situaciones donde el bajo rendimiento sea crítico, sostenido en el tiempo o afecte gravemente su desarrollo personal, emocional o conductual. Esta medida también podrá aplicarse si se detecta un uso inapropiado de esta cláusula o si el apoderado no informa sobre los avances académicos del alumno dentro de un plazo máximo de dos meses desde la fecha de inicio de la suspensión.
+
+Cuando la academia contemple medidas de apoyo asociadas al rendimiento académico, el apoderado podrá solicitar una suspensión temporal acompañando antecedentes suficientes que permitan evaluar la situación.
+
+La aceptación, duración, reserva de cupo, eventual crédito o condiciones de reincorporación serán determinadas por la academia conforme a su reglamento interno y a las circunstancias particulares del alumno.
 
 SUSPENSIÓN POR MORA
-El no pago dentro del plazo establecido faculta a la academia a suspender la participación del alumno en TODAS las actividades programadas, sin derecho a descuento ni compensación por las sesiones no utilizadas durante el período de mora.
-La reincidencia en el incumplimiento de los plazos de pago establecidos, particularmente bajo el régimen de plan mensual, facultará a la academia para suspender la renovación automática del servicio al término del período vigente y reasignar el cupo a otro alumno.
+
+El incumplimiento de las obligaciones de pago dentro de los plazos establecidos podrá facultar a la academia para suspender temporalmente la participación del alumno en las actividades contratadas hasta la regularización de la situación.
+
+La reiteración de incumplimientos podrá dar lugar a la suspensión de la renovación del servicio o a la pérdida del cupo, conforme a las condiciones administrativas y reglamentarias de la academia.
 
 ABANDONO DEL SERVICIO Y REINCORPORACIÓN
-Cuando el apoderado no regularice su situación de mora dentro del mismo período de facturación, se entenderá como abandono voluntario del servicio, lo que implicará la pérdida automática del cupo asignado al alumno.
-En caso de solicitar la reincorporación en un período posterior, su aprobación quedará sujeta a la disponibilidad de cupos y al pago de una tarifa de reinscripción equivalente al 40% del valor vigente de la matrícula, con el fin de garantizar el compromiso y seriedad del proceso formativo.
+
+Cuando el apoderado no regularice una situación de mora o deje de utilizar el servicio sin formalizar oportunamente su continuidad, la academia podrá considerar terminada la prestación y disponer del cupo asignado al alumno.
+
+Una eventual reincorporación estará sujeta a disponibilidad, tarifas vigentes y demás condiciones administrativas aplicables al momento de la nueva solicitud.
 
 RETIRO VOLUNTARIO
-El apoderado podrá solicitar el retiro voluntario del alumno notificando su decisión por escrito al correo realacademyfc@gmail.com o a través de WhatsApp, con al menos 7 días hábiles de anticipación al inicio del próximo período de facturación.
-La notificación oportuna de la liberación de la vacante dará derecho a que el alumno quede exento del pago de reincorporación en meses posteriores por única vez.
 
-SUSPENSIÓN DE CLASES
-Las sesiones de entrenamiento podrán suspenderse por causas de fuerza mayor, tales como:
-•\tMalas condiciones climáticas (lluvia, tormentas eléctricas, incendios, olas de calor, etc.).
-•\tInhabilitación o mantenimiento del recinto deportivo.
-•\tEstado inapropiado de las canchas o instalaciones que comprometa la seguridad de los alumnos.
-•\tCompromisos oficiales o extraordinarios del complejo deportivo.
-•\tProblemas operativos o logísticos que impidan el normal desarrollo de las actividades.
-Estas suspensiones serán evaluadas caso a caso por la administración, priorizando el bienestar, la seguridad de los participantes y la continuidad del proceso formativo.
+El apoderado podrá solicitar el retiro voluntario del alumno mediante comunicación escrita al correo institucional <<email_academia>> o a través de los canales oficiales de la academia.
+
+Las condiciones de término, pagos pendientes, beneficios, reservas de cupo o futuras reincorporaciones se regirán por las condiciones administrativas vigentes y por las obligaciones previamente asumidas por las partes.
+
+SUSPENSIÓN DE ACTIVIDADES
+
+Las actividades deportivas podrán suspenderse por causas de fuerza mayor o circunstancias que comprometan su normal o segura ejecución, tales como:
+
+• Malas condiciones climáticas.
+• Inhabilitación, cierre o mantenimiento de recintos deportivos.
+• Condiciones de las instalaciones que puedan comprometer la seguridad de los participantes.
+• Compromisos oficiales o extraordinarios de los recintos utilizados.
+• Emergencias, restricciones de autoridad u otras contingencias externas.
+• Problemas operativos o logísticos que impidan razonablemente el desarrollo de las actividades.
+
+Estas situaciones serán evaluadas por la academia priorizando la seguridad, el bienestar de los participantes y la continuidad del proceso formativo.
 
 REPROGRAMACIONES Y COMPENSACIONES
-En caso de suspensión de clases, la academia se compromete a evaluar y determinar la viabilidad de reprogramar la clase perdida, siempre que no afecte la planificación general de las actividades programadas y se cumplan las siguientes condiciones:
-•\tExista disponibilidad del complejo deportivo y del cuerpo técnico, y
-•\tSe alcance un quórum mínimo del 60% de los alumnos inscritos por categoría que puedan asistir en el día y horario propuesto.
-La asistencia a las clases reprogramadas será voluntaria, y la inasistencia por razones personales del alumno o su apoderado no dará derecho a reclamos ni compensaciones adicionales.
+
+Ante la suspensión de una actividad, la academia evaluará la viabilidad de su reprogramación considerando la disponibilidad de recintos, cuerpo técnico, calendario y demás condiciones operativas.
+
+Cuando no resulte posible reprogramar una actividad por causas ajenas a la voluntad de la academia, se aplicarán las condiciones administrativas y contractuales vigentes para la modalidad contratada.
 
 REEMBOLSOS EXCEPCIONALES
-La suspensión de clases no dará derecho a devolución de dinero, salvo en los casos en que la causa sea directamente atribuible a la academia.
-En tales casos, la academia se compromete a compensar al apoderado de la siguiente forma:
-•\tPlan mensual: el monto proporcional será abonado automáticamente al mes siguiente, debiendo el apoderado pagar solo la diferencia correspondiente para completar el valor total de la mensualidad.
-•\tPlan trimestral: el valor proporcional será reembolsado mediante transferencia bancaria a la cuenta del apoderado.
+
+Los eventuales reembolsos, abonos o créditos deberán ser evaluados caso a caso conforme a la causa que los origine, al servicio contratado, al período no utilizado y a las obligaciones asumidas por las partes.
+
+Cuando la causa de la imposibilidad de prestar el servicio sea directamente atribuible a la academia, esta evaluará la medida de compensación que corresponda de acuerdo con la naturaleza del servicio y las condiciones económicas registradas.
 
 CANALES DE COMUNICACIÓN
-Todas las suspensiones y reprogramaciones serán informadas oportunamente mediante los grupos de WhatsApp de cada categoría, siendo responsabilidad del apoderado mantenerse atento a dichas comunicaciones.
-La academia no se hará responsable por el retiro voluntario del apoderado de los grupos de WhatsApp.
+
+Las comunicaciones oficiales de la academia podrán ser realizadas mediante correo electrónico, mensajería instantánea, plataforma WELI u otros canales institucionales definidos por la academia.
+
+El correo institucional registrado para efectos de este contrato es <<email_academia>>.
+
+Será responsabilidad del apoderado mantener sus datos de contacto actualizados y revisar periódicamente los canales oficiales utilizados por la academia.
 
 RESPONSABILIDAD ANTE ACCIDENTES Y CONDICIÓN MÉDICA
-El apoderado se compromete a presentar, dentro de un plazo razonable posterior a la matrícula, un certificado médico actualizado que acredite que el alumno se encuentra en condiciones óptimas de salud para participar en actividades físicas. La omisión, falsedad o falta de actualización de dicho documento será de exclusiva responsabilidad del apoderado.
-Asimismo, el apoderado declara conocer y aceptar que la práctica deportiva implica riesgos inherentes, tales como accidentes, lesiones o enfermedades, que pueden ocurrir tanto dentro como fuera de los recintos donde se desarrollen las actividades de la academia.
-Mediante la firma del presente contrato, el apoderado libera expresamente de toda responsabilidad civil o penal a la academia, sus representantes legales, entrenadores y colaboradores, por cualquier accidente, lesión o complicación de salud que el alumno pudiera sufrir en el contexto de actividades propias de la institución.
-Se deja constancia de que la academia recomienda expresamente la contratación de un seguro de accidentes escolares o equivalente, cuya gestión y cobertura serán de exclusiva responsabilidad del apoderado.
+
+El apoderado se compromete a informar de manera veraz y oportuna cualquier antecedente médico, condición de salud o restricción física relevante para la participación deportiva del alumno.
+
+Cuando corresponda, deberá presentar los certificados o antecedentes solicitados por la academia.
+
+Asimismo, el apoderado declara conocer que la práctica deportiva implica riesgos inherentes de accidentes, lesiones o complicaciones de salud.
+
+La academia adoptará medidas preventivas y de actuación razonables dentro del ámbito de sus funciones, sin perjuicio de las responsabilidades que legalmente correspondan a cada una de las partes.
+
+La academia podrá recomendar la contratación de seguros de accidentes u otras coberturas complementarias cuando resulte pertinente.
 
 OBLIGACIONES DE LA ACADEMIA
-La academia se compromete a brindar un servicio de enseñanza deportiva que promueva el desarrollo físico, técnico, táctico y formativo de sus alumnos a través de entrenamientos ejecutados por personal calificado.
+
+La academia se compromete a brindar un servicio de enseñanza deportiva que promueva el desarrollo físico, técnico, táctico y formativo de sus alumnos mediante actividades ejecutadas por personal destinado para tales funciones.
+
 Asimismo, la academia se obliga a:
-•\tBrindar sesiones de entrenamiento conforme al calendario previamente establecido y planificado, velando por su regularidad y continuidad.
-•\tAsegurar un estándar de calidad técnica, pedagógica y formativa, adecuado a la edad, nivel y etapa de desarrollo de los alumnos.
-•\tMantener una comunicación clara y oportuna con los apoderados respecto a actividades, horarios, citaciones y otros asuntos relevantes.
-•\tVelar por el bienestar general de los alumnos durante las actividades organizadas, adoptando medidas preventivas razonables y protocolos de actuación frente a situaciones de emergencia.
-•\tFomentar valores formativos como el respeto, la responsabilidad, la inclusión y la convivencia deportiva.
+
+• Brindar las actividades conforme a la planificación previamente establecida e informada.
+• Procurar un estándar de calidad técnica, pedagógica y formativa acorde con la edad y etapa de desarrollo de los alumnos.
+• Mantener una comunicación clara y oportuna respecto de actividades, horarios, citaciones y asuntos relevantes.
+• Velar por el bienestar general de los alumnos durante las actividades organizadas, adoptando medidas preventivas razonables.
+• Fomentar valores asociados al respeto, responsabilidad, inclusión y convivencia deportiva.
 
 FORMACIÓN DE GRUPOS Y AJUSTES DE CATEGORÍAS
-En caso de no conformarse un grupo mínimo de 5 alumnos para una categoría o nivel determinado, la academia se reserva el derecho de conformar grupos provisionales con alumnos de un rango etario similar, mientras se alcanza el número suficiente de participantes para formalizar una categoría específica, con el fin de garantizar la continuidad del proceso formativo y el correcto funcionamiento administrativo.
+
+La academia podrá reorganizar grupos, categorías o niveles cuando sea necesario para asegurar la continuidad y adecuada prestación del servicio.
+
+Para ello podrá considerar criterios tales como edad, cantidad de alumnos, nivel deportivo, disponibilidad de personal, infraestructura y planificación interna.
+
+Estas modificaciones deberán procurar mantener la naturaleza y objetivos formativos del servicio contratado.
 
 USO DE IMAGEN DEL ALUMNO/A MENOR DE EDAD
-El apoderado autoriza expresamente de forma gratuita a la academia para utilizar la imagen del alumno/a menor de edad, mediante fotografías y videos tomados durante entrenamientos, partidos amistosos, torneos u otros eventos deportivos y oficiales de la academia sin que ello genere derecho a compensación económica alguna.
-Dicho material podrá ser difundido sin fines de lucro en redes sociales, página web, piezas gráficas promocionales, o cualquier otro medio de difusión institucional, con fines publicitarios, informativos o de registro histórico de las actividades de la academia.
-No obstante, el apoderado podrá revocar esta autorización en cualquier momento mediante solicitud escrita al correo realacademyfc@gmail.com.
-La solicitud de revocación será considerada para publicaciones futuras y no tendrá efecto retroactivo sobre material ya difundido.
+
+Cuando el apoderado autorice expresamente el uso de imagen, la academia podrá utilizar fotografías y videos obtenidos durante entrenamientos, encuentros, actividades o eventos institucionales para fines informativos, educativos, promocionales o de registro de las actividades de la academia.
+
+El apoderado podrá solicitar la revocación de dicha autorización para publicaciones futuras mediante comunicación escrita al correo institucional <<email_academia>>, sin perjuicio del tratamiento aplicable al material previamente publicado o utilizado.
 
 REAJUSTES
-La academia se reserva el derecho de aplicar reajustes anuales a sus tarifas, en función de la variación de costos operacionales, mejoras en los servicios ofrecidos u otras condiciones razonables establecidas por la academia.
+
+La academia podrá modificar sus tarifas para períodos futuros en función de costos operacionales, mejoras del servicio, condiciones comerciales u otras circunstancias razonables.
+
+Los reajustes futuros no modificarán retroactivamente los valores económicos expresamente consignados en este contrato para la inscripción que le dio origen.
 
 ACEPTACIÓN DEL CONTRATO
-El apoderado declara haber leído, comprendido y aceptado íntegramente los términos y condiciones del presente contrato, cuya aceptación se entenderá formalizada mediante el pago de la matrícula.
-El cumplimiento de este contrato y del Reglamento Interno será requisito obligatorio para la participación del alumno y su apoderado en las actividades de la academia. Dicho reglamento forma parte integral del contrato y se entenderá aceptado en su totalidad desde el momento de la inscripción.
-Este contrato será enviado en formato digital al correo electrónico registrado por el apoderado, constituyendo dicho envío prueba suficiente de su entrega y conocimiento.
 
-RENOVACIÓN AUTOMÁTICA
-El presente contrato se renovará automáticamente de forma mensual o trimestral, según el plan contratado, siempre que el apoderado mantenga el pago oportuno y continuo de las cuotas correspondientes. Esta renovación automática no requerirá la firma ni reenvío de un nuevo contrato, entendiéndose vigente mientras se mantengan las condiciones pactadas y no exista manifestación expresa de término por parte del apoderado.
-Como única excepción, la academia se compromete a reenviar el presente contrato al apoderado una vez por cada año calendario, o cada vez que se introduzcan modificaciones relevantes a su contenido, ya sea en las condiciones generales, económicas o reglamentarias.
+El apoderado declara haber leído, comprendido y aceptado los términos y condiciones del presente contrato y del reglamento interno de la academia, cuando corresponda.
+
+El contrato será enviado o puesto a disposición del apoderado en formato digital a través de los canales registrados, constituyendo dicho envío o disponibilidad constancia de su entrega.
+
+RENOVACIÓN Y CONTINUIDAD DEL SERVICIO
+
+La continuidad o renovación del servicio estará sujeta a la modalidad contratada, al cumplimiento de las obligaciones de pago, a la disponibilidad de cupos y a las condiciones administrativas vigentes.
+
+Cuando exista una renovación, cambio de plan, nueva contratación o modificación de condiciones económicas, la academia podrá comunicar las nuevas condiciones aplicables antes del inicio del período correspondiente.
 `;

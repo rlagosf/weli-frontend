@@ -1,19 +1,8 @@
 // src/pages/admin/formjugador.jsx
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-
 import { useNavigate } from "react-router-dom";
-
-import { useTheme } from "../../context/ThemeContext";
-
-import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
-
-import IsLoading from "../../components/isLoading";
-
 import { jwtDecode } from "jwt-decode";
-
-import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
-
 import {
   UserRound,
   Users,
@@ -26,21 +15,14 @@ import {
   GraduationCap,
 } from "lucide-react";
 
-/* =========================================================
-   CONTRATO
-========================================================= */
-
+import { useTheme } from "../../context/ThemeContext";
+import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
+import IsLoading from "../../components/isLoading";
+import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 import { CONTRATO_TEMPLATE } from "../../services/contratoTemplate";
-
 import { fillContratoTemplate } from "../../services/contratoFill";
-
 import { buildContratoPdfBlob } from "../../services/contratoPdf";
-
 import { formatRutWithDV } from "../../services/rut";
-
-/* =========================================================
-   PALETA
-========================================================= */
 
 const PALETTE = {
   copper: "#aa5013",
@@ -52,59 +34,25 @@ const PALETTE = {
   terracotta: "#e2773b",
 };
 
-/* =========================================================
-   CONSTANTES
-========================================================= */
-
 const PASO_ANTECEDENTES = 1;
-
 const PASO_DEPORTIVO = 2;
-
 const PASO_APODERADO = 3;
-
 const PASO_FINANZAS = 4;
-
 const TOTAL_PASOS = 4;
-
 const ESTADO_ACTIVO = 1;
 
-/*
- * Este endpoint se implementará en backend
- * sobre jugador_plan_tipo_pago.
- *
- * Se mantiene bajo /jugador-planes para conservar
- * el comportamiento tenant actual de api.js.
- */
 const FINANZAS_BULK_ENDPOINT = "/jugador-planes/tipos-pago/bulk";
-
-/* =========================================================
-   HELPERS
-========================================================= */
 
 const asList = (raw) => {
   if (!raw) return [];
 
-  const d = raw?.data ?? raw;
+  const data = raw?.data ?? raw;
 
-  if (Array.isArray(d)) {
-    return d;
-  }
-
-  if (Array.isArray(d?.items)) {
-    return d.items;
-  }
-
-  if (Array.isArray(d?.results)) {
-    return d.results;
-  }
-
-  if (Array.isArray(d?.roles)) {
-    return d.roles;
-  }
-
-  if (Array.isArray(d?.data)) {
-    return d.data;
-  }
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.results)) return data.results;
+  if (Array.isArray(data?.roles)) return data.roles;
+  if (Array.isArray(data?.data)) return data.data;
 
   return [];
 };
@@ -132,9 +80,7 @@ const emptyToUndef = (obj) => {
 const roundMoney = (value) => {
   const number = Number(value);
 
-  if (!Number.isFinite(number)) {
-    return 0;
-  }
+  if (!Number.isFinite(number)) return 0;
 
   return Math.round(number * 100) / 100;
 };
@@ -142,9 +88,7 @@ const roundMoney = (value) => {
 const formatMoney = (value) => {
   const number = Number(value ?? 0);
 
-  if (!Number.isFinite(number)) {
-    return "$0";
-  }
+  if (!Number.isFinite(number)) return "$0";
 
   return new Intl.NumberFormat("es-CL", {
     style: "currency",
@@ -155,21 +99,14 @@ const formatMoney = (value) => {
 
 const todaySQL = () => {
   const now = new Date();
-
   const yyyy = now.getFullYear();
-
   const mm = String(now.getMonth() + 1).padStart(2, "0");
-
   const dd = String(now.getDate()).padStart(2, "0");
 
   return `${yyyy}-${mm}-${dd}`;
 };
 
-/* =========================================================
-   FECHA CONTRATO
-========================================================= */
-
-const fechaEsLarga = (d = new Date()) => {
+const fechaEsLarga = (date = new Date()) => {
   const meses = [
     "Enero",
     "Febrero",
@@ -185,18 +122,51 @@ const fechaEsLarga = (d = new Date()) => {
     "Diciembre",
   ];
 
-  const dd = String(d.getDate()).padStart(2, "0");
-
-  const mm = meses[d.getMonth()];
-
-  const yyyy = d.getFullYear();
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = meses[date.getMonth()];
+  const yyyy = date.getFullYear();
 
   return `${dd} de ${mm} de ${yyyy}`;
 };
 
-/* =========================================================
-   BLOB -> BASE64
-========================================================= */
+const fechaSQLALarga = (value) => {
+  const raw = String(value ?? "").trim();
+
+  if (!raw) return "";
+
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (!match) return raw;
+
+  const [, yyyy, mm, dd] = match;
+  const date = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+
+  return Number.isNaN(date.getTime()) ? raw : fechaEsLarga(date);
+};
+
+const formatAcademiaRut = (value) => {
+  const rut = String(value ?? "").replace(/\D/g, "");
+
+  return /^\d{7,8}$/.test(rut) ? formatRutWithDV(rut) : rut;
+};
+
+const normalizeAcademiaInfo = (row) => ({
+  id: Number(row?.id ?? 0),
+  nombre: String(row?.nombre ?? "").trim(),
+  rut_academia: row?.rut_academia ?? "",
+  deporte_id: Number(row?.deporte_id ?? 0),
+  deporte_nombre: String(row?.deporte_nombre ?? "").trim(),
+  direccion: String(row?.direccion ?? "").trim(),
+  ciudad_comuna_id: Number(row?.ciudad_comuna_id ?? 0) || null,
+  ciudad_id: Number(row?.ciudad_id ?? 0) || null,
+  ciudad_nombre: String(row?.ciudad_nombre ?? "").trim(),
+  comuna_id: Number(row?.comuna_id ?? 0) || null,
+  comuna_nombre: String(row?.comuna_nombre ?? "").trim(),
+  region_id: Number(row?.region_id ?? 0) || null,
+  region_nombre: String(row?.region_nombre ?? "").trim(),
+  email: String(row?.email ?? "").trim(),
+  estado_id: Number(row?.estado_id ?? 0),
+});
 
 const blobToBase64 = (blob) =>
   new Promise((resolve, reject) => {
@@ -206,82 +176,25 @@ const blobToBase64 = (blob) =>
 
     reader.onload = () => {
       const result = String(reader.result ?? "");
-
       const index = result.indexOf("base64,");
 
-      if (index !== -1) {
-        resolve(result.slice(index + "base64,".length));
-
-        return;
-      }
-
-      resolve(result);
+      resolve(index !== -1 ? result.slice(index + "base64,".length) : result);
     };
 
     reader.readAsDataURL(blob);
   });
 
-/* =========================================================
-   MODAL
-========================================================= */
-
-function Modal({ open, title, children, onClose, darkMode }) {
-  if (!open) {
-    return null;
-  }
-
-  const card =
-    "relative w-full max-w-md rounded-2xl border backdrop-blur-md shadow-[0_10px_40px_rgba(0,0,0,0.25)] p-5 " +
-    (darkMode ? "bg-white/10 border-white/15 text-white" : "bg-white/60 border-ra-marron/15 text-ra-marron");
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
-
-      <div className={card}>
-        <h3 className="text-lg font-extrabold mb-2">{title}</h3>
-
-        <div className={darkMode ? "text-sm mb-4 text-white/85" : "text-sm mb-4 text-ra-marron/80"}>{children}</div>
-
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="py-2 px-4 rounded-xl font-bold border border-white/15 hover:opacity-90 active:scale-[0.99] transition"
-            style={{
-              background: `linear-gradient(135deg, ${PALETTE.copper}, ${PALETTE.terracotta})`,
-
-              color: "white",
-            }}
-          >
-            OK
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* =========================================================
-   ACADEMIA STORAGE
-========================================================= */
-
 const getAcademiaIdFromStorage = () => {
   try {
     const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
 
-    if (!raw) {
-      return null;
-    }
+    if (!raw) return null;
 
     const direct = Number(raw);
 
-    if (Number.isFinite(direct) && direct > 0) {
-      return direct;
-    }
+    if (Number.isFinite(direct) && direct > 0) return direct;
 
     const parsed = JSON.parse(raw);
-
     const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
 
     return Number.isFinite(id) && id > 0 ? id : null;
@@ -300,7 +213,6 @@ const extractRol = (decoded) => {
 
 const extractAcademiaFromToken = (decoded) => {
   const raw = decoded?.academia_id ?? decoded?.user?.academia_id ?? 0;
-
   const number = Number(raw);
 
   return Number.isInteger(number) && number > 0 ? number : 0;
@@ -311,10 +223,6 @@ const isExpired = (decoded) => {
 
   return !decoded?.exp || decoded.exp <= now;
 };
-
-/* =========================================================
-   HEADERS
-========================================================= */
 
 const buildHeaders = (rolActual) => {
   const token = getToken();
@@ -336,21 +244,15 @@ const buildHeaders = (rolActual) => {
   return headers;
 };
 
-/* =========================================================
-   GET CON FALLBACK
-========================================================= */
-
 const tryGetList = async (paths, { signal, headers }) => {
   const variants = [];
 
   for (const path of paths) {
     variants.push(path);
-
     variants.push(path.endsWith("/") ? path.slice(0, -1) : `${path}/`);
   }
 
   const unique = [...new Set(variants)];
-
   let lastError = null;
 
   for (const url of unique) {
@@ -370,13 +272,8 @@ const tryGetList = async (paths, { signal, headers }) => {
 
       const status = error?.status ?? error?.response?.status ?? 0;
 
-      if (status === 401 || status === 403) {
-        throw error;
-      }
-
-      if (status === 404 || status === 405) {
-        continue;
-      }
+      if (status === 401 || status === 403) throw error;
+      if (status === 404 || status === 405) continue;
 
       throw error;
     }
@@ -384,10 +281,6 @@ const tryGetList = async (paths, { signal, headers }) => {
 
   throw lastError ?? new Error("GET failed");
 };
-
-/* =========================================================
-   POST CON FALLBACK
-========================================================= */
 
 const postWithFallback = async (path, body, headers) => {
   const urls = path.endsWith("/") ? [path, path.slice(0, -1)] : [path, `${path}/`];
@@ -404,13 +297,8 @@ const postWithFallback = async (path, body, headers) => {
 
       const status = error?.status ?? error?.response?.status ?? 0;
 
-      if (status === 401 || status === 403) {
-        throw error;
-      }
-
-      if (status === 404 || status === 405) {
-        continue;
-      }
+      if (status === 401 || status === 403) throw error;
+      if (status === 404 || status === 405) continue;
 
       throw error;
     }
@@ -419,235 +307,138 @@ const postWithFallback = async (path, body, headers) => {
   throw lastError ?? new Error("POST failed");
 };
 
-/* =========================================================
-   NORMALIZACIONES FINANCIERAS
-========================================================= */
-
 const normalizeTipoPago = (row) => {
   const id = Number(row?.tipo_pago_id ?? row?.id);
 
   return {
     id,
-
     tipo_pago_id: id,
-
     nombre: String(row?.nombre ?? "").trim(),
-
     descripcion: row?.descripcion ?? null,
-
     tarifa_id: row?.tarifa_id == null ? null : Number(row.tarifa_id),
-
     monto: row?.monto == null ? null : Number(row.monto),
-
     estado_id: Number(row?.academia_estado_id ?? row?.estado_id ?? 1),
-
     tarifa_estado_id: row?.tarifa_estado_id == null ? null : Number(row.tarifa_estado_id),
   };
 };
 
-const normalizePlanCatalogo = (row) => {
-  const reglas = Array.isArray(row?.reglas) ? row.reglas : [];
-
-  return {
-    id: Number(row?.id ?? row?.plan_id),
-
-    nombre: String(row?.nombre ?? "").trim(),
-
-    descripcion: row?.descripcion ?? null,
-
-    estado_id: Number(row?.estado_id ?? 1),
-
-    reglas,
-  };
-};
-
-const normalizePlanAcademia = (row) => ({
-  relacion_id: Number(row?.relacion_id ?? row?.id),
-
-  plan_id: Number(row?.plan_id ?? row?.id),
-
+const normalizePlanCatalogo = (row) => ({
+  id: Number(row?.id ?? row?.plan_id),
   nombre: String(row?.nombre ?? "").trim(),
-
   descripcion: row?.descripcion ?? null,
-
-  aplica_todos: Number(row?.aplica_todos ?? 0),
-
   estado_id: Number(row?.estado_id ?? 1),
-
   reglas: Array.isArray(row?.reglas) ? row.reglas : [],
-
-  tipos_pago: Array.isArray(row?.tipos_pago) ? row.tipos_pago : [],
 });
 
-/* =========================================================
-   COMPONENTE
-========================================================= */
+function Modal({ open, title, children, onClose, darkMode }) {
+  if (!open) return null;
+
+  const card =
+    "relative w-full max-w-md rounded-2xl border backdrop-blur-md shadow-[0_10px_40px_rgba(0,0,0,0.25)] p-5 " +
+    (darkMode ? "bg-white/10 border-white/15 text-white" : "bg-white/60 border-ra-marron/15 text-ra-marron");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+
+      <div className={card}>
+        <h3 className="text-lg font-extrabold mb-2">{title}</h3>
+
+        <div className={darkMode ? "text-sm mb-4 text-white/85" : "text-sm mb-4 text-ra-marron/80"}>{children}</div>
+
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="py-2 px-4 rounded-xl font-bold border border-white/15 hover:opacity-90 active:scale-[0.99] transition"
+            style={{
+              background: `linear-gradient(135deg, ${PALETTE.copper}, ${PALETTE.terracotta})`,
+              color: "white",
+            }}
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function FormJugador() {
   const { darkMode } = useTheme();
-
   const navigate = useNavigate();
 
   useMobileAutoScrollTop();
 
-  /* =======================================================
-     TENANT / ROL
-  ======================================================= */
-
   const [rolActual, setRolActual] = useState(0);
-
   const [academiaTarget, setAcademiaTarget] = useState(() => getAcademiaIdFromStorage());
-
-  /* =======================================================
-     WIZARD
-  ======================================================= */
+  const [academiaInfo, setAcademiaInfo] = useState(null);
 
   const [paso, setPaso] = useState(PASO_ANTECEDENTES);
 
-  /* =======================================================
-     FORMULARIO JUGADOR
-  ======================================================= */
-
   const [formData, setFormData] = useState({
     nombre_jugador: "",
-
     rut_jugador: "",
-
     fecha_nacimiento: "",
-
     edad: "",
-
     telefono: "",
-
     email: "",
-
     direccion: "",
-
     comuna_id: "",
-
     posicion_id: "",
-
     categoria_id: "",
-
     estado_id: "",
-
     talla_polera: "",
-
     talla_short: "",
-
     establec_educ_id: "",
-
     prevision_medica_id: "",
-
     nombre_apoderado: "",
-
     rut_apoderado: "",
-
     telefono_apoderado: "",
-
     peso: "",
-
     estatura: "",
-
     observaciones: "",
-
     sucursal_ids: [],
   });
 
-  /* =======================================================
-     CATÁLOGOS EXISTENTES
-  ======================================================= */
-
   const [posiciones, setPosiciones] = useState([]);
-
   const [categorias, setCategorias] = useState([]);
-
   const [estados, setEstados] = useState([]);
-
   const [establecimientos, setEstablecimientos] = useState([]);
-
   const [previsiones, setPrevisiones] = useState([]);
-
   const [sucursales, setSucursales] = useState([]);
-
   const [comunas, setComunas] = useState([]);
 
-  /* =======================================================
-     CATÁLOGOS FINANCIEROS
-  ======================================================= */
-
   const [tiposPago, setTiposPago] = useState([]);
-
   const [planesCatalogo, setPlanesCatalogo] = useState([]);
-
-  const [planesAcademia, setPlanesAcademia] = useState([]);
-
-  /*
-   * Estado:
-   *
-   * {
-   *   [tipo_pago_id]: {
-   *      plan_id: "4"
-   *   }
-   * }
-   */
   const [beneficiosPorTipo, setBeneficiosPorTipo] = useState({});
 
-  /* =======================================================
-     ESTADOS UI
-  ======================================================= */
-
   const [mensaje, setMensaje] = useState("");
-
   const [error, setError] = useState("");
-
   const [isLoading, setIsLoading] = useState(true);
-
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  /* =======================================================
-     APODERADO
-  ======================================================= */
-
   const [buscandoApoderado, setBuscandoApoderado] = useState(false);
-
   const [apoderadoEncontrado, setApoderadoEncontrado] = useState(false);
-
   const [apoderadoLookupMsg, setApoderadoLookupMsg] = useState("");
 
-  /* =======================================================
-     MODAL
-  ======================================================= */
-
   const [createdOpen, setCreatedOpen] = useState(false);
-
   const [createdInfo, setCreatedInfo] = useState({
     nombre: "",
-
     id: null,
-
     apoderadoCredencial: false,
-
     total: 0,
   });
-
-  /* =======================================================
-     VALIDAR TOKEN
-  ======================================================= */
 
   useEffect(() => {
     try {
       const token = getToken();
 
-      if (!token) {
-        throw new Error("no-token");
-      }
+      if (!token) throw new Error("no-token");
 
       const decoded = jwtDecode(token);
 
-      if (isExpired(decoded)) {
-        throw new Error("expired");
-      }
+      if (isExpired(decoded)) throw new Error("expired");
 
       const rol = extractRol(decoded);
 
@@ -656,19 +447,11 @@ export default function FormJugador() {
       }
 
       const tokenAcademia = extractAcademiaFromToken(decoded);
-
       const storedAcademia = getAcademiaIdFromStorage();
 
-      /*
-       * Admin / Staff.
-       */
       if ((rol === 1 || rol === 2) && !tokenAcademia) {
         clearToken();
-
-        navigate("/login", {
-          replace: true,
-        });
-
+        navigate("/login", { replace: true });
         return;
       }
 
@@ -678,40 +461,27 @@ export default function FormJugador() {
         } catch {}
       }
 
-      /*
-       * Superadmin.
-       */
       const selected = getAcademiaIdFromStorage();
 
       if (rol === 3 && !selected) {
         setRolActual(rol);
-
         setAcademiaTarget(null);
-
         setError("⚠️ Superadmin: selecciona una academia para cargar los datos.");
-
         setIsLoading(false);
-
         return;
       }
 
       setRolActual(rol);
-
-      setAcademiaTarget(selected);
+      setAcademiaTarget(rol === 3 ? selected : tokenAcademia);
     } catch {
       clearToken();
-
-      navigate("/login", {
-        replace: true,
-      });
+      navigate("/login", { replace: true });
     }
   }, [navigate]);
 
-  /* =======================================================
-     CAMBIO DE ACADEMIA
-  ======================================================= */
-
   useEffect(() => {
+    if (rolActual !== 3) return undefined;
+
     const sync = () => setAcademiaTarget(getAcademiaIdFromStorage());
 
     const onStorage = (event) => {
@@ -727,217 +497,182 @@ export default function FormJugador() {
 
       if (now !== last) {
         last = now;
-
         sync();
       }
     }, 800);
 
     window.addEventListener("storage", onStorage);
+    window.addEventListener("weli:selectedAcademiaChanged", sync);
 
     return () => {
       window.removeEventListener("storage", onStorage);
-
+      window.removeEventListener("weli:selectedAcademiaChanged", sync);
       clearInterval(timer);
     };
-  }, []);
-
-  /* =======================================================
-     CARGA DE CATÁLOGOS
-  ======================================================= */
+  }, [rolActual]);
 
   useEffect(() => {
-    if (![1, 2, 3].includes(rolActual)) {
-      return;
-    }
-
-    if (rolActual === 3 && !academiaTarget) {
-      return;
-    }
+    if (![1, 2, 3].includes(rolActual)) return;
+    if (!academiaTarget) return;
 
     const abort = new AbortController();
-
     let alive = true;
+
+    setAcademiaInfo(null);
 
     (async () => {
       setIsLoading(true);
-
       setError("");
 
       try {
         const headers = buildHeaders(rolActual);
 
-        /*
-         * Catálogos generales.
-         */
-        const [_pos, _cat, _estados, _edu, _prev, _suc, _com] = await Promise.all([
+        const [
+          academiaResponse,
+          posicionesRaw,
+          categoriasRaw,
+          estadosRaw,
+          establecimientosRaw,
+          previsionesRaw,
+          sucursalesRaw,
+          comunasRaw,
+        ] = await Promise.all([
+          api.get(`/academias/${academiaTarget}`, {
+            signal: abort.signal,
+            headers,
+          }),
           tryGetList(["/posiciones", "/posicion"], {
             signal: abort.signal,
-
             headers,
           }),
-
           tryGetList(["/categorias", "/categoria"], {
             signal: abort.signal,
-
             headers,
           }),
-
           tryGetList(["/estado", "/estados"], {
             signal: abort.signal,
-
             headers,
           }),
-
           tryGetList(["/establecimientos-educ"], {
             signal: abort.signal,
-
             headers,
           }),
-
           tryGetList(["/prevision-medica"], {
             signal: abort.signal,
-
             headers,
           }),
-
           tryGetList(["/sucursales-real", "/sucursales"], {
             signal: abort.signal,
-
             headers,
           }),
-
           tryGetList(["/comunas"], {
             signal: abort.signal,
-
             headers,
           }),
         ]);
 
-        if (!alive) {
-          return;
+        if (!alive) return;
+
+        const academiaRaw =
+          academiaResponse?.data?.item ?? academiaResponse?.data?.academia ?? academiaResponse?.data ?? null;
+
+        const academiaNormalizada = normalizeAcademiaInfo(academiaRaw);
+
+        if (!academiaNormalizada.id) {
+          throw new Error("No fue posible recuperar los antecedentes institucionales de la academia.");
         }
 
-        const norm = (arr, idKeys = ["id"], nameKeys = ["nombre", "descripcion"]) =>
+        setAcademiaInfo(academiaNormalizada);
+
+        const normalizeCatalog = (arr, idKeys = ["id"], nameKeys = ["nombre", "descripcion"]) =>
           (Array.isArray(arr) ? arr : [])
             .map((item) => {
               const idKey = idKeys.find((key) => item?.[key] != null);
-
               const nameKey = nameKeys.find((key) => typeof item?.[key] === "string");
 
               const id = Number(item?.[idKey]);
 
               return {
                 id,
-
                 nombre: String(item?.[nameKey] ?? id ?? "").trim(),
               };
             })
             .filter((item) => Number.isFinite(item.id) && item.id > 0);
 
-        const posN = norm(_pos, ["id", "posicion_id"]);
-
-        const catN = norm(_cat, ["id", "categoria_id"]);
-
-        const estN = norm(_estados, ["id", "estado_id"]);
-
-        const eduN = norm(_edu, ["id", "establec_educ_id"]);
-
-        const prevN = norm(_prev, ["id", "prevision_medica_id"]);
-
-        const sucN = norm(_suc);
-
-        const comN = norm(_com);
+        const posN = normalizeCatalog(posicionesRaw, ["id", "posicion_id"]);
+        const catN = normalizeCatalog(categoriasRaw, ["id", "categoria_id"]);
+        const estadosN = normalizeCatalog(estadosRaw, ["id", "estado_id"]);
+        const eduN = normalizeCatalog(establecimientosRaw, ["id", "establec_educ_id"]);
+        const prevN = normalizeCatalog(previsionesRaw, ["id", "prevision_medica_id"]);
+        const sucN = normalizeCatalog(sucursalesRaw);
+        const comN = normalizeCatalog(comunasRaw);
 
         setPosiciones(posN);
-
         setCategorias(catN);
-
-        setEstados(estN);
-
+        setEstados(estadosN);
         setEstablecimientos(eduN);
-
         setPrevisiones(prevN);
-
         setSucursales(sucN);
-
         setComunas(comN);
 
         /*
-         * Staff mantiene exactamente
-         * su capacidad actual de crear jugadores,
-         * pero no administra beneficios.
-         *
-         * Roles 1 y 3 cargan configuración financiera.
+         * Tarifas: todos los roles necesitan leerlas
+         * porque forman parte del contrato.
          */
-        if (rolActual === 1 || rolActual === 3) {
-          const [_tiposPago, _catalogoPlanes, _planesAcademia] = await Promise.all([
-            tryGetList(["/tipo-pago"], {
-              signal: abort.signal,
+        const tiposRaw = await tryGetList(["/tipo-pago"], {
+          signal: abort.signal,
+          headers,
+        });
 
-              headers,
-            }),
-
-            tryGetList(["/planes/catalogo"], {
-              signal: abort.signal,
-
-              headers,
-            }),
-          ]);
-
-          if (!alive) {
-            return;
-          }
-
-          const tipos = (Array.isArray(_tiposPago) ? _tiposPago : [])
-            .map(normalizeTipoPago)
-            .filter((item) => item.id > 0 && item.estado_id === ESTADO_ACTIVO);
-
-          const catalogo = (Array.isArray(_catalogoPlanes) ? _catalogoPlanes : [])
-            .map(normalizePlanCatalogo)
-            .filter((item) => item.id > 0 && item.estado_id === ESTADO_ACTIVO);
-
-          setTiposPago(tipos);
-
-          setPlanesCatalogo(catalogo);
-
-          const academiaPlanes = (Array.isArray(_planesAcademia) ? _planesAcademia : [])
-            .map(normalizePlanAcademia)
-            .filter((item) => item.plan_id > 0 && item.estado_id === ESTADO_ACTIVO);
-
-          setTiposPago(tipos);
-
-          setPlanesCatalogo(catalogo);
-
-          setPlanesAcademia(academiaPlanes);
-
-          /*
-           * Por defecto:
-           * SIN BENEFICIO.
-           */
-          const sinBeneficio = academiaPlanes.find(
-            (plan) => String(plan.nombre).trim().toUpperCase() === "SIN BENEFICIO"
-          );
-
-          const defaults = {};
-
-          for (const tipo of tipos) {
-            defaults[tipo.id] = {
-              plan_id: sinBeneficio ? String(sinBeneficio.plan_id) : "",
-            };
-          }
-
-          setBeneficiosPorTipo(defaults);
-        }
+        let catalogoPlanesRaw = [];
 
         /*
-         * Invalidar selects si cambió academia.
+         * Staff no administra beneficios.
+         * Para Staff solo necesitamos snapshot de tarifa base.
          */
+        if (rolActual !== 2) {
+          catalogoPlanesRaw = await tryGetList(["/planes/catalogo"], {
+            signal: abort.signal,
+            headers,
+          });
+        }
+
+        if (!alive) return;
+
+        const tipos = (Array.isArray(tiposRaw) ? tiposRaw : [])
+          .map(normalizeTipoPago)
+          .filter(
+            (item) =>
+              item.id > 0 &&
+              item.estado_id === ESTADO_ACTIVO &&
+              item.monto != null &&
+              Number.isFinite(Number(item.monto)) &&
+              (item.tarifa_estado_id == null || item.tarifa_estado_id === ESTADO_ACTIVO)
+          );
+
+        const catalogo = (Array.isArray(catalogoPlanesRaw) ? catalogoPlanesRaw : [])
+          .map(normalizePlanCatalogo)
+          .filter((item) => item.id > 0 && item.estado_id === ESTADO_ACTIVO);
+
+        setTiposPago(tipos);
+        setPlanesCatalogo(catalogo);
+
+        const sinBeneficio = catalogo.find((plan) => String(plan.nombre).trim().toUpperCase() === "SIN BENEFICIO");
+
+        const defaults = {};
+
+        for (const tipo of tipos) {
+          defaults[tipo.id] = {
+            plan_id: sinBeneficio ? String(sinBeneficio.id) : "",
+          };
+        }
+
+        setBeneficiosPorTipo(defaults);
+
         setFormData((previous) => {
           const exists = (array, id) => array.some((item) => String(item.id) === String(id));
 
-          const next = {
-            ...previous,
-          };
+          const next = { ...previous };
 
           if (previous.posicion_id && !exists(posN, previous.posicion_id)) {
             next.posicion_id = "";
@@ -947,7 +682,7 @@ export default function FormJugador() {
             next.categoria_id = "";
           }
 
-          if (previous.estado_id && !exists(estN, previous.estado_id)) {
+          if (previous.estado_id && !exists(estadosN, previous.estado_id)) {
             next.estado_id = "";
           }
 
@@ -970,15 +705,11 @@ export default function FormJugador() {
           return next;
         });
       } catch (err) {
-        const status = err?.status ?? err?.response?.status;
+        const status = err?.status ?? err?.response?.status ?? 0;
 
         if (status === 401) {
           clearToken();
-
-          navigate("/login", {
-            replace: true,
-          });
-
+          navigate("/login", { replace: true });
           return;
         }
 
@@ -988,12 +719,11 @@ export default function FormJugador() {
               ? "⚠️ Superadmin: falta x-academia-id o no tienes permisos para esta academia."
               : "No tienes permisos para cargar los datos de selección."
           );
-
           return;
         }
 
         if (!abort.signal.aborted) {
-          setError("❌ No se pudieron cargar los datos de selección.");
+          setError(err?.response?.data?.message ?? err?.message ?? "❌ No se pudieron cargar los datos de selección.");
         }
       } finally {
         if (alive && !abort.signal.aborted) {
@@ -1004,38 +734,26 @@ export default function FormJugador() {
 
     return () => {
       alive = false;
-
       abort.abort();
     };
   }, [navigate, rolActual, academiaTarget]);
 
-  /* =======================================================
-     AUTOSELECCIÓN
-  ======================================================= */
-
   useEffect(() => {
     setFormData((previous) => ({
       ...previous,
-
       posicion_id: !previous.posicion_id && posiciones.length === 1 ? String(posiciones[0].id) : previous.posicion_id,
-
       categoria_id:
         !previous.categoria_id && categorias.length === 1 ? String(categorias[0].id) : previous.categoria_id,
-
       estado_id: !previous.estado_id && estados.length === 1 ? String(estados[0].id) : previous.estado_id,
-
       establec_educ_id:
         !previous.establec_educ_id && establecimientos.length === 1
           ? String(establecimientos[0].id)
           : previous.establec_educ_id,
-
       prevision_medica_id:
         !previous.prevision_medica_id && previsiones.length === 1
           ? String(previsiones[0].id)
           : previous.prevision_medica_id,
-
       comuna_id: !previous.comuna_id && comunas.length === 1 ? String(comunas[0].id) : previous.comuna_id,
-
       sucursal_ids:
         (!Array.isArray(previous.sucursal_ids) || previous.sucursal_ids.length === 0) && sucursales.length === 1
           ? [String(sucursales[0].id)]
@@ -1043,22 +761,13 @@ export default function FormJugador() {
     }));
   }, [posiciones, categorias, estados, establecimientos, previsiones, sucursales, comunas]);
 
-  /* =======================================================
-     EDAD
-  ======================================================= */
-
   const calcEdad = (yyyyMmDd) => {
-    if (!yyyyMmDd) {
-      return "";
-    }
+    if (!yyyyMmDd) return "";
 
     const today = new Date();
-
     const birth = new Date(yyyyMmDd);
 
-    if (Number.isNaN(birth.getTime())) {
-      return "";
-    }
+    if (Number.isNaN(birth.getTime())) return "";
 
     let edad = today.getFullYear() - birth.getFullYear();
 
@@ -1074,14 +783,9 @@ export default function FormJugador() {
   const scrollTop = () => {
     window.scrollTo({
       top: 0,
-
       behavior: "smooth",
     });
   };
-
-  /* =======================================================
-     CAMBIOS FORMULARIO
-  ======================================================= */
 
   const handleChange = ({ target: { name, value: rawValue } }) => {
     let value = rawValue;
@@ -1097,14 +801,11 @@ export default function FormJugador() {
 
       if (name === "rut_apoderado") {
         setApoderadoEncontrado(false);
-
         setApoderadoLookupMsg("");
 
         setFormData((previous) => ({
           ...previous,
-
           rut_apoderado: value,
-
           nombre_apoderado: apoderadoEncontrado ? "" : previous.nombre_apoderado,
         }));
 
@@ -1131,9 +832,7 @@ export default function FormJugador() {
     if (name === "fecha_nacimiento") {
       setFormData((previous) => ({
         ...previous,
-
         fecha_nacimiento: value,
-
         edad: calcEdad(value),
       }));
 
@@ -1142,29 +841,19 @@ export default function FormJugador() {
 
     setFormData((previous) => ({
       ...previous,
-
       [name]: value,
     }));
   };
 
-  /* =======================================================
-     APODERADO POR RUT
-  ======================================================= */
-
   useEffect(() => {
-    if (paso !== PASO_APODERADO) {
-      return;
-    }
+    if (paso !== PASO_APODERADO) return;
 
     const rut = String(formData.rut_apoderado ?? "").replace(/\D/g, "");
 
     if (rut.length !== 8) {
       setBuscandoApoderado(false);
-
       setApoderadoEncontrado(false);
-
       setApoderadoLookupMsg("");
-
       return;
     }
 
@@ -1172,7 +861,6 @@ export default function FormJugador() {
 
     const timer = setTimeout(async () => {
       setBuscandoApoderado(true);
-
       setApoderadoLookupMsg("");
 
       try {
@@ -1180,37 +868,28 @@ export default function FormJugador() {
 
         const response = await api.get(`/jugadores/apoderado/rut/${rut}`, {
           signal: controller.signal,
-
           headers,
         });
 
-        const responseBody = response?.data ?? {};
-
-        const item = responseBody?.item ?? responseBody?.data ?? responseBody;
-
+        const body = response?.data ?? {};
+        const item = body?.item ?? body?.data ?? body;
         const nombre = String(item?.nombre_apoderado ?? "").trim();
 
         if (!nombre) {
           setApoderadoEncontrado(false);
-
           setApoderadoLookupMsg("Apoderado nuevo: ingresa su nombre completo.");
-
           return;
         }
 
         setFormData((previous) => ({
           ...previous,
-
           nombre_apoderado: nombre,
         }));
 
         setApoderadoEncontrado(true);
-
         setApoderadoLookupMsg("✓ Apoderado encontrado. Nombre autocompletado.");
       } catch (err) {
-        if (controller.signal.aborted) {
-          return;
-        }
+        if (controller.signal.aborted) return;
 
         const status = err?.status ?? err?.response?.status ?? 0;
 
@@ -1219,22 +898,16 @@ export default function FormJugador() {
 
           setFormData((previous) => ({
             ...previous,
-
             nombre_apoderado: "",
           }));
 
           setApoderadoLookupMsg("Apoderado nuevo: ingresa su nombre completo.");
-
           return;
         }
 
         if (status === 401) {
           clearToken();
-
-          navigate("/login", {
-            replace: true,
-          });
-
+          navigate("/login", { replace: true });
           return;
         }
 
@@ -1244,12 +917,10 @@ export default function FormJugador() {
               ? "⚠️ Superadmin: academia no autorizada."
               : "No tienes permisos para consultar este apoderado."
           );
-
           return;
         }
 
         setApoderadoEncontrado(false);
-
         setApoderadoLookupMsg("No fue posible verificar el RUT del apoderado.");
       } finally {
         if (!controller.signal.aborted) {
@@ -1260,14 +931,9 @@ export default function FormJugador() {
 
     return () => {
       clearTimeout(timer);
-
       controller.abort();
     };
   }, [paso, formData.rut_apoderado, rolActual, navigate]);
-
-  /* =======================================================
-     SUCURSALES
-  ======================================================= */
 
   const toggleSucursal = (id) => {
     const sid = String(id);
@@ -1279,39 +945,26 @@ export default function FormJugador() {
 
       return {
         ...previous,
-
         sucursal_ids: selected ? actuales.filter((current) => String(current) !== sid) : [...actuales, sid],
       };
     });
   };
 
-  /* =======================================================
-     BENEFICIOS DISPONIBLES POR TIPO
-  ======================================================= */
-
   const getPlanesParaTipoPago = useCallback(() => {
     return planesCatalogo
       .filter((plan) => Number(plan.estado_id) === ESTADO_ACTIVO)
+      .slice()
       .sort((a, b) => {
         const aSin = String(a.nombre).trim().toUpperCase() === "SIN BENEFICIO";
 
         const bSin = String(b.nombre).trim().toUpperCase() === "SIN BENEFICIO";
 
-        if (aSin && !bSin) {
-          return -1;
-        }
-
-        if (!aSin && bSin) {
-          return 1;
-        }
+        if (aSin && !bSin) return -1;
+        if (!aSin && bSin) return 1;
 
         return String(a.nombre).localeCompare(String(b.nombre), "es");
       });
   }, [planesCatalogo]);
-
-  /* =======================================================
-     REGLA PLAN
-  ======================================================= */
 
   const getPlan = (planId) => planesCatalogo.find((plan) => Number(plan.id) === Number(planId)) ?? null;
 
@@ -1320,9 +973,7 @@ export default function FormJugador() {
 
     const plan = getPlan(planId);
 
-    if (!plan) {
-      return base;
-    }
+    if (!plan) return base;
 
     if (String(plan.nombre).trim().toUpperCase() === "SIN BENEFICIO") {
       return base;
@@ -1332,9 +983,7 @@ export default function FormJugador() {
       (item) => Number(item?.estado_id ?? 1) === ESTADO_ACTIVO
     );
 
-    if (!regla) {
-      return base;
-    }
+    if (!regla) return base;
 
     const valor = Math.max(0, Number(regla.valor ?? 0));
 
@@ -1363,16 +1012,11 @@ export default function FormJugador() {
   const seleccionarBeneficio = (tipoPagoId, planId) => {
     setBeneficiosPorTipo((previous) => ({
       ...previous,
-
       [tipoPagoId]: {
         plan_id: String(planId),
       },
     }));
   };
-
-  /* =======================================================
-     RESUMEN FINANCIERO
-  ======================================================= */
 
   const totalBase = useMemo(() => tiposPago.reduce((total, tipo) => total + Number(tipo.monto ?? 0), 0), [tiposPago]);
 
@@ -1388,10 +1032,6 @@ export default function FormJugador() {
 
   const totalDescuento = Math.max(0, totalBase - totalFinal);
 
-  /* =======================================================
-     VALIDACIONES
-  ======================================================= */
-
   const validarAntecedentes = () => {
     setError("");
 
@@ -1399,21 +1039,33 @@ export default function FormJugador() {
 
     if (!String(formData.nombre_jugador ?? "").trim()) {
       setError("Debes ingresar el nombre del jugador.");
-
       return false;
     }
 
     if (!/^\d{7,8}$/.test(rut)) {
       setError("El RUT del jugador debe ser de 7 u 8 dígitos (sin DV).");
+      return false;
+    }
 
+    if (!formData.fecha_nacimiento) {
+      setError("Debes ingresar la fecha de nacimiento del jugador para generar el contrato.");
+      return false;
+    }
+
+    if (!String(formData.direccion ?? "").trim()) {
+      setError("Debes ingresar la dirección del jugador para generar el contrato.");
+      return false;
+    }
+
+    if (!formData.comuna_id) {
+      setError("Debes seleccionar la comuna del jugador para generar el contrato.");
       return false;
     }
 
     const edad = Number(formData.edad ?? 0);
 
     if (formData.edad && (edad < 5 || edad > 100)) {
-      setError("La edad debe estar entre 5 y 100 años si la indicas.");
-
+      setError("La edad debe estar entre 5 y 100 años.");
       return false;
     }
 
@@ -1422,7 +1074,6 @@ export default function FormJugador() {
 
       if (!valid) {
         setError("Teléfono inválido: usa +569... o 9–11 dígitos.");
-
         return false;
       }
     }
@@ -1435,19 +1086,16 @@ export default function FormJugador() {
 
     if ([formData.posicion_id, formData.categoria_id, formData.estado_id].some((value) => !value)) {
       setError("Debes seleccionar posición, categoría y estado.");
-
       return false;
     }
 
     if (!Array.isArray(formData.sucursal_ids) || formData.sucursal_ids.length === 0) {
       setError("Debes seleccionar al menos una sucursal para el jugador.");
-
       return false;
     }
 
     if (rolActual === 3 && !getAcademiaIdFromStorage()) {
       setError("⚠️ Superadmin: selecciona una academia antes de continuar.");
-
       return false;
     }
 
@@ -1461,13 +1109,11 @@ export default function FormJugador() {
 
     if (!/^\d{7,8}$/.test(rut)) {
       setError("El RUT del apoderado debe ser de 7 u 8 dígitos (sin DV).");
-
       return false;
     }
 
     if (!String(formData.nombre_apoderado ?? "").trim()) {
       setError("Debes ingresar el nombre del apoderado.");
-
       return false;
     }
 
@@ -1476,7 +1122,6 @@ export default function FormJugador() {
 
       if (!valid) {
         setError("Teléfono del apoderado inválido: usa +569... o 9–11 dígitos.");
-
         return false;
       }
     }
@@ -1487,23 +1132,44 @@ export default function FormJugador() {
   const validarFinanzas = () => {
     setError("");
 
+    if (!academiaInfo?.id) {
+      setError("No fue posible cargar los antecedentes institucionales de la academia.");
+      return false;
+    }
+
+    const requiredAcademia = [
+      ["nombre", academiaInfo.nombre],
+      ["RUT", academiaInfo.rut_academia],
+      ["deporte", academiaInfo.deporte_nombre],
+      ["dirección", academiaInfo.direccion],
+      ["comuna", academiaInfo.comuna_nombre],
+      ["ciudad", academiaInfo.ciudad_nombre],
+      ["región", academiaInfo.region_nombre],
+      ["correo", academiaInfo.email],
+    ];
+
+    const missingAcademia = requiredAcademia.find(([, value]) => !String(value ?? "").trim());
+
+    if (missingAcademia) {
+      setError(`Falta completar ${missingAcademia[0]} de la academia antes de generar el contrato.`);
+      return false;
+    }
+
+    if (tiposPago.length === 0) {
+      setError("La academia no posee tipos de pago activos con tarifa configurada.");
+      return false;
+    }
+
     /*
-     * Staff no modifica beneficios.
+     * Staff trabaja con tarifa base en modo lectura.
      */
     if (rolActual === 2) {
       return true;
     }
 
-    if (tiposPago.length === 0) {
-      setError("La academia no posee tipos de pago activos con tarifa configurada.");
-
-      return false;
-    }
-
     for (const tipo of tiposPago) {
       if (tipo.monto == null || !Number.isFinite(Number(tipo.monto))) {
         setError(`El concepto "${tipo.nombre}" no posee una tarifa válida.`);
-
         return false;
       }
 
@@ -1511,15 +1177,13 @@ export default function FormJugador() {
 
       if (!planId) {
         setError(`Debes seleccionar un beneficio para "${tipo.nombre}".`);
-
         return false;
       }
 
       const available = getPlanesParaTipoPago(tipo.id).some((plan) => Number(plan.id) === Number(planId));
 
       if (!available) {
-        setError(`El beneficio seleccionado para "${tipo.nombre}" no está habilitado para este concepto.`);
-
+        setError(`El beneficio seleccionado para "${tipo.nombre}" no está disponible.`);
         return false;
       }
     }
@@ -1527,15 +1191,9 @@ export default function FormJugador() {
     return true;
   };
 
-  /* =======================================================
-     NAVEGACIÓN
-  ======================================================= */
-
   const goTo = (next) => {
     setPaso(next);
-
     setError("");
-
     scrollTop();
   };
 
@@ -1553,23 +1211,121 @@ export default function FormJugador() {
 
   const siguienteApoderado = () => {
     if (validarApoderado()) {
-      if (rolActual === 2) {
-        /*
-         * Staff conserva capacidad de alta,
-         * sin administración financiera.
-         */
-        goTo(PASO_FINANZAS);
-
-        return;
-      }
-
       goTo(PASO_FINANZAS);
     }
   };
 
-  /* =======================================================
-     CONTRATO
-  ======================================================= */
+  const buildContratoContext = useCallback(() => {
+    if (!academiaInfo?.id) {
+      throw new Error("No fue posible obtener los antecedentes institucionales de la academia.");
+    }
+
+    const rutApoderado = String(formData.rut_apoderado ?? "").replace(/\D/g, "");
+
+    const rutJugador = String(formData.rut_jugador ?? "").replace(/\D/g, "");
+
+    if (!/^\d{7,8}$/.test(rutApoderado) || !/^\d{7,8}$/.test(rutJugador)) {
+      throw new Error("Los RUT del jugador y apoderado deben contener 7 u 8 dígitos sin DV.");
+    }
+
+    const comunaJugador = comunas.find((comuna) => String(comuna.id) === String(formData.comuna_id))?.nombre ?? "";
+
+    const categoriaJugador =
+      categorias.find((categoria) => String(categoria.id) === String(formData.categoria_id))?.nombre ?? "";
+
+    const sucursalesSeleccionadas = sucursales.filter((sucursal) =>
+      (Array.isArray(formData.sucursal_ids) ? formData.sucursal_ids : []).some(
+        (id) => String(id) === String(sucursal.id)
+      )
+    );
+
+    const conceptos = tiposPago.map((tipo) => {
+      const planId = rolActual === 2 ? null : beneficiosPorTipo[tipo.id]?.plan_id;
+
+      const plan = rolActual === 2 ? null : getPlan(planId);
+
+      const montoBase = roundMoney(tipo.monto);
+
+      const montoFinal = rolActual === 2 ? montoBase : roundMoney(calcularMontoFinal(montoBase, planId));
+
+      const descuento = roundMoney(Math.max(0, montoBase - montoFinal));
+
+      return {
+        tipo_pago_id: Number(tipo.id),
+        tipo_pago_nombre: String(tipo.nombre ?? "").trim() || `Concepto #${tipo.id}`,
+        tarifa_id: tipo.tarifa_id == null ? null : Number(tipo.tarifa_id),
+        monto_base: montoBase,
+        plan_id: plan ? Number(plan.id) : null,
+        plan_nombre: plan?.nombre ? String(plan.nombre).trim() : "Sin beneficio",
+        monto_descuento: descuento,
+        monto_final: montoFinal,
+      };
+    });
+
+    const contratoTotalBase = roundMoney(conceptos.reduce((total, item) => total + item.monto_base, 0));
+
+    const contratoTotalFinal = roundMoney(conceptos.reduce((total, item) => total + item.monto_final, 0));
+
+    const contratoTotalDescuento = roundMoney(Math.max(0, contratoTotalBase - contratoTotalFinal));
+
+    const detalleTarifas = conceptos
+      .map(
+        (item) =>
+          `• ${item.tipo_pago_nombre}: tarifa base ${formatMoney(
+            item.monto_base
+          )} · beneficio ${item.plan_nombre} · total ${formatMoney(item.monto_final)}`
+      )
+      .join("\n");
+
+    const detalleBeneficios = conceptos.map((item) => `• ${item.tipo_pago_nombre}: ${item.plan_nombre}`).join("\n");
+
+    const detallePlan = conceptos
+      .map((item) => `• ${item.tipo_pago_nombre}: ${item.plan_nombre} — ${formatMoney(item.monto_final)}`)
+      .join("\n");
+
+    const detalleSucursales = sucursalesSeleccionadas.map((sucursal) => `• ${sucursal.nombre}`).join("\n");
+
+    return {
+      ciudad_contrato: academiaInfo.ciudad_nombre,
+      fecha_contrato: fechaEsLarga(new Date()),
+      nombre_academia: academiaInfo.nombre,
+      rut_academia: formatAcademiaRut(academiaInfo.rut_academia),
+      deporte: academiaInfo.deporte_nombre,
+      direccion_academia: academiaInfo.direccion,
+      comuna_academia: academiaInfo.comuna_nombre,
+      ciudad_academia: academiaInfo.ciudad_nombre,
+      region_academia: academiaInfo.region_nombre,
+      email_academia: academiaInfo.email,
+
+      nombre_apoderado: String(formData.nombre_apoderado).trim(),
+      rut_apoderado: formatRutWithDV(rutApoderado),
+
+      nombre_jugador: String(formData.nombre_jugador).trim(),
+      rut_jugador: formatRutWithDV(rutJugador),
+      fecha_nacimiento: fechaSQLALarga(formData.fecha_nacimiento),
+      direccion_jugador: String(formData.direccion).trim(),
+      comuna_jugador: comunaJugador,
+      categoria_jugador: categoriaJugador,
+
+      detalle_tarifas: detalleTarifas || "Sin conceptos tarifarios configurados.",
+      total_base: formatMoney(contratoTotalBase),
+      total_descuento: formatMoney(contratoTotalDescuento),
+      total_final: formatMoney(contratoTotalFinal),
+      detalle_beneficios: detalleBeneficios || "Sin beneficios aplicados.",
+      detalle_plan: detallePlan || "Sin modalidad económica adicional.",
+      detalle_sucursales: detalleSucursales || "Sin sucursal informada.",
+    };
+  }, [
+    academiaInfo,
+    formData,
+    comunas,
+    categorias,
+    sucursales,
+    tiposPago,
+    beneficiosPorTipo,
+    planesCatalogo,
+    rolActual,
+  ]);
 
   const generarContratoBase64 = useCallback(async () => {
     const required = ["nombre_apoderado", "rut_apoderado", "nombre_jugador", "rut_jugador"];
@@ -1580,45 +1336,19 @@ export default function FormJugador() {
       }
     }
 
-    const rutApoderado = String(formData.rut_apoderado).replace(/\D/g, "");
-
-    const rutJugador = String(formData.rut_jugador).replace(/\D/g, "");
-
-    if (!/^\d{7,8}$/.test(rutApoderado)) {
-      throw new Error("El RUT del apoderado debe ser de 7 u 8 dígitos (sin DV).");
-    }
-
-    if (!/^\d{7,8}$/.test(rutJugador)) {
-      throw new Error("El RUT del jugador debe ser de 7 u 8 dígitos (sin DV).");
-    }
-
-    const comunaNombre = comunas.find((comuna) => String(comuna.id) === String(formData.comuna_id))?.nombre ?? "";
-
-    const data = {
-      fecha_contrato: fechaEsLarga(new Date()),
-
-      nombre_apoderado: String(formData.nombre_apoderado).trim(),
-
-      rut_apoderado: formatRutWithDV(rutApoderado),
-
-      nombre_jugador: String(formData.nombre_jugador).trim(),
-
-      rut_jugador: formatRutWithDV(rutJugador),
-
-      fecha_nacimiento: formData.fecha_nacimiento ? String(formData.fecha_nacimiento) : "",
-
-      dirección: formData.direccion ? String(formData.direccion).trim() : "",
-
-      comuna_id: comunaNombre,
-    };
+    const data = buildContratoContext();
 
     const textoFinal = fillContratoTemplate(CONTRATO_TEMPLATE, data);
 
+    const unresolved = textoFinal.match(/<<\s*[^>]+\s*>>/g);
+
+    if (unresolved?.length) {
+      throw new Error(`El contrato contiene variables sin resolver: ${unresolved.join(", ")}`);
+    }
+
     const blob = await buildContratoPdfBlob({
-      titulo: "CONTRATO DE PRESTACIÓN DE SERVICIOS",
-
+      titulo: "CONTRATO DE PRESTACIÓN DE SERVICIOS DE ENSEÑANZA DEPORTIVA",
       subtitulo: `${data.nombre_jugador} • ${data.rut_jugador}`,
-
       texto: textoFinal,
     });
 
@@ -1629,20 +1359,13 @@ export default function FormJugador() {
     }
 
     return base64;
-  }, [formData, comunas]);
-
-  /* =======================================================
-     GUARDAR CONFIGURACIÓN FINANCIERA
-  ======================================================= */
+  }, [formData, buildContratoContext]);
 
   const guardarConfiguracionFinanciera = async (jugadorId, headers) => {
-    if (rolActual === 2) {
-      return;
-    }
+    if (rolActual === 2) return;
 
     const items = tiposPago.map((tipo) => ({
       tipo_pago_id: Number(tipo.id),
-
       plan_id: Number(beneficiosPorTipo[tipo.id]?.plan_id),
     }));
 
@@ -1650,146 +1373,92 @@ export default function FormJugador() {
       FINANZAS_BULK_ENDPOINT,
       {
         jugador_id: Number(jugadorId),
-
         fecha_inicio: todaySQL(),
-
         fecha_fin: null,
-
         estado_id: ESTADO_ACTIVO,
-
         items,
       },
       headers
     );
   };
 
-  /* =======================================================
-     RESET
-  ======================================================= */
-
   const resetForm = () => {
     setFormData({
       nombre_jugador: "",
-
       rut_jugador: "",
-
       fecha_nacimiento: "",
-
       edad: "",
-
       telefono: "",
-
       email: "",
-
       direccion: "",
-
       comuna_id: "",
-
       posicion_id: "",
-
       categoria_id: "",
-
       estado_id: "",
-
       talla_polera: "",
-
       talla_short: "",
-
       establec_educ_id: "",
-
       prevision_medica_id: "",
-
       nombre_apoderado: "",
-
       rut_apoderado: "",
-
       telefono_apoderado: "",
-
       peso: "",
-
       estatura: "",
-
       observaciones: "",
-
       sucursal_ids: [],
     });
 
-    const sinBeneficio = planesAcademia.find((plan) => String(plan.nombre).trim().toUpperCase() === "SIN BENEFICIO");
+    const sinBeneficio = planesCatalogo.find((plan) => String(plan.nombre).trim().toUpperCase() === "SIN BENEFICIO");
 
     const defaults = {};
 
     for (const tipo of tiposPago) {
       defaults[tipo.id] = {
-        plan_id: sinBeneficio ? String(sinBeneficio.plan_id) : "",
+        plan_id: sinBeneficio ? String(sinBeneficio.id) : "",
       };
     }
 
     setBeneficiosPorTipo(defaults);
-
     setApoderadoEncontrado(false);
-
     setApoderadoLookupMsg("");
-
     setBuscandoApoderado(false);
-
     setPaso(PASO_ANTECEDENTES);
   };
-
-  /* =======================================================
-     SUBMIT
-  ======================================================= */
 
   const enviarJugador = async (event) => {
     event.preventDefault();
 
     setMensaje("");
-
     setError("");
 
-    if (paso !== PASO_FINANZAS) {
-      return;
-    }
+    if (paso !== PASO_FINANZAS) return;
 
     if (!validarAntecedentes()) {
       goTo(PASO_ANTECEDENTES);
-
       return;
     }
 
     if (!validarDeportivo()) {
       goTo(PASO_DEPORTIVO);
-
       return;
     }
 
     if (!validarApoderado()) {
       goTo(PASO_APODERADO);
-
       return;
     }
 
-    if (!validarFinanzas()) {
-      return;
-    }
+    if (!validarFinanzas()) return;
 
     if (rolActual === 3 && !getAcademiaIdFromStorage()) {
       setError("⚠️ Superadmin: selecciona una academia antes de guardar.");
-
       return;
     }
 
     try {
       setIsSubmitting(true);
 
-      /* -----------------------------------------------
-           1. CONTRATO
-        ----------------------------------------------- */
-
       const contratoBase64 = await generarContratoBase64();
-
-      /* -----------------------------------------------
-           2. PAYLOAD JUGADOR
-        ----------------------------------------------- */
 
       const cleaned = trimStrings(formData);
 
@@ -1803,10 +1472,6 @@ export default function FormJugador() {
 
       const payload = emptyToUndef({
         ...cleaned,
-
-        /*
-         * Estado UI solamente.
-         */
         sucursal_ids: undefined,
 
         rut_jugador: cleaned.rut_jugador ? Number(cleaned.rut_jugador) : undefined,
@@ -1825,14 +1490,7 @@ export default function FormJugador() {
 
         prevision_medica_id: cleaned.prevision_medica_id ? Number(cleaned.prevision_medica_id) : undefined,
 
-        /*
-         * Legacy.
-         */
         sucursal_id: sucursalPrincipal,
-
-        /*
-         * N:M.
-         */
         sucursales: sucursalIds,
 
         direccion: cleaned.direccion ? String(cleaned.direccion) : undefined,
@@ -1846,10 +1504,6 @@ export default function FormJugador() {
 
       const headers = buildHeaders(rolActual);
 
-      /* -----------------------------------------------
-           3. CREAR JUGADOR
-        ----------------------------------------------- */
-
       const response = await postWithFallback("/jugadores", payload, headers);
 
       const responseBody = response?.data ?? {};
@@ -1860,15 +1514,7 @@ export default function FormJugador() {
         throw new Error("El jugador fue creado, pero el backend no devolvió un ID válido.");
       }
 
-      /* -----------------------------------------------
-           4. CONFIGURACIÓN FINANCIERA
-        ----------------------------------------------- */
-
       await guardarConfiguracionFinanciera(jugadorId, headers);
-
-      /* -----------------------------------------------
-           5. RESPUESTA
-        ----------------------------------------------- */
 
       const nombreOk =
         responseBody?.nombre_jugador ?? responseBody?.item?.nombre_jugador ?? cleaned.nombre_jugador ?? "Jugador";
@@ -1881,16 +1527,12 @@ export default function FormJugador() {
 
       setCreatedInfo({
         nombre: nombreOk,
-
         id: jugadorId,
-
         apoderadoCredencial,
-
-        total: totalFinal,
+        total: rolActual === 2 ? totalBase : totalFinal,
       });
 
       setCreatedOpen(true);
-
       resetForm();
     } catch (err) {
       const status = err?.status ?? err?.response?.status ?? 0;
@@ -1903,11 +1545,9 @@ export default function FormJugador() {
 
       if (status === 401) {
         clearToken();
-
         navigate("/login", {
           replace: true,
         });
-
         return;
       }
 
@@ -1917,7 +1557,6 @@ export default function FormJugador() {
             ? "⚠️ Superadmin: falta x-academia-id o academia no autorizada."
             : "No tienes permisos para registrar este jugador."
         );
-
         return;
       }
 
@@ -1933,10 +1572,6 @@ export default function FormJugador() {
       setIsSubmitting(false);
     }
   };
-
-  /* =======================================================
-     UI
-  ======================================================= */
 
   const ui = useMemo(() => {
     const page =
@@ -1984,35 +1619,21 @@ export default function FormJugador() {
 
     return {
       page,
-
       card,
-
       section,
-
       input,
-
       select: input,
-
       textarea: input + " min-h-28 resize-y",
-
       label,
-
       helper,
-
       bannerErr,
-
       bannerWarn,
-
       btn,
-
       btnSecondary,
-
       btnBg: {
         background: `linear-gradient(135deg, ${PALETTE.copper}, ${PALETTE.terracotta})`,
-
         color: "white",
       },
-
       titleColor: darkMode ? "text-white" : "text-ra-marron",
     };
   }, [darkMode]);
@@ -2021,40 +1642,25 @@ export default function FormJugador() {
     return <IsLoading />;
   }
 
-  /* =======================================================
-     INDICADOR DE PASOS
-  ======================================================= */
-
   const steps = [
     {
       id: PASO_ANTECEDENTES,
-
       label: "Antecedentes",
-
       icon: UserRound,
     },
-
     {
       id: PASO_DEPORTIVO,
-
       label: "Información deportiva",
-
       icon: MapPin,
     },
-
     {
       id: PASO_APODERADO,
-
       label: "Apoderado",
-
       icon: Users,
     },
-
     {
       id: PASO_FINANZAS,
-
       label: "Tarifas y beneficios",
-
       icon: WalletCards,
     },
   ];
@@ -2063,9 +1669,7 @@ export default function FormJugador() {
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-6">
       {steps.map((step) => {
         const Icon = step.icon;
-
         const active = paso === step.id;
-
         const done = paso > step.id;
 
         return (
@@ -2073,7 +1677,6 @@ export default function FormJugador() {
             key={step.id}
             className={[
               "rounded-2xl border p-3 sm:p-4 transition",
-
               active
                 ? darkMode
                   ? "bg-white/15 border-white/25"
@@ -2087,7 +1690,6 @@ export default function FormJugador() {
               <div
                 className={[
                   "w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0",
-
                   active || done
                     ? "text-white"
                     : darkMode
@@ -2119,10 +1721,6 @@ export default function FormJugador() {
     </div>
   );
 
-  /* =======================================================
-     RENDER
-  ======================================================= */
-
   return (
     <div className={ui.page}>
       <div className="w-full max-w-6xl mx-auto mb-4 sm:mb-6 text-center">
@@ -2131,6 +1729,12 @@ export default function FormJugador() {
         <p className={`mt-1 ${ui.helper}`}>
           Registra sus antecedentes, información deportiva, apoderado y configuración financiera inicial.
         </p>
+
+        {academiaInfo?.id && (
+          <p className={`mt-2 text-xs font-bold ${darkMode ? "text-white/70" : "text-ra-marron/70"}`}>
+            {academiaInfo.nombre} · {academiaInfo.deporte_nombre}
+          </p>
+        )}
       </div>
 
       <div className={`${ui.card} p-4 sm:p-6 lg:p-8`}>
@@ -2143,10 +1747,6 @@ export default function FormJugador() {
         {error && <div className={ui.bannerErr}>{error}</div>}
 
         <form onSubmit={enviarJugador}>
-          {/* =================================================
-              PASO 1 - ANTECEDENTES
-          ================================================= */}
-
           {paso === PASO_ANTECEDENTES && (
             <div className="space-y-5">
               <section className={ui.section}>
@@ -2182,13 +1782,14 @@ export default function FormJugador() {
                       onChange={handleChange}
                       placeholder="Sin puntos, guion ni DV"
                       inputMode="numeric"
+                      maxLength={8}
                       className={ui.input}
                       required
                     />
                   </div>
 
                   <div>
-                    <label className={ui.label}>Fecha de nacimiento</label>
+                    <label className={ui.label}>Fecha de nacimiento *</label>
 
                     <input
                       name="fecha_nacimiento"
@@ -2196,6 +1797,7 @@ export default function FormJugador() {
                       value={formData.fecha_nacimiento}
                       onChange={handleChange}
                       className={ui.input}
+                      required
                     />
                   </div>
 
@@ -2236,15 +1838,27 @@ export default function FormJugador() {
                   </div>
 
                   <div>
-                    <label className={ui.label}>Dirección</label>
+                    <label className={ui.label}>Dirección *</label>
 
-                    <input name="direccion" value={formData.direccion} onChange={handleChange} className={ui.input} />
+                    <input
+                      name="direccion"
+                      value={formData.direccion}
+                      onChange={handleChange}
+                      className={ui.input}
+                      required
+                    />
                   </div>
 
                   <div>
-                    <label className={ui.label}>Comuna</label>
+                    <label className={ui.label}>Comuna *</label>
 
-                    <select name="comuna_id" value={formData.comuna_id} onChange={handleChange} className={ui.select}>
+                    <select
+                      name="comuna_id"
+                      value={formData.comuna_id}
+                      onChange={handleChange}
+                      className={ui.select}
+                      required
+                    >
                       <option value="">Selecciona comuna</option>
 
                       {comunas.map((item) => (
@@ -2265,10 +1879,6 @@ export default function FormJugador() {
               </div>
             </div>
           )}
-
-          {/* =================================================
-              PASO 2 - DEPORTIVO
-          ================================================= */}
 
           {paso === PASO_DEPORTIVO && (
             <div className="space-y-5">
@@ -2361,7 +1971,6 @@ export default function FormJugador() {
                           onClick={() => toggleSucursal(item.id)}
                           className={[
                             "rounded-xl border p-3 text-left flex items-center gap-3 transition",
-
                             selected
                               ? darkMode
                                 ? "bg-white/15 border-white/30"
@@ -2494,10 +2103,6 @@ export default function FormJugador() {
             </div>
           )}
 
-          {/* =================================================
-              PASO 3 - APODERADO
-          ================================================= */}
-
           {paso === PASO_APODERADO && (
             <div className="space-y-5">
               <section className={ui.section}>
@@ -2586,10 +2191,6 @@ export default function FormJugador() {
             </div>
           )}
 
-          {/* =================================================
-              PASO 4 - FINANZAS
-          ================================================= */}
-
           {paso === PASO_FINANZAS && (
             <div className="space-y-5">
               <section className={ui.section}>
@@ -2600,25 +2201,22 @@ export default function FormJugador() {
                     <h3 className="font-extrabold text-lg">Tarifas y beneficios</h3>
 
                     <p className={ui.helper}>
-                      Define cuánto pagará este jugador por cada concepto habilitado en la academia.
+                      Valores que quedarán incorporados al contrato al momento de la inscripción.
                     </p>
                   </div>
                 </div>
 
-                {rolActual === 2 ? (
+                {tiposPago.length === 0 ? (
                   <div className={ui.bannerWarn}>
-                    El rol Staff puede registrar jugadores, pero no modificar su configuración financiera.
+                    Esta academia no posee tipos de pago activos con tarifa configurada.
                   </div>
-                ) : tiposPago.length === 0 ? (
-                  <div className={ui.bannerWarn}>Esta academia no posee tipos de pago activos disponibles.</div>
                 ) : (
                   <div className="space-y-4">
                     {tiposPago.map((tipo) => {
                       const planId = beneficiosPorTipo[tipo.id]?.plan_id ?? "";
 
-                      const planes = getPlanesParaTipoPago(tipo.id);
-
-                      const montoFinal = calcularMontoFinal(tipo.monto, planId);
+                      const montoFinal =
+                        rolActual === 2 ? Number(tipo.monto ?? 0) : calcularMontoFinal(tipo.monto, planId);
 
                       const descuento = Math.max(0, Number(tipo.monto ?? 0) - montoFinal);
 
@@ -2627,7 +2225,6 @@ export default function FormJugador() {
                           key={tipo.id}
                           className={[
                             "rounded-2xl border p-4 sm:p-5",
-
                             darkMode ? "bg-white/[0.04] border-white/10" : "bg-white/55 border-ra-marron/10",
                           ].join(" ")}
                         >
@@ -2647,29 +2244,40 @@ export default function FormJugador() {
                             <div>
                               <label className={ui.label}>Beneficio</label>
 
-                              <select
-                                value={planId}
-                                onChange={(event) => seleccionarBeneficio(tipo.id, event.target.value)}
-                                className={ui.select}
-                              >
-                                <option value="">Selecciona beneficio</option>
+                              {rolActual === 2 ? (
+                                <div
+                                  className={`rounded-xl px-3.5 py-2.5 border ${
+                                    darkMode
+                                      ? "bg-white/5 border-white/10 text-white/70"
+                                      : "bg-white/60 border-ra-marron/10 text-ra-marron/70"
+                                  }`}
+                                >
+                                  Sin beneficio modificable
+                                </div>
+                              ) : (
+                                <select
+                                  value={planId}
+                                  onChange={(event) => seleccionarBeneficio(tipo.id, event.target.value)}
+                                  className={ui.select}
+                                >
+                                  <option value="">Selecciona beneficio</option>
 
-                                {planes.map((plan) => (
-                                  <option key={plan.id} value={plan.id}>
-                                    {plan.nombre}
-                                  </option>
-                                ))}
-                              </select>
+                                  {getPlanesParaTipoPago(tipo.id).map((plan) => (
+                                    <option key={plan.id} value={plan.id}>
+                                      {plan.nombre}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
                             </div>
 
                             <div
                               className={[
                                 "rounded-xl border px-4 py-3",
-
                                 darkMode ? "border-white/10 bg-white/[0.05]" : "border-ra-marron/10 bg-white/70",
                               ].join(" ")}
                             >
-                              <div className={ui.helper}>Monto final</div>
+                              <div className={ui.helper}>Monto contractual</div>
 
                               <div className="font-extrabold text-2xl">{formatMoney(montoFinal)}</div>
 
@@ -2687,40 +2295,41 @@ export default function FormJugador() {
                 )}
               </section>
 
-              {rolActual !== 2 && (
-                <section className={ui.section}>
-                  <div className="flex items-center gap-3 mb-4">
-                    <ClipboardList size={22} />
+              <section className={ui.section}>
+                <div className="flex items-center gap-3 mb-4">
+                  <ClipboardList size={22} />
 
-                    <h3 className="font-extrabold text-lg">Resumen financiero</h3>
+                  <h3 className="font-extrabold text-lg">Resumen financiero</h3>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="rounded-xl border p-4">
+                    <div className={ui.helper}>Total sin beneficios</div>
+
+                    <div className="font-extrabold text-xl">{formatMoney(totalBase)}</div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="rounded-xl border p-4">
-                      <div className={ui.helper}>Total sin beneficios</div>
+                  <div className="rounded-xl border p-4">
+                    <div className={ui.helper}>Beneficios aplicados</div>
 
-                      <div className="font-extrabold text-xl">{formatMoney(totalBase)}</div>
-                    </div>
-
-                    <div className="rounded-xl border p-4">
-                      <div className={ui.helper}>Beneficios aplicados</div>
-
-                      <div className="font-extrabold text-xl">{formatMoney(totalDescuento)}</div>
-                    </div>
-
-                    <div className="rounded-xl border p-4">
-                      <div className={ui.helper}>Total configurado</div>
-
-                      <div className="font-extrabold text-2xl">{formatMoney(totalFinal)}</div>
+                    <div className="font-extrabold text-xl">
+                      {rolActual === 2 ? formatMoney(0) : formatMoney(totalDescuento)}
                     </div>
                   </div>
 
-                  <p className={`${ui.helper} mt-3`}>
-                    Este total representa la suma de todos los conceptos configurados. Los cobros reales se registrarán
-                    posteriormente en el módulo de pagos.
-                  </p>
-                </section>
-              )}
+                  <div className="rounded-xl border p-4">
+                    <div className={ui.helper}>Total contractual</div>
+
+                    <div className="font-extrabold text-2xl">
+                      {formatMoney(rolActual === 2 ? totalBase : totalFinal)}
+                    </div>
+                  </div>
+                </div>
+
+                <p className={`${ui.helper} mt-3`}>
+                  Estos valores quedarán incorporados al contrato generado para esta inscripción.
+                </p>
+              </section>
 
               <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
                 <button
@@ -2735,7 +2344,7 @@ export default function FormJugador() {
 
                 <button
                   type="submit"
-                  disabled={isSubmitting || (rolActual === 3 && !academiaTarget)}
+                  disabled={isSubmitting || !academiaInfo?.id || (rolActual === 3 && !academiaTarget)}
                   className={ui.btn}
                   style={ui.btnBg}
                 >
@@ -2782,11 +2391,9 @@ export default function FormJugador() {
             </div>
           )}
 
-          {rolActual !== 2 && (
-            <div className="mt-2">
-              <b>Configuración financiera:</b> {formatMoney(createdInfo.total)}
-            </div>
-          )}
+          <div className="mt-2">
+            <b>Valor contractual:</b> {formatMoney(createdInfo.total)}
+          </div>
 
           <div className={darkMode ? "mt-2 text-white/80" : "mt-2 text-ra-marron/75"}>
             Contrato generado y almacenado correctamente.

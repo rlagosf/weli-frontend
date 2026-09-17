@@ -9,7 +9,9 @@ import {
   CreditCard,
   Edit3,
   LogOut,
+  Mail,
   MapPin,
+  MapPinned,
   Moon,
   Plus,
   Power,
@@ -26,6 +28,10 @@ import { useTheme } from "../../context/ThemeContext";
 const academiasPath = "/academias";
 const deportesPath = "/deportes";
 const tiposPagoPath = "/tipo-pago/catalogo";
+const regionesPath = "/regiones";
+const ciudadesPath = "/ciudades";
+const comunasPath = "/comunas";
+const ciudadComunaPaths = ["/ciudad-comuna", "/ciudad_comuna"];
 
 const MAX_SUCURSALES = 50;
 const MAX_CATEGORIAS = 50;
@@ -82,6 +88,112 @@ function pickAcademias(payload) {
 
 function pickDeportes(payload) {
   return pickList(payload, ["deportes"]);
+}
+
+function normalizeCatalogItem(item) {
+  const id = Number(item?.id ?? 0);
+  const nombre = normalizeText(item?.nombre ?? "");
+
+  if (!Number.isInteger(id) || id <= 0 || !nombre) return null;
+
+  return {
+    ...item,
+    id,
+    nombre,
+  };
+}
+
+function normalizeRegion(item) {
+  const normalized = normalizeCatalogItem(item);
+  if (!normalized) return null;
+
+  return {
+    ...normalized,
+    estado_id: Number(item?.estado_id ?? 1),
+  };
+}
+
+function normalizeCiudad(item) {
+  const normalized = normalizeCatalogItem(item);
+  if (!normalized) return null;
+
+  const region_id = Number(item?.region_id ?? 0);
+
+  if (!Number.isInteger(region_id) || region_id <= 0) return null;
+
+  return {
+    ...normalized,
+    region_id,
+    estado_id: Number(item?.estado_id ?? 1),
+  };
+}
+
+function normalizeComuna(item) {
+  const normalized = normalizeCatalogItem(item);
+  if (!normalized) return null;
+
+  const region_id = Number(item?.region_id ?? 0);
+
+  if (!Number.isInteger(region_id) || region_id <= 0) return null;
+
+  return {
+    ...normalized,
+    region_id,
+  };
+}
+
+function normalizeCiudadComuna(item) {
+  const id = Number(item?.id ?? item?.ciudad_comuna_id ?? 0);
+  const ciudad_id = Number(item?.ciudad_id ?? 0);
+  const comuna_id = Number(item?.comuna_id ?? 0);
+  const estado_id = Number(item?.estado_id ?? 1);
+
+  if (
+    !Number.isInteger(id) ||
+    id <= 0 ||
+    !Number.isInteger(ciudad_id) ||
+    ciudad_id <= 0 ||
+    !Number.isInteger(comuna_id) ||
+    comuna_id <= 0
+  ) {
+    return null;
+  }
+
+  return {
+    ...item,
+    id,
+    ciudad_id,
+    comuna_id,
+    estado_id,
+  };
+}
+
+async function getListWithFallback(paths, options = {}) {
+  const urls = Array.from(new Set((Array.isArray(paths) ? paths : [paths]).filter(Boolean)));
+  let lastError = null;
+
+  for (const url of urls) {
+    try {
+      const response = await api.get(url, options);
+      return pickList(response?.data ?? response, ["regiones", "ciudades", "comunas", "ciudad_comuna", "relaciones"]);
+    } catch (error) {
+      lastError = error;
+
+      const status = Number(error?.status ?? error?.response?.status ?? 0);
+
+      if (status === 401 || status === 403) {
+        throw error;
+      }
+
+      if (status === 404 || status === 405) {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw lastError ?? new Error("No fue posible cargar el catálogo solicitado.");
 }
 
 const isExpired = (decoded) => {
@@ -177,6 +289,14 @@ function createEmptyForm() {
     nombre: "",
     rut_academia: "",
     deporte_id: "",
+
+    direccion: "",
+    region_id: "",
+    ciudad_id: "",
+    comuna_id: "",
+    ciudad_comuna_id: "",
+    email: "",
+
     estado_id: "1",
 
     sucursales: [],
@@ -241,6 +361,18 @@ function normalizeAcademiaForEdit(item, catalogoTiposPago = []) {
     rut_academia: String(item?.rut_academia ?? ""),
 
     deporte_id: String(item?.deporte_id ?? ""),
+
+    direccion: String(item?.direccion ?? ""),
+
+    region_id: String(item?.region_id ?? ""),
+
+    ciudad_id: String(item?.ciudad_id ?? ""),
+
+    comuna_id: String(item?.comuna_id ?? ""),
+
+    ciudad_comuna_id: String(item?.ciudad_comuna_id ?? ""),
+
+    email: String(item?.email ?? ""),
 
     estado_id: String(item?.estado_id ?? 1),
 
@@ -334,6 +466,12 @@ export default function SuperDashboard() {
 
   const [catalogoTiposPago, setCatalogoTiposPago] = useState([]);
   const [tiposPagoReady, setTiposPagoReady] = useState(false);
+
+  const [regiones, setRegiones] = useState([]);
+  const [ciudades, setCiudades] = useState([]);
+  const [comunas, setComunas] = useState([]);
+  const [ciudadComuna, setCiudadComuna] = useState([]);
+  const [territorioReady, setTerritorioReady] = useState(false);
 
   const [openForm, setOpenForm] = useState(false);
   const [formMode, setFormMode] = useState("create");
@@ -473,6 +611,83 @@ export default function SuperDashboard() {
     [navigate]
   );
 
+  const loadTerritorio = useCallback(
+    async (signal) => {
+      setTerritorioReady(false);
+
+      try {
+        const options = {
+          signal,
+          headers: {
+            "Cache-Control": "no-cache",
+          },
+        };
+
+        const [regionesRaw, ciudadesRaw, comunasRaw, relacionesRaw] = await Promise.all([
+          getListWithFallback([regionesPath], options),
+          getListWithFallback([ciudadesPath], options),
+          getListWithFallback([comunasPath], options),
+          getListWithFallback(ciudadComunaPaths, options),
+        ]);
+
+        const regionesNormalizadas = (regionesRaw ?? [])
+          .map(normalizeRegion)
+          .filter(Boolean)
+          .filter((item) => Number(item.estado_id) === 1)
+          .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+
+        const ciudadesNormalizadas = (ciudadesRaw ?? [])
+          .map(normalizeCiudad)
+          .filter(Boolean)
+          .filter((item) => Number(item.estado_id) === 1)
+          .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+
+        const comunasNormalizadas = (comunasRaw ?? [])
+          .map(normalizeComuna)
+          .filter(Boolean)
+          .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+
+        const relacionesNormalizadas = (relacionesRaw ?? [])
+          .map(normalizeCiudadComuna)
+          .filter(Boolean)
+          .filter((item) => Number(item.estado_id) === 1);
+
+        setRegiones(regionesNormalizadas);
+        setCiudades(ciudadesNormalizadas);
+        setComunas(comunasNormalizadas);
+        setCiudadComuna(relacionesNormalizadas);
+      } catch (err) {
+        if (signal?.aborted) return;
+
+        setRegiones([]);
+        setCiudades([]);
+        setComunas([]);
+        setCiudadComuna([]);
+
+        const status = Number(err?.status ?? err?.response?.status ?? 0);
+
+        if (status === 401) {
+          clearToken();
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        setMsgType("error");
+        setMsg(
+          err?.data?.message ??
+            err?.response?.data?.message ??
+            err?.message ??
+            "No fue posible cargar región, ciudad y comuna."
+        );
+      } finally {
+        if (!signal?.aborted) {
+          setTerritorioReady(true);
+        }
+      }
+    },
+    [navigate]
+  );
+
   const loadDeportes = useCallback(async (signal) => {
     setDeportesReady(false);
 
@@ -505,9 +720,10 @@ export default function SuperDashboard() {
     loadAcademias(ctrl.signal);
     loadDeportes(ctrl.signal);
     loadTiposPago(ctrl.signal);
+    loadTerritorio(ctrl.signal);
 
     return () => ctrl.abort();
-  }, [loadAcademias, loadDeportes, loadTiposPago]);
+  }, [loadAcademias, loadDeportes, loadTiposPago, loadTerritorio]);
 
   /* =========================================================
      FILTRADO
@@ -571,6 +787,15 @@ export default function SuperDashboard() {
       rut_academia: academia?.rut_academia ?? null,
       deporte_id: academia?.deporte_id ?? null,
       deporte_nombre: academia?.deporte_nombre ?? null,
+      direccion: academia?.direccion ?? null,
+      ciudad_comuna_id: academia?.ciudad_comuna_id ?? null,
+      ciudad_id: academia?.ciudad_id ?? null,
+      ciudad_nombre: academia?.ciudad_nombre ?? null,
+      comuna_id: academia?.comuna_id ?? null,
+      comuna_nombre: academia?.comuna_nombre ?? null,
+      region_id: academia?.region_id ?? null,
+      region_nombre: academia?.region_nombre ?? null,
+      email: academia?.email ?? null,
       estado_id: academia?.estado_id ?? null,
       estado_nombre: academia?.estado_nombre ?? null,
       ts: Date.now(),
@@ -881,6 +1106,65 @@ export default function SuperDashboard() {
     }));
   };
 
+  const ciudadesDisponibles = useMemo(() => {
+    const regionId = Number(form.region_id);
+
+    if (!Number.isInteger(regionId) || regionId <= 0) {
+      return [];
+    }
+
+    return ciudades.filter((item) => Number(item.region_id) === regionId);
+  }, [ciudades, form.region_id]);
+
+  const comunasDisponibles = useMemo(() => {
+    const ciudadId = Number(form.ciudad_id);
+
+    if (!Number.isInteger(ciudadId) || ciudadId <= 0) {
+      return [];
+    }
+
+    const map = new Map();
+
+    ciudadComuna
+      .filter((item) => Number(item.ciudad_id) === ciudadId && Number(item.estado_id) === 1)
+      .forEach((item) => {
+        const comunaId = Number(item.comuna_id);
+
+        if (!Number.isInteger(comunaId) || comunaId <= 0) {
+          return;
+        }
+
+        map.set(comunaId, {
+          id: comunaId,
+          nombre: String(item.comuna_nombre ?? "").trim() || `Comuna #${comunaId}`,
+        });
+      });
+
+    return Array.from(map.values()).sort((a, b) =>
+      a.nombre.localeCompare(b.nombre, "es", {
+        sensitivity: "base",
+      })
+    );
+  }, [ciudadComuna, form.ciudad_id]);
+
+  const resolveCiudadComunaId = useCallback(
+    (ciudadIdRaw, comunaIdRaw) => {
+      const ciudadId = Number(ciudadIdRaw);
+      const comunaId = Number(comunaIdRaw);
+
+      if (!Number.isInteger(ciudadId) || ciudadId <= 0 || !Number.isInteger(comunaId) || comunaId <= 0) {
+        return "";
+      }
+
+      const relation = ciudadComuna.find(
+        (item) => Number(item.ciudad_id) === ciudadId && Number(item.comuna_id) === comunaId
+      );
+
+      return relation ? String(relation.id) : "";
+    },
+    [ciudadComuna]
+  );
+
   /* =========================================================
      VALIDACIONES POR PASO
   ========================================================= */
@@ -890,6 +1174,12 @@ export default function SuperDashboard() {
     const rutClean = normalizeRutAcademia(form.rut_academia);
     const rutAcademia = Number(rutClean);
     const deporteId = Number(form.deporte_id);
+    const regionId = Number(form.region_id);
+    const ciudadId = Number(form.ciudad_id);
+    const comunaId = Number(form.comuna_id);
+    const ciudadComunaId = Number(form.ciudad_comuna_id);
+    const direccion = normalizeText(form.direccion);
+    const email = normalizeText(form.email).toLowerCase();
     const estadoId = Number(form.estado_id);
 
     if (nombre.length < 2) {
@@ -906,6 +1196,32 @@ export default function SuperDashboard() {
 
     if (!Number.isInteger(deporteId) || deporteId <= 0) {
       throw new Error("Debes seleccionar un deporte válido.");
+    }
+
+    if (direccion.length < 3 || direccion.length > 180) {
+      throw new Error("Debes ingresar una dirección válida para la academia.");
+    }
+
+    if (!Number.isInteger(regionId) || regionId <= 0) {
+      throw new Error("Debes seleccionar una región.");
+    }
+
+    if (!Number.isInteger(ciudadId) || ciudadId <= 0) {
+      throw new Error("Debes seleccionar una ciudad.");
+    }
+
+    if (!Number.isInteger(comunaId) || comunaId <= 0) {
+      throw new Error("Debes seleccionar una comuna.");
+    }
+
+    const expectedCiudadComunaId = Number(resolveCiudadComunaId(ciudadId, comunaId));
+
+    if (!Number.isInteger(ciudadComunaId) || ciudadComunaId <= 0 || ciudadComunaId !== expectedCiudadComunaId) {
+      throw new Error("La combinación de ciudad y comuna seleccionada no es válida.");
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 160) {
+      throw new Error("Debes ingresar un correo institucional válido.");
     }
 
     if (![1, 2].includes(estadoId)) {
@@ -1107,6 +1423,12 @@ export default function SuperDashboard() {
 
     const deporte_id = Number(form.deporte_id);
 
+    const direccion = normalizeText(form.direccion);
+
+    const ciudad_comuna_id = Number(form.ciudad_comuna_id);
+
+    const email = normalizeText(form.email).toLowerCase();
+
     const estado_id = Number(form.estado_id);
 
     const tipos_pago = form.tipos_pago.map((tipo) => ({
@@ -1122,6 +1444,9 @@ export default function SuperDashboard() {
         nombre,
         rut_academia,
         deporte_id,
+        direccion,
+        ciudad_comuna_id,
+        email,
         estado_id,
 
         sucursales: form.sucursales.map((sucursal) => normalizeText(sucursal.nombre)),
@@ -1136,6 +1461,9 @@ export default function SuperDashboard() {
       nombre,
       rut_academia,
       deporte_id,
+      direccion,
+      ciudad_comuna_id,
+      email,
       estado_id,
 
       sucursales: form.sucursales.map((sucursal) => ({
@@ -1424,62 +1752,79 @@ export default function SuperDashboard() {
     <div className={`${shell} min-h-screen font-sans`}>
       {/* HEADER */}
 
-      <header className="flex items-center justify-between px-4 sm:px-6 pt-6 gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tightish">Panel de Academias</h1>
+      <header className="px-4 sm:px-6 pt-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div
+              className={`text-[10px] sm:text-[11px] font-extrabold uppercase tracking-[0.18em] ${
+                darkMode ? "text-ra-sand/80" : "text-ra-marron/55"
+              }`}
+            >
+              Superadministración WELI
+            </div>
 
-          <p className={`text-xs sm:text-sm mt-1 ${headerSub}`}>Administra las academias registradas en WELI.</p>
-        </div>
+            <h1 className="mt-1 text-2xl sm:text-4xl font-extrabold tracking-tightish">Gestión de Academias</h1>
 
-        <div className="flex items-center gap-1 sm:gap-2">
-          <button
-            type="button"
-            title="Cambiar tema"
-            onClick={toggleTheme}
-            className={`p-2 rounded-xl transition ${buttonIcon}`}
-          >
-            {darkMode ? <Sun size={20} /> : <Moon size={20} />}
-          </button>
+            <p className={`text-xs sm:text-sm mt-1.5 max-w-2xl ${headerSub}`}>
+              Administra la información institucional, configuración operativa y acceso a cada academia registrada.
+            </p>
+          </div>
 
-          <button
-            type="button"
-            title="Crear academia"
-            onClick={openCreateModal}
-            className={`p-2 rounded-xl transition ${buttonIcon}`}
-          >
-            <Plus size={20} />
-          </button>
+          <div className="flex items-center gap-1 sm:gap-2">
+            <button
+              type="button"
+              title="Cambiar tema"
+              onClick={toggleTheme}
+              className={`p-2 rounded-xl transition ${buttonIcon}`}
+            >
+              {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
 
-          <button
-            type="button"
-            title="Cerrar sesión"
-            onClick={handleCerrarSesion}
-            className={`p-2 rounded-xl transition ${buttonIcon}`}
-          >
-            <LogOut size={20} />
-          </button>
+            <button
+              type="button"
+              title="Cerrar sesión"
+              onClick={handleCerrarSesion}
+              className={`p-2 rounded-xl transition ${buttonIcon}`}
+            >
+              <LogOut size={20} />
+            </button>
+          </div>
         </div>
       </header>
 
       {/* ACADEMIAS */}
 
       <main className="px-4 sm:px-6 pb-20">
-        <div className="mt-6 flex flex-col md:flex-row md:items-center gap-3">
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar por nombre, RUT, deporte o estado…"
-            className={`w-full md:w-[560px] rounded-2xl px-5 py-3 border outline-none transition ${searchInput}`}
-          />
+        <div className={`mt-6 rounded-2xl border p-4 sm:p-5 shadow-sm ${card}`}>
+          <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+            <div className="flex-1">
+              <label className={`block text-xs font-extrabold uppercase tracking-[0.08em] ${labelText}`}>
+                Buscar academia
+              </label>
 
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 font-extrabold text-white bg-ra-terracotta hover:opacity-90 transition"
-          >
-            <Plus size={18} />
-            Nueva academia
-          </button>
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Nombre, RUT, deporte o estado…"
+                className={`mt-2 w-full rounded-xl px-4 py-3 border outline-none transition ${searchInput}`}
+              />
+            </div>
+
+            <div className="lg:w-auto">
+              <button
+                type="button"
+                onClick={openCreateModal}
+                className="w-full lg:w-auto inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-extrabold text-white bg-ra-terracotta hover:opacity-90 active:scale-[0.99] transition"
+              >
+                <Plus size={18} />
+                Nueva academia
+              </button>
+            </div>
+          </div>
+
+          <div className={`mt-3 text-xs ${helperText}`}>
+            {filtered.length} academia{filtered.length === 1 ? "" : "s"} visible{filtered.length === 1 ? "" : "s"}.
+          </div>
         </div>
 
         {msg && !openForm && (
@@ -1549,6 +1894,24 @@ export default function SuperDashboard() {
                         <span>•</span>
                         <span>{estado}</span>
                       </div>
+
+                      {(academia?.direccion || academia?.comuna_nombre || academia?.ciudad_nombre) && (
+                        <div className={`mt-3 flex items-start gap-2 text-xs ${headerSub}`}>
+                          <MapPinned size={14} className="mt-0.5 shrink-0" />
+                          <span className="leading-relaxed">
+                            {[academia?.direccion, academia?.comuna_nombre, academia?.ciudad_nombre]
+                              .filter(Boolean)
+                              .join(", ")}
+                          </span>
+                        </div>
+                      )}
+
+                      {academia?.email && (
+                        <div className={`mt-2 flex items-center gap-2 text-xs ${headerSub}`}>
+                          <Mail size={14} className="shrink-0" />
+                          <span className="truncate">{academia.email}</span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="mt-5 grid grid-cols-2 gap-2">
@@ -1634,7 +1997,7 @@ export default function SuperDashboard() {
         subtitle={
           formMode === "edit"
             ? "Actualiza la configuración de la academia paso a paso."
-            : "Completa antecedentes, sucursales, categorías y tipos de pago con sus tarifas iniciales."
+            : "Completa identificación, ubicación, sucursales, categorías y tipos de pago con sus tarifas iniciales."
         }
         darkMode={darkMode}
       >
@@ -1715,7 +2078,7 @@ export default function SuperDashboard() {
                   <h3 className="font-extrabold text-lg">Antecedentes de la academia</h3>
 
                   <p className={`text-xs mt-1 ${helperText}`}>
-                    Información principal de identificación de la academia.
+                    Información institucional, territorial y de contacto que identificará a la academia.
                   </p>
                 </div>
               </div>
@@ -1768,6 +2131,34 @@ export default function SuperDashboard() {
                 </div>
 
                 <div>
+                  <label className={`text-sm font-bold ${labelText}`}>Correo institucional</label>
+
+                  <div className="relative mt-2">
+                    <Mail
+                      size={16}
+                      className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${
+                        darkMode ? "text-white/40" : "text-ra-marron/45"
+                      }`}
+                    />
+
+                    <input
+                      type="email"
+                      value={form.email}
+                      onChange={(e) =>
+                        setForm((current) => ({
+                          ...current,
+                          email: e.target.value,
+                        }))
+                      }
+                      className={`w-full rounded-xl pl-10 pr-4 py-3 border outline-none transition ${modalInput}`}
+                      placeholder="contacto@academia.cl"
+                      maxLength={160}
+                      disabled={saving}
+                    />
+                  </div>
+                </div>
+
+                <div>
                   <label className={`text-sm font-bold ${labelText}`}>Deporte</label>
 
                   <select
@@ -1779,7 +2170,7 @@ export default function SuperDashboard() {
                       }))
                     }
                     className={`mt-2 ${selectDark}`}
-                    disabled={saving || !deportesReady || !tiposPagoReady}
+                    disabled={saving || !deportesReady}
                   >
                     {!deportesReady && <option value="">Cargando deportes…</option>}
 
@@ -1817,9 +2208,158 @@ export default function SuperDashboard() {
                     disabled={saving}
                   >
                     <option value="1">Activado</option>
-
                     <option value="2">Desactivado</option>
                   </select>
+                </div>
+
+                <div className="md:col-span-2 mt-1">
+                  <div
+                    className={`rounded-xl border px-4 py-3 ${
+                      darkMode ? "border-white/10 bg-black/10" : "border-ra-marron/10 bg-white/45"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <MapPinned size={18} className={darkMode ? "text-ra-sand mt-0.5" : "text-ra-terracotta mt-0.5"} />
+
+                      <div>
+                        <div className={`text-sm font-extrabold ${labelText}`}>Ubicación institucional</div>
+
+                        <p className={`mt-1 text-xs leading-relaxed ${helperText}`}>
+                          Selecciona región, ciudad y comuna. WELI guardará la relación territorial válida para
+                          utilizarla posteriormente en la identificación contractual de la academia.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className={`text-sm font-bold ${labelText}`}>Dirección</label>
+
+                  <input
+                    value={form.direccion}
+                    onChange={(e) =>
+                      setForm((current) => ({
+                        ...current,
+                        direccion: e.target.value,
+                      }))
+                    }
+                    className={`mt-2 w-full rounded-xl px-4 py-3 border outline-none transition ${modalInput}`}
+                    placeholder="Ej: Avenida Principal 1234"
+                    maxLength={180}
+                    disabled={saving}
+                  />
+                </div>
+
+                <div>
+                  <label className={`text-sm font-bold ${labelText}`}>Región</label>
+
+                  <select
+                    value={form.region_id}
+                    onChange={(e) => {
+                      const regionId = e.target.value;
+
+                      setForm((current) => ({
+                        ...current,
+                        region_id: regionId,
+                        ciudad_id: "",
+                        comuna_id: "",
+                        ciudad_comuna_id: "",
+                      }));
+                    }}
+                    className={`mt-2 ${selectDark}`}
+                    disabled={saving || !territorioReady}
+                  >
+                    {!territorioReady ? (
+                      <option value="">Cargando regiones…</option>
+                    ) : (
+                      <>
+                        <option value="">Selecciona…</option>
+
+                        {regiones.map((region) => (
+                          <option key={String(region.id)} value={String(region.id)}>
+                            {region.nombre}
+                          </option>
+                        ))}
+                      </>
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className={`text-sm font-bold ${labelText}`}>Ciudad</label>
+
+                  <select
+                    value={form.ciudad_id}
+                    onChange={(e) => {
+                      const ciudadId = e.target.value;
+
+                      setForm((current) => ({
+                        ...current,
+                        ciudad_id: ciudadId,
+                        comuna_id: "",
+                        ciudad_comuna_id: "",
+                      }));
+                    }}
+                    className={`mt-2 ${selectDark}`}
+                    disabled={saving || !territorioReady || !form.region_id}
+                  >
+                    <option value="">{!form.region_id ? "Selecciona primero una región" : "Selecciona…"}</option>
+
+                    {ciudadesDisponibles.map((ciudad) => (
+                      <option key={String(ciudad.id)} value={String(ciudad.id)}>
+                        {ciudad.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className={`text-sm font-bold ${labelText}`}>Comuna</label>
+
+                  <select
+                    value={form.comuna_id}
+                    onChange={(e) => {
+                      const comunaId = e.target.value;
+                      const relationId = resolveCiudadComunaId(form.ciudad_id, comunaId);
+
+                      setForm((current) => ({
+                        ...current,
+                        comuna_id: comunaId,
+                        ciudad_comuna_id: relationId,
+                      }));
+                    }}
+                    className={`mt-2 ${selectDark}`}
+                    disabled={saving || !territorioReady || !form.ciudad_id}
+                  >
+                    <option value="">{!form.ciudad_id ? "Selecciona primero una ciudad" : "Selecciona…"}</option>
+
+                    {comunasDisponibles.map((comuna) => (
+                      <option key={String(comuna.id)} value={String(comuna.id)}>
+                        {comuna.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className={`text-sm font-bold ${labelText}`}>Relación territorial</label>
+
+                  <div
+                    className={`mt-2 min-h-[50px] rounded-xl border px-4 py-3 flex items-center ${
+                      form.ciudad_comuna_id
+                        ? darkMode
+                          ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                        : sectionCard
+                    }`}
+                  >
+                    <span className="text-xs font-bold">
+                      {form.ciudad_comuna_id
+                        ? `Ciudad y comuna validadas · Relación #${form.ciudad_comuna_id}`
+                        : "Pendiente de seleccionar ciudad y comuna."}
+                    </span>
+                  </div>
                 </div>
               </div>
             </section>
@@ -2239,7 +2779,7 @@ export default function SuperDashboard() {
             ) : (
               <button
                 type="submit"
-                disabled={saving || !deportesReady || !tiposPagoReady}
+                disabled={saving || !deportesReady || !tiposPagoReady || !territorioReady}
                 className="inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 font-extrabold text-white bg-ra-terracotta hover:opacity-90 active:scale-[0.98] transition disabled:opacity-50"
               >
                 <Check size={17} />
