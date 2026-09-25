@@ -9,10 +9,15 @@ import { useNavigate } from "react-router-dom";
 import IsLoading from "../../components/isLoading";
 import { useTheme } from "../../context/ThemeContext";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
+
 import api, { ACADEMIA_STORAGE_KEY, clearToken, getToken } from "../../services/api";
 
 /* =========================================================
    Configuración visual
+
+   IMPORTANTE:
+   Esta paleta se mantiene exclusivamente para el PDF
+   documental. La UI utiliza themeTokens.
 ========================================================= */
 
 const PALETTE = {
@@ -28,6 +33,7 @@ const PALETTE = {
 const ACCENT = PALETTE.fucsia;
 
 const PANEL_ROLES = new Set([1, 2, 3]);
+
 const PANEL_TYPES = new Set(["admin", "user", "staff", "superadmin"]);
 
 /* =========================================================
@@ -37,10 +43,21 @@ const PANEL_TYPES = new Set(["admin", "user", "staff", "superadmin"]);
 const toArray = (response) => {
   const data = response?.data ?? response ?? [];
 
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.items)) return data.items;
-  if (Array.isArray(data?.results)) return data.results;
-  if (data?.ok && Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (Array.isArray(data?.items)) {
+    return data.items;
+  }
+
+  if (Array.isArray(data?.results)) {
+    return data.results;
+  }
+
+  if (data?.ok && Array.isArray(data?.data)) {
+    return data.data;
+  }
 
   return [];
 };
@@ -89,7 +106,9 @@ const hexToRgb = (hex) => {
     .replace("#", "")
     .trim();
 
-  if (!/^[0-9a-fA-F]{6}$/.test(clean)) return [0, 0, 0];
+  if (!/^[0-9a-fA-F]{6}$/.test(clean)) {
+    return [0, 0, 0];
+  }
 
   return [parseInt(clean.slice(0, 2), 16), parseInt(clean.slice(2, 4), 16), parseInt(clean.slice(4, 6), 16)];
 };
@@ -109,6 +128,7 @@ const generarUuidDocumento = () => {
     crypto.getRandomValues(bytes);
 
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
+
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
     const hex = Array.from(bytes)
@@ -139,9 +159,12 @@ const decodeToken = (token) => {
 
 const isExpired = (decoded) => {
   const exp = Number(decoded?.exp ?? 0);
+
   const now = Math.floor(Date.now() / 1000);
 
-  if (!Number.isFinite(exp) || exp <= 0) return true;
+  if (!Number.isFinite(exp) || exp <= 0) {
+    return true;
+  }
 
   return now >= exp;
 };
@@ -186,6 +209,7 @@ const getSelectedAcademiaIdForSuperadmin = () => {
     }
 
     const parsed = JSON.parse(raw);
+
     const academiaId = Number(parsed?.id ?? parsed?.academia_id ?? 0);
 
     return Number.isInteger(academiaId) && academiaId > 0 ? academiaId : 0;
@@ -205,7 +229,10 @@ const ensureScopeOrRedirect = (navigate) => {
 
   if (!token) {
     clearToken();
-    navigate("/login", { replace: true });
+
+    navigate("/login", {
+      replace: true,
+    });
 
     return {
       ok: false,
@@ -219,7 +246,10 @@ const ensureScopeOrRedirect = (navigate) => {
 
     if (!decoded || isExpired(decoded)) {
       clearToken();
-      navigate("/login", { replace: true });
+
+      navigate("/login", {
+        replace: true,
+      });
 
       return {
         ok: false,
@@ -229,11 +259,15 @@ const ensureScopeOrRedirect = (navigate) => {
     }
 
     const type = extractType(decoded);
+
     const rol = extractRol(decoded);
 
     if (!PANEL_TYPES.has(type) || !rol) {
       clearToken();
-      navigate("/login", { replace: true });
+
+      navigate("/login", {
+        replace: true,
+      });
 
       return {
         ok: false,
@@ -252,7 +286,10 @@ const ensureScopeOrRedirect = (navigate) => {
 
       if (!academiaId) {
         clearToken();
-        navigate("/login", { replace: true });
+
+        navigate("/login", {
+          replace: true,
+        });
 
         return {
           ok: false,
@@ -276,7 +313,9 @@ const ensureScopeOrRedirect = (navigate) => {
     const academiaId = getSelectedAcademiaIdForSuperadmin();
 
     if (!academiaId) {
-      navigate("/super-dashboard", { replace: true });
+      navigate("/super-dashboard", {
+        replace: true,
+      });
 
       return {
         ok: false,
@@ -292,7 +331,10 @@ const ensureScopeOrRedirect = (navigate) => {
     };
   } catch {
     clearToken();
-    navigate("/login", { replace: true });
+
+    navigate("/login", {
+      replace: true,
+    });
 
     return {
       ok: false,
@@ -315,6 +357,7 @@ const getList = async (basePath, signal) => {
     try {
       const response = await api.get(url, {
         signal,
+
         meta: {
           isPublic: false,
         },
@@ -431,13 +474,16 @@ const postWithFallback = async (path, body) => {
 ========================================================= */
 
 export default function CrearConvocatorias() {
-  const { darkMode } = useTheme();
+  const { darkMode, themeTokens } = useTheme();
+
   const navigate = useNavigate();
 
   useMobileAutoScrollTop();
 
   const [jugadoresRaw, setJugadoresRaw] = useState([]);
+
   const [categorias, setCategorias] = useState([]);
+
   const [eventos, setEventos] = useState([]);
 
   const [convocatorias, setConvocatorias] = useState({});
@@ -447,10 +493,13 @@ export default function CrearConvocatorias() {
   const [mostrarModal, setMostrarModal] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
+
   const [generandoListado, setGenerandoListado] = useState(false);
+
   const [guardandoConvocatoria, setGuardandoConvocatoria] = useState(false);
 
   const [convocatoriaInfo, setConvocatoriaInfo] = useState(null);
+
   const [rolActual, setRolActual] = useState(0);
 
   /*
@@ -466,7 +515,9 @@ export default function CrearConvocatorias() {
   useEffect(() => {
     const guard = ensureScopeOrRedirect(navigate);
 
-    if (!guard.ok) return;
+    if (!guard.ok) {
+      return;
+    }
 
     setRolActual(guard.rol);
   }, [navigate]);
@@ -476,12 +527,15 @@ export default function CrearConvocatorias() {
   ======================================================= */
 
   useEffect(() => {
-    if (!rolActual) return;
+    if (!rolActual) {
+      return;
+    }
 
     const guard = ensureScopeOrRedirect(navigate);
 
     if (!guard.ok) {
       setIsLoading(false);
+
       return;
     }
 
@@ -500,12 +554,15 @@ export default function CrearConvocatorias() {
 
     const cargarDatos = async () => {
       setIsLoading(true);
+
       setError("");
 
       try {
         const [jugadoresData, eventosData, categoriasData, academiaResponse] = await Promise.all([
           getList("/jugadores", abortController.signal),
+
           getList("/eventos", abortController.signal),
+
           getList("/categorias", abortController.signal),
 
           /*
@@ -517,7 +574,10 @@ export default function CrearConvocatorias() {
            */
           api.get(`/academias/${academiaIdActual}`, {
             signal: abortController.signal,
-            meta: { isPublic: false },
+
+            meta: {
+              isPublic: false,
+            },
           }),
         ]);
 
@@ -526,34 +586,48 @@ export default function CrearConvocatorias() {
         jugadoresData.forEach((jugador, index) => {
           initialConvocatorias[jugadorKey(jugador, index)] = {
             fecha_partido: "",
+
             evento_id: "",
+
             asistio: false,
+
             titular: false,
+
             observaciones: "",
           };
         });
 
         setJugadoresRaw(jugadoresData);
+
         setEventos(eventosData);
+
         setCategorias(categoriasData);
 
         const nombreAcademiaActual = String(academiaResponse?.data?.item?.nombre ?? "").trim();
 
         setNombreAcademia(nombreAcademiaActual);
+
         setConvocatorias(initialConvocatorias);
       } catch (requestError) {
-        if (abortController.signal.aborted) return;
+        if (abortController.signal.aborted) {
+          return;
+        }
 
         const status = requestError?.response?.status ?? requestError?.status;
 
         if (status === 401) {
           clearToken();
-          navigate("/login", { replace: true });
+
+          navigate("/login", {
+            replace: true,
+          });
+
           return;
         }
 
         if (status === 403) {
           setError("No tienes permisos para acceder a Convocatorias.");
+
           return;
         }
 
@@ -576,6 +650,7 @@ export default function CrearConvocatorias() {
 
   const catMap = useMemo(
     () => new Map(categorias.map((categoria) => [Number(categoria.id), categoria.nombre])),
+
     [categorias]
   );
 
@@ -598,14 +673,18 @@ export default function CrearConvocatorias() {
           "—";
 
         return {
+          ...jugador,
+
           _key: key,
 
           rut_jugador: Number(jugador?.rut_jugador ?? jugador?.rut ?? jugador?.id ?? 0),
 
           nombre_jugador: nombre,
+
           categoriaNombre,
         };
       }),
+
     [jugadoresRaw, catMap]
   );
 
@@ -613,7 +692,11 @@ export default function CrearConvocatorias() {
      Eventos futuros
   ======================================================= */
 
-  const today = useMemo(() => dateOnly(new Date()), []);
+  const today = useMemo(
+    () => dateOnly(new Date()),
+
+    []
+  );
 
   const eventosFuturos = useMemo(
     () =>
@@ -622,6 +705,7 @@ export default function CrearConvocatorias() {
 
         return date && today && date >= today;
       }),
+
     [eventos, today]
   );
 
@@ -630,6 +714,7 @@ export default function CrearConvocatorias() {
       Array.from(
         new Set(eventosFuturos.map((evento) => String(evento?.fecha_inicio ?? evento?.fecha).slice(0, 10)))
       ).sort(),
+
     [eventosFuturos]
   );
 
@@ -646,11 +731,14 @@ export default function CrearConvocatorias() {
 
         [key]: {
           ...previous[key],
+
           fecha_partido: fecha,
+
           evento_id: evento ? String(evento.id) : previous[key]?.evento_id,
         },
       }));
     },
+
     [eventosFuturos]
   );
 
@@ -676,6 +764,7 @@ export default function CrearConvocatorias() {
         },
       }));
     },
+
     [eventosFuturos]
   );
 
@@ -683,71 +772,89 @@ export default function CrearConvocatorias() {
      Convocado
   ======================================================= */
 
-  const handleAsistencia = useCallback((key, checked) => {
-    setConvocatorias((previous) => ({
-      ...previous,
+  const handleAsistencia = useCallback(
+    (key, checked) => {
+      setConvocatorias((previous) => ({
+        ...previous,
 
-      [key]: {
-        ...previous[key],
-        asistio: checked,
+        [key]: {
+          ...previous[key],
 
-        /*
-         * Un jugador no convocado tampoco
-         * puede permanecer como titular.
-         */
-        titular: checked ? !!previous[key]?.titular : false,
-      },
-    }));
-  }, []);
+          asistio: checked,
+
+          /*
+           * Un jugador no convocado tampoco
+           * puede permanecer como titular.
+           */
+          titular: checked ? !!previous[key]?.titular : false,
+        },
+      }));
+    },
+
+    []
+  );
 
   /* =======================================================
      Titular
   ======================================================= */
 
-  const handleTitular = useCallback((key, checked) => {
-    setConvocatorias((previous) => ({
-      ...previous,
+  const handleTitular = useCallback(
+    (key, checked) => {
+      setConvocatorias((previous) => ({
+        ...previous,
 
-      [key]: {
-        ...previous[key],
+        [key]: {
+          ...previous[key],
 
-        /*
-         * Todo titular debe estar convocado.
-         */
-        asistio: checked ? true : !!previous[key]?.asistio,
+          /*
+           * Todo titular debe estar convocado.
+           */
+          asistio: checked ? true : !!previous[key]?.asistio,
 
-        titular: checked,
-      },
-    }));
-  }, []);
+          titular: checked,
+        },
+      }));
+    },
+
+    []
+  );
 
   /* =======================================================
      Observaciones
   ======================================================= */
 
-  const handleObservaciones = useCallback((key, text) => {
-    setConvocatorias((previous) => ({
-      ...previous,
+  const handleObservaciones = useCallback(
+    (key, text) => {
+      setConvocatorias((previous) => ({
+        ...previous,
 
-      [key]: {
-        ...previous[key],
-        observaciones: text,
-      },
-    }));
-  }, []);
+        [key]: {
+          ...previous[key],
+
+          observaciones: text,
+        },
+      }));
+    },
+
+    []
+  );
 
   /* =======================================================
      Guardar convocatoria
   ======================================================= */
 
   const guardarConvocatorias = useCallback(async () => {
-    if (guardandoConvocatoria) return;
+    if (guardandoConvocatoria) {
+      return;
+    }
 
     setError("");
 
     const guard = ensureScopeOrRedirect(navigate);
 
-    if (!guard.ok) return;
+    if (!guard.ok) {
+      return;
+    }
 
     try {
       setGuardandoConvocatoria(true);
@@ -778,11 +885,13 @@ export default function CrearConvocatorias() {
 
       if (!datosEnviar.length) {
         setError("⚠️ Debe seleccionar al menos un evento.");
+
         return;
       }
 
       if (!datosEnviar.some((item) => item.asistio)) {
         setError("⚠️ Marque al menos un jugador como convocado.");
+
         return;
       }
 
@@ -794,6 +903,7 @@ export default function CrearConvocatorias() {
 
       if (eventosSeleccionados.length !== 1) {
         setError("⚠️ Todos los jugadores de una convocatoria deben pertenecer al mismo evento.");
+
         return;
       }
 
@@ -857,11 +967,15 @@ export default function CrearConvocatorias() {
   ======================================================= */
 
   const generarListado = useCallback(async () => {
-    if (generandoListado) return;
+    if (generandoListado) {
+      return;
+    }
 
     const guard = ensureScopeOrRedirect(navigate);
 
-    if (!guard.ok) return;
+    if (!guard.ok) {
+      return;
+    }
 
     try {
       setGenerandoListado(true);
@@ -915,8 +1029,8 @@ export default function CrearConvocatorias() {
         convocados?.[0]?.fecha_partido ?? eventoSeleccionado?.fecha_inicio ?? eventoSeleccionado?.fecha ?? "";
 
       /* ─────────────────────────────────────────────
-         Identidad documental
-      ───────────────────────────────────────────── */
+             Identidad documental
+          ───────────────────────────────────────────── */
 
       const documentoUuid = generarUuidDocumento();
 
@@ -925,8 +1039,8 @@ export default function CrearConvocatorias() {
       const marcaDocumento = `WELI-DOC:${documentoUuid}|${fechaGeneracion}`;
 
       /* ─────────────────────────────────────────────
-         Colores
-      ───────────────────────────────────────────── */
+             Colores PDF
+          ───────────────────────────────────────────── */
 
       const COLOR_MARRON = hexToRgb(PALETTE.marron);
 
@@ -943,13 +1057,16 @@ export default function CrearConvocatorias() {
       const COLOR_TERRACOTTA = hexToRgb(PALETTE.terracotta);
 
       /* ─────────────────────────────────────────────
-         Documento
-      ───────────────────────────────────────────── */
+             Documento
+          ───────────────────────────────────────────── */
 
       const doc = new jsPDF({
         unit: "mm",
+
         format: [330, 216],
+
         orientation: "landscape",
+
         compress: true,
       });
 
@@ -970,10 +1087,11 @@ export default function CrearConvocatorias() {
       });
 
       /* ─────────────────────────────────────────────
-         Cabecera
-      ───────────────────────────────────────────── */
+             Cabecera
+          ───────────────────────────────────────────── */
 
       doc.setDrawColor(...COLOR_FUCSIA);
+
       doc.setLineWidth(1.5);
 
       doc.line(14, 11, pageWidth - 14, 11);
@@ -1005,18 +1123,21 @@ export default function CrearConvocatorias() {
       });
 
       /* ─────────────────────────────────────────────
-         Información
-      ───────────────────────────────────────────── */
+             Información
+          ───────────────────────────────────────────── */
 
       doc.setFontSize(11);
+
       doc.setTextColor(...COLOR_MARRON);
 
       let infoY = 47;
 
       doc.setFont("times", "bold");
+
       doc.text("Evento:", 18, infoY);
 
       doc.setFont("times", "normal");
+
       doc.text(String(nombreEvento), 39, infoY);
 
       infoY += 6;
@@ -1050,8 +1171,8 @@ export default function CrearConvocatorias() {
       doc.text(String(convocados.length), pageWidth - 34, 47);
 
       /* ─────────────────────────────────────────────
-         Identificación
-      ───────────────────────────────────────────── */
+             Identificación
+          ───────────────────────────────────────────── */
 
       const documentInfoY = infoY + 8;
 
@@ -1077,8 +1198,8 @@ export default function CrearConvocatorias() {
       doc.text(marcaDocumento, 2, 2);
 
       /* ─────────────────────────────────────────────
-         Tabla
-      ───────────────────────────────────────────── */
+             Tabla
+          ───────────────────────────────────────────── */
 
       const startTableY = documentInfoY + 7;
 
@@ -1089,8 +1210,11 @@ export default function CrearConvocatorias() {
 
         body: convocados.map((convocado) => [
           convocado.nombre,
+
           convocado.categoria,
+
           convocado.titular ? "Titular" : "Convocado",
+
           convocado.observaciones || "",
         ]),
 
@@ -1098,22 +1222,35 @@ export default function CrearConvocatorias() {
 
         styles: {
           font: "times",
+
           fontSize: 9.5,
+
           textColor: COLOR_MARRON,
+
           lineColor: COLOR_GOLD,
+
           lineWidth: 0.2,
+
           cellPadding: 3.2,
+
           valign: "middle",
         },
 
         headStyles: {
           font: "times",
+
           fontStyle: "bold",
+
           fontSize: 10,
+
           fillColor: COLOR_MARRON,
+
           textColor: [255, 255, 255],
+
           lineColor: COLOR_GOLD,
+
           lineWidth: 0.3,
+
           halign: "center",
         },
 
@@ -1132,11 +1269,13 @@ export default function CrearConvocatorias() {
 
           1: {
             cellWidth: 55,
+
             halign: "center",
           },
 
           2: {
             cellWidth: 38,
+
             halign: "center",
           },
 
@@ -1147,6 +1286,7 @@ export default function CrearConvocatorias() {
 
         margin: {
           left: 18,
+
           right: 18,
         },
 
@@ -1160,8 +1300,8 @@ export default function CrearConvocatorias() {
       });
 
       /* ─────────────────────────────────────────────
-         Firma
-      ───────────────────────────────────────────── */
+             Firma
+          ───────────────────────────────────────────── */
 
       const finalY = doc.lastAutoTable?.finalY ?? startTableY;
 
@@ -1210,8 +1350,8 @@ export default function CrearConvocatorias() {
       });
 
       /* ─────────────────────────────────────────────
-         Pie
-      ───────────────────────────────────────────── */
+             Pie
+          ───────────────────────────────────────────── */
 
       doc.setFont("times", "italic");
 
@@ -1224,8 +1364,8 @@ export default function CrearConvocatorias() {
       });
 
       /* ─────────────────────────────────────────────
-         PDF → Base64
-      ───────────────────────────────────────────── */
+             PDF → Base64
+          ───────────────────────────────────────────── */
 
       const dataUri = doc.output("datauristring");
 
@@ -1262,8 +1402,8 @@ export default function CrearConvocatorias() {
       }
 
       /* ─────────────────────────────────────────────
-         Histórico
-      ───────────────────────────────────────────── */
+             Histórico
+          ───────────────────────────────────────────── */
 
       /*
        * IMPORTANTE:
@@ -1284,25 +1424,29 @@ export default function CrearConvocatorias() {
       });
 
       /* ─────────────────────────────────────────────
-         Descargar
-      ───────────────────────────────────────────── */
+             Descargar
+          ───────────────────────────────────────────── */
 
       const nombreArchivo = `${documentoUuid}.pdf`;
 
       doc.save(nombreArchivo);
 
       /* ─────────────────────────────────────────────
-         Reset
-      ───────────────────────────────────────────── */
+             Reset
+          ───────────────────────────────────────────── */
 
       const initialConvocatorias = {};
 
       jugadores.forEach((jugador, index) => {
         initialConvocatorias[jugadorKey(jugador, index)] = {
           fecha_partido: "",
+
           evento_id: "",
+
           asistio: false,
+
           titular: false,
+
           observaciones: "",
         };
       });
@@ -1310,6 +1454,7 @@ export default function CrearConvocatorias() {
       setConvocatorias(initialConvocatorias);
 
       setConvocatoriaInfo(null);
+
       setMostrarModal(false);
 
       alert(
@@ -1348,44 +1493,216 @@ export default function CrearConvocatorias() {
   }, [convocatoriaInfo, jugadores, convocatorias, eventos, nombreAcademia, navigate, generandoListado]);
 
   /* =======================================================
-     UI
+     TOKENS DE APARIENCIA
   ======================================================= */
 
-  /*
-   * Las clases ra-* se mantienen temporalmente.
-   *
-   * Son tokens visuales definidos en Tailwind/CSS.
-   * Deben renombrarse coordinadamente cuando hagamos
-   * la purga del tema visual.
-   */
-  const shell = darkMode
-    ? "bg-[#111827] text-white"
-    : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
+  const tokens = useMemo(() => {
+    if (themeTokens) {
+      return themeTokens;
+    }
 
-  const fondoClase = `${shell} min-h-screen px-2 sm:px-4 pt-4 pb-16 font-sans overflow-x-hidden`;
+    if (darkMode) {
+      return {
+        surface: "#1F2937",
 
-  const tarjetaClase =
-    "rounded-2xl p-4 border shadow-lg " +
-    (darkMode ? "bg-white/10 border-white/15" : "bg-white/60 border-ra-marron/15");
+        surfaceSoft: "#172033",
 
-  const tablaCabecera = "text-white " + (darkMode ? "bg-white/10" : "bg-ra-marron/80");
+        surface2: "#263244",
 
-  const filaHover = darkMode ? "hover:bg-white/5" : "hover:bg-white/40";
+        surfaceHover: "#374151",
 
-  const inputClase =
-    "w-full rounded-xl px-3 py-2 border outline-none transition " +
-    (darkMode
-      ? "bg-white/10 border-white/15 text-white placeholder-white/40 focus:border-white/30"
-      : "bg-white/60 border-ra-marron/15 text-ra-marron placeholder-ra-marron/40 focus:border-ra-terracotta");
+        primary: "#FFDDA1",
 
-  const btnPrimary =
-    "text-white px-8 py-2 rounded-xl shadow font-extrabold hover:opacity-90 active:scale-[0.99] transition disabled:opacity-50 disabled:cursor-not-allowed";
+        primaryHover: "#FFE5B8",
 
-  const modalCard =
-    "p-6 rounded-2xl shadow-2xl text-center border w-full max-w-md " +
-    (darkMode ? "bg-[#1f2937] border-white/15 text-white" : "bg-white border-ra-marron/15 text-ra-marron");
+        primaryContrast: "#3F2D18",
 
-  const msgError = darkMode ? "text-red-200" : "text-red-700";
+        text: "#F9FAFB",
+
+        textMuted: "#D1D5DB",
+
+        icon: "#FFDDA1",
+
+        border: "#374151",
+
+        borderStrong: "#4B5563",
+
+        inputBg: "#111827",
+
+        inputText: "#F9FAFB",
+
+        inputBorder: "#4B5563",
+
+        tableHead: "#172033",
+
+        focus: "#FFDDA1",
+
+        overlay: "rgba(0,0,0,.65)",
+      };
+    }
+
+    return {
+      surface: "#FFFFFF",
+
+      surfaceSoft: "#FAF6EE",
+
+      surface2: "#F7EAD4",
+
+      surfaceHover: "#FFF9F2",
+
+      primary: "#AA5013",
+
+      primaryHover: "#994812",
+
+      primaryContrast: "#FFFFFF",
+
+      text: "#3B2A1E",
+
+      textMuted: "#766657",
+
+      icon: "#AA5013",
+
+      border: "#D8C7AE",
+
+      borderStrong: "#BFA684",
+
+      inputBg: "#FFFFFF",
+
+      inputText: "#3B2A1E",
+
+      inputBorder: "#9B7B50",
+
+      tableHead: "#F7EAD4",
+
+      focus: "#AA5013",
+
+      overlay: "rgba(0,0,0,.55)",
+    };
+  }, [themeTokens, darkMode]);
+
+  /* =======================================================
+     UI
+
+     REGLAS:
+     - Dashboard controla el fondo global.
+     - Esta página permanece transparente.
+     - Sólo tarjetas/tablas/controles tienen superficie.
+     - Toda la UI consume themeTokens.
+     - Error y éxito conservan color semántico.
+  ======================================================= */
+
+  const ui = useMemo(() => {
+    const page =
+      "min-h-[calc(100vh-100px)] w-full bg-transparent px-3 sm:px-5 lg:px-7 2xl:px-10 pt-4 pb-16 font-sans overflow-x-hidden";
+
+    const content = "w-full max-w-[1700px] mx-auto";
+
+    const card = "rounded-2xl border p-4 sm:p-5 shadow-[0_14px_42px_rgba(0,0,0,0.12)] transition-colors duration-200";
+
+    const tableHeader = "text-[10px] sm:text-xs";
+
+    const row = "border-t transition-colors duration-200 weli-convocatoria-row";
+
+    const cellBorder = "border";
+
+    const control =
+      "w-full min-h-10 rounded-xl border px-3 py-2 text-[13px] sm:text-[14px] font-medium outline-none transition focus:ring-2";
+
+    const primaryButton =
+      "inline-flex min-h-11 items-center justify-center rounded-xl border px-6 sm:px-8 py-2.5 text-[14px] sm:text-[15px] font-extrabold shadow-sm transition hover:opacity-90 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed";
+
+    const errorBox =
+      "rounded-xl border px-4 py-3 text-[14px] sm:text-[15px] font-semibold text-center " +
+      (darkMode ? "border-red-300/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
+
+    const modalCard =
+      "w-full max-w-md rounded-2xl border p-5 sm:p-6 text-center shadow-2xl transition-colors duration-200";
+
+    return {
+      page,
+      content,
+      card,
+      tableHeader,
+      row,
+      cellBorder,
+      control,
+      primaryButton,
+      errorBox,
+      modalCard,
+
+      pageStyle: {
+        color: tokens.text,
+      },
+
+      titleStyle: {
+        color: tokens.text,
+      },
+
+      subtitleStyle: {
+        color: tokens.textMuted,
+      },
+
+      cardStyle: {
+        backgroundColor: tokens.surface,
+
+        borderColor: tokens.border,
+
+        color: tokens.text,
+      },
+
+      dividerStyle: {
+        borderColor: tokens.border,
+      },
+
+      tableHeaderStyle: {
+        backgroundColor: tokens.tableHead,
+
+        color: tokens.text,
+      },
+
+      cellStyle: {
+        borderColor: tokens.border,
+      },
+
+      textStyle: {
+        color: tokens.text,
+      },
+
+      mutedTextStyle: {
+        color: tokens.textMuted,
+      },
+
+      controlStyle: {
+        backgroundColor: tokens.inputBg,
+
+        borderColor: tokens.inputBorder,
+
+        color: tokens.inputText,
+
+        "--tw-ring-color": `${tokens.focus}33`,
+      },
+
+      primaryButtonStyle: {
+        backgroundColor: tokens.primary,
+
+        borderColor: tokens.primary,
+
+        color: tokens.primaryContrast,
+      },
+
+      modalCardStyle: {
+        backgroundColor: tokens.surface,
+
+        borderColor: tokens.borderStrong,
+
+        color: tokens.text,
+      },
+
+      overlayStyle: {
+        backgroundColor: tokens.overlay,
+      },
+    };
+  }, [tokens, darkMode]);
 
   /* =======================================================
      Agrupar jugadores
@@ -1422,176 +1739,296 @@ export default function CrearConvocatorias() {
   ======================================================= */
 
   return (
-    <div className={fondoClase}>
-      <h2 className="text-2xl font-extrabold mb-6 text-center tracking-wide">Registro de Convocatorias</h2>
+    <div className={ui.page} style={ui.pageStyle}>
+      <style>
+        {`
+          .weli-convocatoria-row:hover {
+            background-color: ${tokens.surfaceHover};
+          }
 
-      {error && (
-        <p className={`${msgError} mb-4 font-bold text-center`} role="alert">
-          {error}
-        </p>
-      )}
+          .weli-convocatoria-control::placeholder {
+            color: ${tokens.textMuted};
+            opacity: .72;
+          }
+        `}
+      </style>
 
-      <div className="space-y-6">
-        {grupos.map(([categoria, lista]) => (
-          <div key={categoria} className={tarjetaClase}>
-            <h3 className="text-xl font-extrabold mb-3 text-center">Categoría {categoria}</h3>
+      <div className={ui.content}>
+        {/* =================================================
+            HEADER
+        ================================================= */}
 
-            <div className="w-full overflow-x-auto">
-              <table className="w-full text-xs sm:text-sm table-fixed min-w-[1050px]">
-                <thead className={`${tablaCabecera} text-[10px] sm:text-xs`}>
-                  <tr>
-                    <th className="p-2 border border-white/10 text-center w-40">Nombre Jugador</th>
+        <header className="text-center">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight" style={ui.titleStyle}>
+            Registro de Convocatorias
+          </h1>
 
-                    <th className="p-2 border border-white/10 text-center w-36">Categoría</th>
+          <p
+            className="mx-auto mt-2 max-w-3xl text-[14px] sm:text-[15px] lg:text-base leading-relaxed"
+            style={ui.subtitleStyle}
+          >
+            Selecciona el evento, define los jugadores convocados y marca los titulares para generar el listado oficial
+            de la academia.
+          </p>
+        </header>
 
-                    <th className="p-2 border border-white/10 text-center w-36">Fecha Partido</th>
+        {/* =================================================
+            ERROR
+        ================================================= */}
 
-                    <th className="p-2 border border-white/10 text-center w-44">Evento</th>
+        {error && (
+          <div className={`${ui.errorBox} mt-4`} role="alert">
+            {error}
+          </div>
+        )}
 
-                    <th className="p-2 border border-white/10 text-center w-20">Convocado</th>
+        {/* =================================================
+            CATEGORÍAS
+        ================================================= */}
 
-                    <th className="p-2 border border-white/10 text-center w-20">Titular</th>
+        <div className="mt-5 space-y-4">
+          {grupos.map(([categoria, lista]) => (
+            <section key={categoria} className={ui.card} style={ui.cardStyle}>
+              <div className="mb-4 border-b pb-3 text-center" style={ui.dividerStyle}>
+                <h2 className="text-lg sm:text-xl font-extrabold" style={ui.titleStyle}>
+                  Categoría {categoria}
+                </h2>
 
-                    <th className="p-2 border border-white/10 text-center w-64">Observaciones</th>
-                  </tr>
-                </thead>
+                <p className="mt-1 text-[12px] sm:text-[13px]" style={ui.subtitleStyle}>
+                  {lista.length} jugador
+                  {lista.length !== 1 ? "es" : ""} registrado
+                  {lista.length !== 1 ? "s" : ""}
+                </p>
+              </div>
 
-                <tbody>
-                  {lista.map((jugador) => {
-                    const row = convocatorias[jugador._key] || {
-                      fecha_partido: "",
-                      evento_id: "",
-                      asistio: false,
-                      titular: false,
-                      observaciones: "",
-                    };
+              <div className="w-full overflow-x-auto">
+                <table className="w-full min-w-[1050px] table-fixed text-xs sm:text-sm">
+                  <thead className={ui.tableHeader} style={ui.tableHeaderStyle}>
+                    <tr>
+                      <th className={`w-40 p-2 text-center font-extrabold ${ui.cellBorder}`} style={ui.cellStyle}>
+                        Nombre Jugador
+                      </th>
 
-                    return (
-                      <tr key={jugador._key} className={filaHover}>
-                        <td className="p-2 border border-white/10 text-center">{jugador.nombre_jugador}</td>
+                      <th className={`w-36 p-2 text-center font-extrabold ${ui.cellBorder}`} style={ui.cellStyle}>
+                        Categoría
+                      </th>
 
-                        <td className="p-2 border border-white/10 text-center">{jugador.categoriaNombre}</td>
+                      <th className={`w-36 p-2 text-center font-extrabold ${ui.cellBorder}`} style={ui.cellStyle}>
+                        Fecha Partido
+                      </th>
 
-                        <td className="p-2 border border-white/10 text-center">
-                          <select
-                            className={inputClase}
-                            value={row.fecha_partido}
-                            onChange={(event) => handleFechaChange(jugador._key, event.target.value)}
+                      <th className={`w-44 p-2 text-center font-extrabold ${ui.cellBorder}`} style={ui.cellStyle}>
+                        Evento
+                      </th>
+
+                      <th className={`w-20 p-2 text-center font-extrabold ${ui.cellBorder}`} style={ui.cellStyle}>
+                        Convocado
+                      </th>
+
+                      <th className={`w-20 p-2 text-center font-extrabold ${ui.cellBorder}`} style={ui.cellStyle}>
+                        Titular
+                      </th>
+
+                      <th className={`w-64 p-2 text-center font-extrabold ${ui.cellBorder}`} style={ui.cellStyle}>
+                        Observaciones
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {lista.map((jugador) => {
+                      const row = convocatorias[jugador._key] || {
+                        fecha_partido: "",
+
+                        evento_id: "",
+
+                        asistio: false,
+
+                        titular: false,
+
+                        observaciones: "",
+                      };
+
+                      return (
+                        <tr
+                          key={jugador._key}
+                          className={ui.row}
+                          style={{
+                            borderColor: tokens.border,
+
+                            color: tokens.text,
+                          }}
+                        >
+                          <td
+                            className={`p-2 text-center font-semibold ${ui.cellBorder}`}
+                            style={{
+                              ...ui.cellStyle,
+                              ...ui.textStyle,
+                            }}
                           >
-                            <option value="">Seleccionar fecha</option>
+                            {jugador.nombre_jugador}
+                          </td>
 
-                            {fechasDisponibles.map((fecha) => (
-                              <option key={fecha} value={fecha}>
-                                {fecha}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-
-                        <td className="p-2 border border-white/10 text-center">
-                          <select
-                            className={inputClase}
-                            value={row.evento_id}
-                            onChange={(event) => handleEventoChange(jugador._key, event.target.value)}
+                          <td
+                            className={`p-2 text-center ${ui.cellBorder}`}
+                            style={{
+                              ...ui.cellStyle,
+                              ...ui.mutedTextStyle,
+                            }}
                           >
-                            <option value="">Seleccionar evento</option>
+                            {jugador.categoriaNombre}
+                          </td>
 
-                            {eventosFuturos.map((evento) => (
-                              <option key={evento.id} value={evento.id}>
-                                {evento.titulo ?? evento.nombre ?? `Evento #${evento.id}`}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
+                          <td className={`p-2 text-center ${ui.cellBorder}`} style={ui.cellStyle}>
+                            <select
+                              className={ui.control}
+                              style={ui.controlStyle}
+                              value={row.fecha_partido}
+                              onChange={(event) => handleFechaChange(jugador._key, event.target.value)}
+                            >
+                              <option value="">Seleccionar fecha</option>
 
-                        <td className="p-2 border border-white/10 text-center">
-                          <input
-                            type="checkbox"
-                            checked={!!row.asistio}
-                            onChange={(event) => handleAsistencia(jugador._key, event.target.checked)}
-                            className="h-5 w-5 accent-[#aa5013]"
-                            aria-label={`Convocar a ${jugador.nombre_jugador}`}
-                          />
-                        </td>
+                              {fechasDisponibles.map((fecha) => (
+                                <option key={fecha} value={fecha}>
+                                  {fecha}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
 
-                        <td className="p-2 border border-white/10 text-center">
-                          <input
-                            type="checkbox"
-                            checked={!!row.titular}
-                            disabled={!row.asistio}
-                            onChange={(event) => handleTitular(jugador._key, event.target.checked)}
-                            className="h-5 w-5 accent-[#aa5013] disabled:opacity-40"
-                            aria-label={`Marcar titular a ${jugador.nombre_jugador}`}
-                          />
-                        </td>
+                          <td className={`p-2 text-center ${ui.cellBorder}`} style={ui.cellStyle}>
+                            <select
+                              className={ui.control}
+                              style={ui.controlStyle}
+                              value={row.evento_id}
+                              onChange={(event) => handleEventoChange(jugador._key, event.target.value)}
+                            >
+                              <option value="">Seleccionar evento</option>
 
-                        <td className="p-2 border border-white/10 text-center">
-                          <input
-                            type="text"
-                            className={inputClase}
-                            value={row.observaciones}
-                            maxLength={500}
-                            placeholder="Observaciones"
-                            onChange={(event) => handleObservaciones(jugador._key, event.target.value)}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                              {eventosFuturos.map((evento) => (
+                                <option key={evento.id} value={evento.id}>
+                                  {evento.titulo ?? evento.nombre ?? `Evento #${evento.id}`}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+
+                          <td className={`p-2 text-center ${ui.cellBorder}`} style={ui.cellStyle}>
+                            <input
+                              type="checkbox"
+                              checked={!!row.asistio}
+                              onChange={(event) => handleAsistencia(jugador._key, event.target.checked)}
+                              className="h-5 w-5 cursor-pointer"
+                              style={{
+                                accentColor: tokens.primary,
+                              }}
+                              aria-label={`Convocar a ${jugador.nombre_jugador}`}
+                            />
+                          </td>
+
+                          <td className={`p-2 text-center ${ui.cellBorder}`} style={ui.cellStyle}>
+                            <input
+                              type="checkbox"
+                              checked={!!row.titular}
+                              disabled={!row.asistio}
+                              onChange={(event) => handleTitular(jugador._key, event.target.checked)}
+                              className="h-5 w-5 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                              style={{
+                                accentColor: tokens.primary,
+                              }}
+                              aria-label={`Marcar titular a ${jugador.nombre_jugador}`}
+                            />
+                          </td>
+
+                          <td className={`p-2 text-center ${ui.cellBorder}`} style={ui.cellStyle}>
+                            <input
+                              type="text"
+                              className={`${ui.control} weli-convocatoria-control`}
+                              style={ui.controlStyle}
+                              value={row.observaciones}
+                              maxLength={500}
+                              placeholder="Observaciones"
+                              onChange={(event) => handleObservaciones(jugador._key, event.target.value)}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ))}
+        </div>
+
+        {/* =================================================
+            GUARDAR
+        ================================================= */}
+
+        <div className="mt-6 text-center">
+          <button
+            type="button"
+            onClick={guardarConvocatorias}
+            disabled={guardandoConvocatoria}
+            className={ui.primaryButton}
+            style={ui.primaryButtonStyle}
+          >
+            {guardandoConvocatoria ? "Guardando..." : "Guardar"}
+          </button>
+        </div>
+
+        {/* =================================================
+            MODAL
+        ================================================= */}
+
+        {mostrarModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center px-3 backdrop-blur-[2px]"
+            style={ui.overlayStyle}
+          >
+            <div className={ui.modalCard} style={ui.modalCardStyle}>
+              <div
+                className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full ${
+                  darkMode ? "bg-emerald-500/15 text-emerald-200" : "bg-emerald-100 text-emerald-700"
+                }`}
+              >
+                ✓
+              </div>
+
+              <h2 className="text-xl font-extrabold" style={ui.titleStyle}>
+                Convocatoria creada
+              </h2>
+
+              <p className="mt-2 text-sm leading-relaxed" style={ui.subtitleStyle}>
+                La convocatoria fue almacenada correctamente. Presione Aceptar para generar el listado PDF y almacenarlo
+                en el histórico.
+              </p>
+
+              <button
+                type="button"
+                disabled={generandoListado}
+                className={`${ui.primaryButton} mt-5`}
+                style={ui.primaryButtonStyle}
+                onClick={generarListado}
+              >
+                {generandoListado ? "Generando..." : "Aceptar"}
+              </button>
+
+              <button
+                type="button"
+                disabled={generandoListado}
+                className="mx-auto mt-3 block text-sm font-bold underline transition hover:opacity-80 disabled:opacity-40"
+                style={{
+                  color: tokens.textMuted,
+                }}
+                onClick={() => setMostrarModal(false)}
+              >
+                Cerrar
+              </button>
             </div>
           </div>
-        ))}
+        )}
       </div>
-
-      <div className="text-center mt-6">
-        <button
-          type="button"
-          onClick={guardarConvocatorias}
-          disabled={guardandoConvocatoria}
-          className={btnPrimary}
-          style={{
-            backgroundColor: ACCENT,
-          }}
-        >
-          {guardandoConvocatoria ? "Guardando..." : "Guardar"}
-        </button>
-      </div>
-
-      {mostrarModal && (
-        <div className="fixed inset-0 flex justify-center items-center bg-black/60 z-50 px-3">
-          <div className={modalCard}>
-            <h2 className="text-xl font-extrabold mb-3">✅ Convocatoria creada</h2>
-
-            <p className="text-sm opacity-80 mb-5">
-              La convocatoria fue almacenada correctamente. Presione Aceptar para generar el listado PDF y almacenarlo
-              en el histórico.
-            </p>
-
-            <button
-              type="button"
-              disabled={generandoListado}
-              className="text-white px-6 py-2 rounded-xl font-extrabold hover:opacity-90 active:scale-[0.99] transition disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{
-                backgroundColor: ACCENT,
-              }}
-              onClick={generarListado}
-            >
-              {generandoListado ? "Generando..." : "Aceptar"}
-            </button>
-
-            <button
-              type="button"
-              disabled={generandoListado}
-              className="mt-3 block mx-auto hover:opacity-90 underline disabled:opacity-40"
-              onClick={() => setMostrarModal(false)}
-            >
-              Cerrar
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

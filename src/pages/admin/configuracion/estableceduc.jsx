@@ -66,7 +66,8 @@ const getComunaNombre = (item) => String(item?.comuna_nombre ?? item?.comuna?.no
 const getRegionNombre = (item) => String(item?.region_nombre ?? item?.region?.nombre ?? item?.region ?? "").trim();
 
 export default function EstablecimientosEducacionales() {
-  const { darkMode } = useTheme();
+  const { darkMode, themeTokens } = useTheme();
+
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -80,6 +81,7 @@ export default function EstablecimientosEducacionales() {
   // Paginación backend
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(15);
+
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 15,
@@ -209,10 +211,8 @@ export default function EstablecimientosEducacionales() {
 
       navigate(currentPath, {
         replace: true,
-
         state: {
           ...(location.state || {}),
-
           breadcrumb: [
             {
               label: "Configuración",
@@ -283,8 +283,10 @@ export default function EstablecimientosEducacionales() {
        * Mientras ambas no estén seleccionadas, no se consulta el directorio
        * ni se muestran establecimientos.
        */
+
       if (!filtroRegion || !filtroComuna) {
         setEstablecimientos([]);
+
         setPagination({
           page: 1,
           limit,
@@ -293,6 +295,7 @@ export default function EstablecimientosEducacionales() {
           has_previous: false,
           has_next: false,
         });
+
         return;
       }
 
@@ -324,7 +327,9 @@ export default function EstablecimientosEducacionales() {
         setEstablecimientos(items);
 
         const rawPagination = data?.pagination ?? {};
+
         const total = Number(rawPagination?.total ?? items.length ?? 0);
+
         const totalPages = Number(
           rawPagination?.total_pages ?? rawPagination?.totalPages ?? Math.max(1, Math.ceil(total / Math.max(1, limit)))
         );
@@ -358,10 +363,12 @@ export default function EstablecimientosEducacionales() {
    * Se obtiene sin los filtros visuales para que las opciones no dependan
    * solamente de la página actualmente visible.
    */
+
   const fetchCatalogoFiltros = useCallback(
     async ({ signal } = {}) => {
       try {
         const acumulado = [];
+
         let currentPage = 1;
         let totalPages = 1;
 
@@ -371,12 +378,16 @@ export default function EstablecimientosEducacionales() {
             limit: "100",
           });
 
-          const response = await api.get(`/establecimientos-educ?${params.toString()}`, { signal });
+          const response = await api.get(`/establecimientos-educ?${params.toString()}`, {
+            signal,
+          });
+
           const data = response?.data ?? response ?? {};
 
           acumulado.push(...asList(response));
 
           totalPages = Math.max(1, Number(data?.pagination?.total_pages ?? 1));
+
           currentPage += 1;
         } while (currentPage <= totalPages && !signal?.aborted);
 
@@ -424,6 +435,7 @@ export default function EstablecimientosEducacionales() {
     })();
 
     return () => abort.abort();
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rolActual, fetchEstablecimientos]);
 
@@ -432,7 +444,9 @@ export default function EstablecimientosEducacionales() {
 
     const abort = new AbortController();
 
-    fetchCatalogoFiltros({ signal: abort.signal });
+    fetchCatalogoFiltros({
+      signal: abort.signal,
+    });
 
     return () => abort.abort();
   }, [rolActual, fetchCatalogoFiltros]);
@@ -460,10 +474,12 @@ export default function EstablecimientosEducacionales() {
 
     if (estadoGlobal !== ESTADO_ACTIVO) {
       setError("El establecimiento está deshabilitado globalmente y no puede activarse para la academia.");
+
       return;
     }
 
     const estadoActual = getEstadoAcademia(establecimiento);
+
     const nuevoEstado = estadoActual === ESTADO_ACTIVO ? ESTADO_INACTIVO : ESTADO_ACTIVO;
 
     setBusyId(establecimientoId);
@@ -481,7 +497,10 @@ export default function EstablecimientosEducacionales() {
         prev.map((item) =>
           Number(item?.id) === establecimientoId
             ? actualizado
-              ? { ...item, ...actualizado }
+              ? {
+                  ...item,
+                  ...actualizado,
+                }
               : {
                   ...item,
                   estado_academia_id: nuevoEstado,
@@ -519,17 +538,12 @@ export default function EstablecimientosEducacionales() {
       (Array.isArray(establecimientos) ? establecimientos : [])
         .map((item) => ({
           ...item,
-
           id: Number(item?.id ?? 0),
-
           nombre: String(item?.nombre ?? item?.descripcion ?? `Establecimiento #${item?.id ?? ""}`).trim(),
-
           comuna_id: Number(item?.comuna_id ?? 0),
           comuna_nombre: getComunaNombre(item),
-
           region_id: Number(item?.region_id ?? 0),
           region_nombre: getRegionNombre(item),
-
           estado_id: getEstadoGlobal(item),
           estado_global_id: getEstadoGlobal(item),
           estado_academia_id: getEstadoAcademia(item),
@@ -567,15 +581,24 @@ export default function EstablecimientosEducacionales() {
     });
 
     return Array.from(mapa.entries())
-      .map(([id, nombre]) => ({ id, nombre }))
-      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" }));
+      .map(([id, nombre]) => ({
+        id,
+        nombre,
+      }))
+      .sort((a, b) =>
+        a.nombre.localeCompare(b.nombre, "es", {
+          sensitivity: "base",
+        })
+      );
   }, [catalogoFiltrosNormalizado]);
 
   const comunasDisponibles = useMemo(() => {
     const mapa = new Map();
 
     catalogoFiltrosNormalizado.forEach((item) => {
-      if (filtroRegion && String(item.region_id) !== String(filtroRegion)) return;
+      if (filtroRegion && String(item.region_id) !== String(filtroRegion)) {
+        return;
+      }
 
       if (item.comuna_id > 0 && item.comuna_nombre) {
         mapa.set(item.comuna_id, {
@@ -586,7 +609,11 @@ export default function EstablecimientosEducacionales() {
       }
     });
 
-    return Array.from(mapa.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" }));
+    return Array.from(mapa.values()).sort((a, b) =>
+      a.nombre.localeCompare(b.nombre, "es", {
+        sensitivity: "base",
+      })
+    );
   }, [catalogoFiltrosNormalizado, filtroRegion]);
 
   useEffect(() => {
@@ -594,7 +621,9 @@ export default function EstablecimientosEducacionales() {
   }, [filtroEstado, filtroComuna, filtroRegion]);
 
   useEffect(() => {
-    if (!filtroComuna) return;
+    if (!filtroComuna) {
+      return;
+    }
 
     const comunaSigueDisponible = comunasDisponibles.some((comuna) => String(comuna.id) === String(filtroComuna));
 
@@ -623,527 +652,766 @@ export default function EstablecimientosEducacionales() {
   }, [establecimientosNormalizados]);
 
   /* =======================================================
+     TOKENS DE APARIENCIA
+     ThemeContext resuelve la paleta personalizada y Dark Mode.
+  ======================================================= */
+
+  const tokens = useMemo(() => {
+    if (themeTokens) {
+      return themeTokens;
+    }
+
+    if (darkMode) {
+      return {
+        surface: "#1F2937",
+        surfaceSoft: "#172033",
+        surface2: "#263244",
+        surfaceHover: "#374151",
+        primary: "#FFDDA1",
+        primaryContrast: "#3F2D18",
+        text: "#F9FAFB",
+        textMuted: "#D1D5DB",
+        icon: "#FFDDA1",
+        border: "#374151",
+        borderStrong: "#4B5563",
+        inputBg: "#111827",
+        inputText: "#F9FAFB",
+        inputBorder: "#4B5563",
+        tableHead: "#172033",
+        focus: "#FFDDA1",
+      };
+    }
+
+    return {
+      surface: "#FFFFFF",
+      surfaceSoft: "#FAF6EE",
+      surface2: "#F7EAD4",
+      surfaceHover: "#FFF9F2",
+      primary: "#AA5013",
+      primaryContrast: "#FFFFFF",
+      text: "#3B2A1E",
+      textMuted: "#766657",
+      icon: "#AA5013",
+      border: "#D8C7AE",
+      borderStrong: "#BFA684",
+      inputBg: "#FFFFFF",
+      inputText: "#3B2A1E",
+      inputBorder: "#9B7B50",
+      tableHead: "#F7EAD4",
+      focus: "#AA5013",
+    };
+  }, [themeTokens, darkMode]);
+
+  /* =======================================================
      UI
+
+     Dashboard mantiene el fondo global. Esta página permanece
+     transparente y todas sus superficies consumen themeTokens.
   ======================================================= */
 
   const ui = useMemo(() => {
-    const shell = darkMode
-      ? "bg-[#111827] text-white"
-      : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
+    const page = "min-h-[calc(100vh-100px)] w-full bg-transparent px-3 sm:px-5 lg:px-7 2xl:px-10 pt-4 pb-16";
 
-    const titleMain = darkMode ? "text-white" : "text-ra-marron";
+    const content = "w-full max-w-[1700px] mx-auto";
 
-    const subText = darkMode ? "text-white/65" : "text-ra-marron/65";
+    const card = "rounded-2xl border shadow-[0_14px_42px_rgba(0,0,0,0.12)] transition-colors duration-200";
 
-    const card =
-      "rounded-2xl border shadow-[0_14px_42px_rgba(0,0,0,0.10)] " +
-      (darkMode ? "bg-white/[0.07] border-white/10" : "bg-white/65 border-ra-marron/15");
+    const label = "block mb-1.5 text-[13px] sm:text-[14px] font-extrabold";
 
     const control =
-      "w-full h-11 sm:h-12 px-3.5 rounded-xl text-[14px] sm:text-[15px] font-medium outline-none transition " +
-      (darkMode
-        ? "border border-white/15 bg-[#111827] text-white placeholder:text-white/40 focus:border-[#ffdda1] focus:ring-2 focus:ring-[#ffdda1]/15"
-        : "border border-ra-marron/20 bg-white/80 text-ra-marron placeholder:text-ra-marron/45 focus:border-[#aa5013] focus:ring-2 focus:ring-[#aa5013]/10");
+      "w-full h-11 sm:h-12 px-3.5 rounded-xl border text-[14px] sm:text-[15px] font-medium outline-none transition focus:ring-2";
 
     const secondaryButton =
-      "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] font-bold transition disabled:opacity-50 disabled:cursor-not-allowed " +
-      (darkMode ? "border-white/15 text-white hover:bg-white/10" : "border-ra-marron/20 text-ra-marron hover:bg-white");
+      "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] sm:text-[15px] font-bold transition hover:opacity-90 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed";
+
+    const iconBox =
+      "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors duration-200";
+
+    const innerCard = "rounded-2xl border p-4 transition-colors duration-200";
 
     const ok =
-      "rounded-2xl border px-4 py-3 text-[14px] font-semibold " +
+      "rounded-xl border px-4 py-3 text-[14px] sm:text-[15px] font-semibold " +
       (darkMode
-        ? "border-emerald-200/20 bg-emerald-500/10 text-emerald-100"
-        : "border-emerald-200 bg-emerald-50 text-emerald-900");
+        ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100"
+        : "border-emerald-200 bg-emerald-50 text-emerald-800");
 
     const danger =
-      "rounded-2xl border px-4 py-3 text-[14px] font-semibold " +
-      (darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
+      "rounded-xl border px-4 py-3 text-[14px] sm:text-[15px] font-semibold " +
+      (darkMode ? "border-red-300/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
 
     return {
-      shell,
-      titleMain,
-      subText,
+      page,
+      content,
       card,
+      label,
       control,
       secondaryButton,
+      iconBox,
+      innerCard,
       ok,
       danger,
+
+      pageStyle: {
+        color: tokens.text,
+      },
+
+      cardStyle: {
+        backgroundColor: tokens.surface,
+        borderColor: tokens.border,
+        color: tokens.text,
+      },
+
+      innerCardStyle: {
+        backgroundColor: tokens.surfaceSoft,
+        borderColor: tokens.border,
+        color: tokens.text,
+      },
+
+      titleStyle: {
+        color: tokens.text,
+      },
+
+      subTextStyle: {
+        color: tokens.textMuted,
+      },
+
+      labelStyle: {
+        color: tokens.text,
+      },
+
+      controlStyle: {
+        backgroundColor: tokens.inputBg,
+        borderColor: tokens.inputBorder,
+        color: tokens.inputText,
+        "--tw-ring-color": `${tokens.focus}33`,
+      },
+
+      secondaryButtonStyle: {
+        backgroundColor: tokens.surfaceSoft,
+        borderColor: tokens.borderStrong,
+        color: tokens.text,
+      },
+
+      iconBoxStyle: {
+        backgroundColor: tokens.surface2,
+        borderColor: tokens.border,
+        color: tokens.icon,
+      },
+
+      tableHeadStyle: {
+        backgroundColor: tokens.tableHead,
+        color: tokens.text,
+      },
+
+      dividerStyle: {
+        borderColor: tokens.border,
+      },
     };
-  }, [darkMode]);
+  }, [darkMode, tokens]);
+
+  /* =======================================================
+     LOADING
+  ======================================================= */
 
   if (loading) {
     return (
-      <div className={`${ui.shell} min-h-screen font-sans`}>
-        <div className="min-h-[70vh] flex items-center justify-center">
-          <div className={`text-sm font-semibold ${ui.subText}`}>Cargando establecimientos…</div>
+      <div className={`${ui.page} font-sans`} style={ui.pageStyle}>
+        <div className={`${ui.content} min-h-[70vh] flex items-center justify-center`}>
+          <div className="text-sm font-semibold" style={ui.subTextStyle}>
+            Cargando establecimientos…
+          </div>
         </div>
       </div>
     );
   }
 
+  /* =======================================================
+     RENDER
+  ======================================================= */
+
   return (
-    <div className={`${ui.shell} min-h-screen font-sans`}>
-      <header className="px-4 sm:px-6 lg:px-8 pt-6 text-center">
-        <div className="mx-auto max-w-4xl">
-          <div
-            className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border ${
-              darkMode
-                ? "border-white/10 bg-white/[0.06] text-[#ffdda1]"
-                : "border-ra-marron/15 bg-white/60 text-[#aa5013]"
-            }`}
-          >
-            <Building2 className="h-6 w-6" />
-          </div>
+    <div className={`${ui.page} font-sans`} style={ui.pageStyle}>
+      <div className={ui.content}>
+        {/* =================================================
+            HEADER
+        ================================================= */}
 
-          <h1 className={`text-3xl sm:text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>
-            Establecimientos Educacionales
-          </h1>
-
-          <p className={`mx-auto mt-2 max-w-3xl text-[14px] sm:text-[15px] leading-relaxed ${ui.subText}`}>
-            Selecciona qué establecimientos educacionales estarán disponibles para la operación de tu academia. El
-            catálogo general se administra de forma centralizada.
-          </p>
-        </div>
-      </header>
-
-      <main className="px-4 sm:px-6 lg:px-8 pb-20">
-        {/* RESUMEN */}
-
-        <section className="mx-auto mt-7 max-w-7xl grid grid-cols-2 xl:grid-cols-5 gap-4">
-          <SummaryCard darkMode={darkMode} label="Establecimientos" value={pagination.total} type="total" />
-
-          <SummaryCard darkMode={darkMode} label="Activos" value={resumen.activos} type="active" />
-
-          <SummaryCard darkMode={darkMode} label="Inactivos" value={resumen.inactivos} type="inactive" />
-
-          <SummaryCard darkMode={darkMode} label="Comunas" value={resumen.comunas} type="location" />
-
-          <SummaryCard darkMode={darkMode} label="Regiones" value={resumen.regiones} type="location" />
-        </section>
-
-        <div className="mx-auto mt-4 max-w-7xl space-y-3">
-          {!!mensaje && <div className={ui.ok}>{mensaje}</div>}
-
-          {!!error && <div className={ui.danger}>{error}</div>}
-        </div>
-
-        {/* GOBERNANZA */}
-
-        <section className={`${ui.card} mx-auto mt-4 max-w-7xl p-4 sm:p-5`}>
-          <div className="flex items-start gap-3">
+        <header className="text-center">
+          <div className="mx-auto max-w-4xl">
             <div
-              className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
-                darkMode ? "bg-[#ffdda1]/10 text-[#ffdda1]" : "bg-[#aa5013]/10 text-[#aa5013]"
-              }`}
+              className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border transition-colors duration-200"
+              style={ui.iconBoxStyle}
             >
-              <ShieldCheck className="h-5 w-5" />
+              <Building2 className="h-6 w-6" />
             </div>
 
-            <div>
-              <h2 className={`text-[15px] sm:text-base font-extrabold ${ui.titleMain}`}>
-                Catálogo institucional centralizado
-              </h2>
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight" style={ui.titleStyle}>
+              Establecimientos Educacionales
+            </h1>
 
-              <p className={`mt-1 text-[13px] sm:text-sm leading-relaxed ${ui.subText}`}>
-                El administrador de academia puede habilitar o deshabilitar establecimientos, pero no crear, renombrar
-                ni eliminar registros del catálogo general. Esto mantiene una nomenclatura consistente y permite ampliar
-                WELI posteriormente a nuevas comunas y regiones.
-              </p>
-            </div>
+            <p
+              className="mx-auto mt-2 max-w-4xl text-[14px] sm:text-[15px] lg:text-base leading-relaxed"
+              style={ui.subTextStyle}
+            >
+              Selecciona qué establecimientos educacionales estarán disponibles para la operación de tu academia. El
+              catálogo general se administra de forma centralizada.
+            </p>
           </div>
-        </section>
+        </header>
 
-        {/* FILTROS */}
+        <main>
+          {/* =================================================
+              RESUMEN
+          ================================================= */}
 
-        <section className={`${ui.card} mx-auto mt-4 max-w-7xl p-4 sm:p-5`}>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[190px_190px_1fr_150px_110px_auto] gap-3 xl:items-end">
-            <div>
-              <label className={`block mb-1.5 text-[13px] sm:text-sm font-extrabold ${ui.titleMain}`}>Región</label>
+          <section className="mt-5 grid grid-cols-2 xl:grid-cols-5 gap-3">
+            <SummaryCard tokens={tokens} label="Establecimientos" value={pagination.total} type="total" />
 
-              <select
-                value={filtroRegion}
-                onChange={(event) => {
-                  setFiltroRegion(event.target.value);
-                  setFiltroComuna("");
-                  setPage(1);
-                }}
-                className={ui.control}
-                disabled={!regionesDisponibles.length}
-              >
-                <option value="">Selecciona región</option>
+            <SummaryCard tokens={tokens} label="Activos" value={resumen.activos} type="active" />
 
-                {regionesDisponibles.map((region) => (
-                  <option key={region.id} value={region.id}>
-                    {region.nombre}
-                  </option>
-                ))}
-              </select>
+            <SummaryCard tokens={tokens} label="Inactivos" value={resumen.inactivos} type="inactive" />
+
+            <SummaryCard tokens={tokens} label="Comunas" value={resumen.comunas} type="location" />
+
+            <SummaryCard tokens={tokens} label="Regiones" value={resumen.regiones} type="location" />
+          </section>
+
+          {/* =================================================
+              MENSAJES
+          ================================================= */}
+
+          <div className="mt-4 space-y-3">
+            {!!mensaje && <div className={ui.ok}>{mensaje}</div>}
+
+            {!!error && <div className={ui.danger}>{error}</div>}
+          </div>
+
+          {/* =================================================
+              GOBERNANZA
+          ================================================= */}
+
+          <section className={`${ui.card} mt-4 p-4 sm:p-5`} style={ui.cardStyle}>
+            <div className="flex items-start gap-3">
+              <div className={`${ui.iconBox} mt-0.5`} style={ui.iconBoxStyle}>
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+
+              <div>
+                <h2 className="text-[15px] sm:text-base font-extrabold" style={ui.titleStyle}>
+                  Catálogo institucional centralizado
+                </h2>
+
+                <p className="mt-1 text-[13px] sm:text-sm leading-relaxed" style={ui.subTextStyle}>
+                  El administrador de academia puede habilitar o deshabilitar establecimientos, pero no crear, renombrar
+                  ni eliminar registros del catálogo general. Esto mantiene una nomenclatura consistente y permite
+                  ampliar WELI posteriormente a nuevas comunas y regiones.
+                </p>
+              </div>
             </div>
+          </section>
 
-            <div>
-              <label className={`block mb-1.5 text-[13px] sm:text-sm font-extrabold ${ui.titleMain}`}>Comuna</label>
+          {/* =================================================
+              FILTROS
+          ================================================= */}
 
-              <select
-                value={filtroComuna}
-                onChange={(event) => {
-                  setFiltroComuna(event.target.value);
-                  setPage(1);
-                }}
-                className={ui.control}
-                disabled={!filtroRegion || !comunasDisponibles.length}
+          <section className={`${ui.card} mt-4 p-4 sm:p-5`} style={ui.cardStyle}>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[190px_190px_1fr_150px_110px_auto] gap-3 xl:items-end">
+              {/* REGIÓN */}
+
+              <div>
+                <label className={ui.label} style={ui.labelStyle}>
+                  Región
+                </label>
+
+                <select
+                  value={filtroRegion}
+                  onChange={(event) => {
+                    setFiltroRegion(event.target.value);
+                    setFiltroComuna("");
+                    setPage(1);
+                  }}
+                  className={ui.control}
+                  style={ui.controlStyle}
+                  disabled={!regionesDisponibles.length}
+                >
+                  <option value="">Selecciona región</option>
+
+                  {regionesDisponibles.map((region) => (
+                    <option key={region.id} value={region.id}>
+                      {region.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* COMUNA */}
+
+              <div>
+                <label className={ui.label} style={ui.labelStyle}>
+                  Comuna
+                </label>
+
+                <select
+                  value={filtroComuna}
+                  onChange={(event) => {
+                    setFiltroComuna(event.target.value);
+                    setPage(1);
+                  }}
+                  className={ui.control}
+                  style={ui.controlStyle}
+                  disabled={!filtroRegion || !comunasDisponibles.length}
+                >
+                  <option value="">{filtroRegion ? "Selecciona comuna" : "Selecciona primero una región"}</option>
+
+                  {comunasDisponibles.map((comuna) => (
+                    <option key={comuna.id} value={comuna.id}>
+                      {comuna.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* BÚSQUEDA */}
+
+              <div>
+                <label className={ui.label} style={ui.labelStyle}>
+                  Buscar establecimiento
+                </label>
+
+                <div className="relative">
+                  <Search
+                    className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 pointer-events-none"
+                    style={{
+                      color: tokens.textMuted,
+                    }}
+                  />
+
+                  <input
+                    type="text"
+                    value={filtroTexto}
+                    onChange={(event) => setFiltroTexto(event.target.value)}
+                    placeholder="Nombre o ID"
+                    className={`${ui.control} !pl-10`}
+                    style={ui.controlStyle}
+                  />
+                </div>
+              </div>
+
+              {/* ESTADO */}
+
+              <div>
+                <label className={ui.label} style={ui.labelStyle}>
+                  Estado
+                </label>
+
+                <select
+                  value={filtroEstado}
+                  onChange={(event) => {
+                    setFiltroEstado(event.target.value);
+                    setPage(1);
+                  }}
+                  className={ui.control}
+                  style={ui.controlStyle}
+                >
+                  <option value="">Todos</option>
+
+                  <option value="1">Activos</option>
+
+                  <option value="0">Inactivos</option>
+                </select>
+              </div>
+
+              {/* LIMIT */}
+
+              <div>
+                <label className={ui.label} style={ui.labelStyle}>
+                  Mostrar
+                </label>
+
+                <select
+                  value={limit}
+                  onChange={(event) => {
+                    setLimit(Number(event.target.value));
+
+                    setPage(1);
+                  }}
+                  className={ui.control}
+                  style={ui.controlStyle}
+                >
+                  <option value={15}>15</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+
+              {/* REFRESH */}
+
+              <button
+                type="button"
+                onClick={refresh}
+                disabled={reloadBusy || pageBusy}
+                className={ui.secondaryButton}
+                style={ui.secondaryButtonStyle}
               >
-                <option value="">{filtroRegion ? "Selecciona comuna" : "Selecciona primero una región"}</option>
-
-                {comunasDisponibles.map((comuna) => (
-                  <option key={comuna.id} value={comuna.id}>
-                    {comuna.nombre}
-                  </option>
-                ))}
-              </select>
+                <RefreshCw className={`h-4 w-4 ${reloadBusy || pageBusy ? "animate-spin" : ""}`} />
+                Actualizar
+              </button>
             </div>
+          </section>
 
-            <div>
-              <label className={`block mb-1.5 text-[13px] sm:text-sm font-extrabold ${ui.titleMain}`}>
-                Buscar establecimiento
-              </label>
+          {/* =================================================
+              TABLA
+          ================================================= */}
 
-              <div className="relative">
-                <Search
-                  className={`absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 ${
-                    darkMode ? "text-white/40" : "text-ra-marron/45"
-                  }`}
-                />
+          <section className={`${ui.card} mt-4 overflow-hidden`} style={ui.cardStyle}>
+            <div
+              className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b px-4 sm:px-5 py-4"
+              style={ui.dividerStyle}
+            >
+              <div>
+                <h2 className="text-lg sm:text-xl font-extrabold" style={ui.titleStyle}>
+                  Directorio de establecimientos
+                </h2>
 
-                <input
-                  type="text"
-                  value={filtroTexto}
-                  onChange={(event) => setFiltroTexto(event.target.value)}
-                  placeholder="Nombre o ID"
-                  className={`${ui.control} !pl-10`}
-                />
+                <p className="mt-1 text-[13px] sm:text-sm" style={ui.subTextStyle}>
+                  {!filtrosTerritorialesListos
+                    ? "Selecciona una región y una comuna para visualizar los establecimientos."
+                    : pagination.total > 0
+                      ? `Mostrando ${(pagination.page - 1) * pagination.limit + 1}–${Math.min(
+                          (pagination.page - 1) * pagination.limit + establecimientos.length,
+                          pagination.total
+                        )} de ${pagination.total} establecimientos.`
+                      : "No existen establecimientos para la región y comuna seleccionadas."}
+                </p>
               </div>
             </div>
 
-            <div>
-              <label className={`block mb-1.5 text-[13px] sm:text-sm font-extrabold ${ui.titleMain}`}>Estado</label>
+            {/* ===============================================
+                DESKTOP
+            =============================================== */}
 
-              <select
-                value={filtroEstado}
-                onChange={(event) => {
-                  setFiltroEstado(event.target.value);
-                  setPage(1);
-                }}
-                className={ui.control}
-              >
-                <option value="">Todos</option>
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-[14px]">
+                <thead style={ui.tableHeadStyle}>
+                  <tr>
+                    <th className="px-5 py-3 text-center font-extrabold">Establecimiento</th>
 
-                <option value="1">Activos</option>
+                    <th className="px-5 py-3 text-center font-extrabold">Comuna</th>
 
-                <option value="0">Inactivos</option>
-              </select>
-            </div>
+                    <th className="px-5 py-3 text-center font-extrabold">Región</th>
 
-            <div>
-              <label className={`block mb-1.5 text-[13px] sm:text-sm font-extrabold ${ui.titleMain}`}>Mostrar</label>
+                    <th className="px-5 py-3 text-center font-extrabold">Estado</th>
 
-              <select
-                value={limit}
-                onChange={(event) => {
-                  setLimit(Number(event.target.value));
-                  setPage(1);
-                }}
-                className={ui.control}
-              >
-                <option value={15}>15</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-              </select>
-            </div>
+                    <th className="px-5 py-3 text-center font-extrabold">Disponibilidad</th>
+                  </tr>
+                </thead>
 
-            <button type="button" onClick={refresh} disabled={reloadBusy || pageBusy} className={ui.secondaryButton}>
-              <RefreshCw className={`h-4 w-4 ${reloadBusy || pageBusy ? "animate-spin" : ""}`} />
-              Actualizar
-            </button>
-          </div>
-        </section>
+                <tbody>
+                  {establecimientosFiltrados.map((item) => {
+                    const activoGlobal = item.estado_global_id === ESTADO_ACTIVO;
 
-        {/* TABLA */}
+                    const activoAcademia = item.estado_academia_id === ESTADO_ACTIVO;
 
-        <section className={`${ui.card} mx-auto mt-4 max-w-7xl overflow-hidden`}>
-          <div
-            className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b px-4 sm:px-5 py-4 ${
-              darkMode ? "border-white/10" : "border-ra-marron/10"
-            }`}
-          >
-            <div>
-              <h2 className={`text-lg sm:text-xl font-extrabold ${ui.titleMain}`}>Directorio de establecimientos</h2>
+                    const procesando = busyId === item.id;
 
-              <p className={`mt-1 text-[13px] sm:text-sm ${ui.subText}`}>
-                {!filtrosTerritorialesListos
-                  ? "Selecciona una región y una comuna para visualizar los establecimientos."
-                  : pagination.total > 0
-                    ? `Mostrando ${(pagination.page - 1) * pagination.limit + 1}–${Math.min(
-                        (pagination.page - 1) * pagination.limit + establecimientos.length,
-                        pagination.total
-                      )} de ${pagination.total} establecimientos.`
-                    : "No existen establecimientos para la región y comuna seleccionadas."}
-              </p>
-            </div>
-          </div>
+                    return (
+                      <tr
+                        key={item.id}
+                        className="border-t transition hover:bg-[var(--weli-surface-hover)]"
+                        style={{
+                          borderColor: tokens.border,
+                        }}
+                      >
+                        <td className="px-5 py-4 text-center">
+                          <div
+                            className="font-extrabold"
+                            style={{
+                              color: tokens.text,
+                            }}
+                          >
+                            {item.nombre}
+                          </div>
 
-          <div className="hidden lg:block overflow-x-auto">
-            <table className="w-full text-[14px]">
-              <thead className={darkMode ? "bg-black/20 text-[#ffdda1]" : "bg-[#f7ead4] text-[#6d5829]"}>
-                <tr>
-                  <th className="px-5 py-3 text-center font-extrabold">Establecimiento</th>
+                          <div
+                            className="mt-0.5 text-[12px]"
+                            style={{
+                              color: tokens.textMuted,
+                            }}
+                          >
+                            ID {item.id}
+                          </div>
+                        </td>
 
-                  <th className="px-5 py-3 text-center font-extrabold">Comuna</th>
+                        <td className="px-5 py-4 text-center">
+                          <LocationValue tokens={tokens} value={item.comuna_nombre} />
+                        </td>
 
-                  <th className="px-5 py-3 text-center font-extrabold">Región</th>
+                        <td className="px-5 py-4 text-center">
+                          <LocationValue tokens={tokens} value={item.region_nombre} />
+                        </td>
 
-                  <th className="px-5 py-3 text-center font-extrabold">Estado</th>
+                        <td className="px-5 py-4 text-center">
+                          <StatusPill tokens={tokens} darkMode={darkMode} active={activoGlobal} />
+                        </td>
 
-                  <th className="px-5 py-3 text-center font-extrabold">Disponibilidad</th>
-                </tr>
-              </thead>
+                        <td className="px-5 py-4 text-center">
+                          <button
+                            type="button"
+                            onClick={() => cambiarEstado(item)}
+                            disabled={procesando || !activoGlobal}
+                            className={`inline-flex min-h-10 min-w-[150px] items-center justify-center gap-2 rounded-xl border px-4 py-2 text-[13px] font-extrabold transition disabled:opacity-50 disabled:cursor-not-allowed ${
+                              activoAcademia
+                                ? darkMode
+                                  ? "border-red-300/20 bg-red-500/10 text-red-100 hover:bg-red-500/15"
+                                  : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                                : darkMode
+                                  ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/15"
+                                  : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                            }`}
+                          >
+                            <Power className="h-4 w-4" />
 
-              <tbody>
-                {establecimientosFiltrados.map((item) => {
-                  const activoGlobal = item.estado_global_id === ESTADO_ACTIVO;
-                  const activoAcademia = item.estado_academia_id === ESTADO_ACTIVO;
+                            {procesando
+                              ? "Procesando…"
+                              : !activoGlobal
+                                ? "No disponible"
+                                : activoAcademia
+                                  ? "Desactivar"
+                                  : "Activar"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
 
-                  const procesando = busyId === item.id;
-
-                  return (
-                    <tr
-                      key={item.id}
-                      className={`border-t ${
-                        darkMode ? "border-white/10 hover:bg-white/[0.04]" : "border-ra-marron/10 hover:bg-white/50"
-                      }`}
-                    >
-                      <td className="px-5 py-4 text-center">
-                        <div className={`font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}>
-                          {item.nombre}
-                        </div>
-
-                        <div className={`mt-0.5 text-[12px] ${ui.subText}`}>ID {item.id}</div>
-                      </td>
-
-                      <td className="px-5 py-4 text-center">
-                        <LocationValue darkMode={darkMode} value={item.comuna_nombre} />
-                      </td>
-
-                      <td className="px-5 py-4 text-center">
-                        <LocationValue darkMode={darkMode} value={item.region_nombre} />
-                      </td>
-
-                      <td className="px-5 py-4 text-center">
-                        <StatusPill darkMode={darkMode} active={activoGlobal} />
-                      </td>
-
-                      <td className="px-5 py-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() => cambiarEstado(item)}
-                          disabled={procesando || !activoGlobal}
-                          className={`inline-flex min-h-10 min-w-[150px] items-center justify-center gap-2 rounded-xl border px-4 py-2 text-[13px] font-extrabold transition disabled:opacity-50 disabled:cursor-not-allowed ${
-                            activoAcademia
-                              ? darkMode
-                                ? "border-red-300/20 bg-red-500/10 text-red-100 hover:bg-red-500/15"
-                                : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-                              : darkMode
-                                ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/15"
-                                : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                          }`}
-                        >
-                          <Power className="h-4 w-4" />
-
-                          {procesando
-                            ? "Procesando…"
-                            : !activoGlobal
-                              ? "No disponible"
-                              : activoAcademia
-                                ? "Desactivar"
-                                : "Activar"}
-                        </button>
+                  {!establecimientosFiltrados.length && (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-6 py-12 text-center text-[14px]"
+                        style={{
+                          color: tokens.textMuted,
+                        }}
+                      >
+                        {filtrosTerritorialesListos
+                          ? "No existen establecimientos para los filtros seleccionados."
+                          : "Selecciona primero una región y luego una comuna para cargar los establecimientos."}
                       </td>
                     </tr>
-                  );
-                })}
+                  )}
+                </tbody>
+              </table>
+            </div>
 
-                {!establecimientosFiltrados.length && (
-                  <tr>
-                    <td colSpan={5} className={`px-6 py-12 text-center text-[14px] ${ui.subText}`}>
-                      {filtrosTerritorialesListos
-                        ? "No existen establecimientos para los filtros seleccionados."
-                        : "Selecciona primero una región y luego una comuna para cargar los establecimientos."}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+            {/* ===============================================
+                MOBILE / TABLET
+            =============================================== */}
 
-          {/* MOBILE / TABLET */}
+            <div className="lg:hidden p-3 sm:p-4 space-y-3">
+              {establecimientosFiltrados.map((item) => {
+                const activoGlobal = item.estado_global_id === ESTADO_ACTIVO;
 
-          <div className="lg:hidden p-3 sm:p-4 space-y-3">
-            {establecimientosFiltrados.map((item) => {
-              const activoGlobal = item.estado_global_id === ESTADO_ACTIVO;
-              const activoAcademia = item.estado_academia_id === ESTADO_ACTIVO;
+                const activoAcademia = item.estado_academia_id === ESTADO_ACTIVO;
 
-              const procesando = busyId === item.id;
+                const procesando = busyId === item.id;
 
-              return (
-                <article
-                  key={item.id}
-                  className={`rounded-2xl border p-4 ${
-                    darkMode ? "border-white/10 bg-black/10" : "border-ra-marron/10 bg-white/45"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className={`text-base font-extrabold break-words ${ui.titleMain}`}>{item.nombre}</h3>
+                return (
+                  <article key={item.id} className={ui.innerCard} style={ui.innerCardStyle}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3
+                          className="text-base font-extrabold break-words"
+                          style={{
+                            color: tokens.text,
+                          }}
+                        >
+                          {item.nombre}
+                        </h3>
 
-                      <p className={`mt-1 text-[12px] ${ui.subText}`}>ID {item.id}</p>
+                        <p
+                          className="mt-1 text-[12px]"
+                          style={{
+                            color: tokens.textMuted,
+                          }}
+                        >
+                          ID {item.id}
+                        </p>
+                      </div>
+
+                      <StatusPill tokens={tokens} darkMode={darkMode} active={activoGlobal} />
                     </div>
 
-                    <StatusPill darkMode={darkMode} active={activoGlobal} />
-                  </div>
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <MobileLocationBox tokens={tokens} label="Comuna" value={item.comuna_nombre} />
 
-                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <MobileLocationBox darkMode={darkMode} label="Comuna" value={item.comuna_nombre} />
+                      <MobileLocationBox tokens={tokens} label="Región" value={item.region_nombre} />
+                    </div>
 
-                    <MobileLocationBox darkMode={darkMode} label="Región" value={item.region_nombre} />
-                  </div>
+                    <button
+                      type="button"
+                      onClick={() => cambiarEstado(item)}
+                      disabled={procesando || !activoGlobal}
+                      className={`mt-4 w-full min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] font-extrabold transition disabled:opacity-50 ${
+                        activoAcademia
+                          ? darkMode
+                            ? "border-red-300/20 bg-red-500/10 text-red-100"
+                            : "border-red-200 bg-red-50 text-red-700"
+                          : darkMode
+                            ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100"
+                            : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      }`}
+                    >
+                      <Power className="h-4 w-4" />
 
-                  <button
-                    type="button"
-                    onClick={() => cambiarEstado(item)}
-                    disabled={procesando || !activoGlobal}
-                    className={`mt-4 w-full min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] font-extrabold transition disabled:opacity-50 ${
-                      activoAcademia
-                        ? darkMode
-                          ? "border-red-300/20 bg-red-500/10 text-red-100"
-                          : "border-red-200 bg-red-50 text-red-700"
-                        : darkMode
-                          ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100"
-                          : "border-emerald-200 bg-emerald-50 text-emerald-800"
-                    }`}
-                  >
-                    <Power className="h-4 w-4" />
+                      {procesando
+                        ? "Procesando…"
+                        : !activoGlobal
+                          ? "No disponible globalmente"
+                          : activoAcademia
+                            ? "Desactivar establecimiento"
+                            : "Activar establecimiento"}
+                    </button>
+                  </article>
+                );
+              })}
 
-                    {procesando
-                      ? "Procesando…"
-                      : !activoGlobal
-                        ? "No disponible globalmente"
-                        : activoAcademia
-                          ? "Desactivar establecimiento"
-                          : "Activar establecimiento"}
-                  </button>
-                </article>
-              );
-            })}
+              {!establecimientosFiltrados.length && (
+                <div
+                  className="py-10 text-center text-[14px]"
+                  style={{
+                    color: tokens.textMuted,
+                  }}
+                >
+                  {filtrosTerritorialesListos
+                    ? "No existen establecimientos para los filtros seleccionados."
+                    : "Selecciona primero una región y luego una comuna para cargar los establecimientos."}
+                </div>
+              )}
+            </div>
 
-            {!establecimientosFiltrados.length && (
-              <div className={`py-10 text-center text-[14px] ${ui.subText}`}>
-                {filtrosTerritorialesListos
-                  ? "No existen establecimientos para los filtros seleccionados."
-                  : "Selecciona primero una región y luego una comuna para cargar los establecimientos."}
+            {/* ===============================================
+                PAGINACIÓN
+            =============================================== */}
+
+            <div
+              className="border-t px-4 sm:px-5 py-4 flex flex-col sm:flex-row items-center justify-between gap-3"
+              style={ui.dividerStyle}
+            >
+              <div className="text-[13px] sm:text-sm" style={ui.subTextStyle}>
+                Página {pagination.page} de {pagination.total_pages}
               </div>
-            )}
-          </div>
 
-          {/* PAGINACIÓN */}
-          <div
-            className={`border-t px-4 sm:px-5 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 ${
-              darkMode ? "border-white/10" : "border-ra-marron/10"
-            }`}
-          >
-            <div className={`text-[13px] sm:text-sm ${ui.subText}`}>
-              Página {pagination.page} de {pagination.total_pages}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  disabled={!pagination.has_previous || pageBusy}
+                  className={ui.secondaryButton}
+                  style={ui.secondaryButtonStyle}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Anterior
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPage((current) => Math.min(pagination.total_pages, current + 1))}
+                  disabled={!pagination.has_next || pageBusy}
+                  className={ui.secondaryButton}
+                  style={ui.secondaryButtonStyle}
+                >
+                  Siguiente
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
             </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-                disabled={!pagination.has_previous || pageBusy}
-                className={ui.secondaryButton}
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Anterior
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setPage((current) => Math.min(pagination.total_pages, current + 1))}
-                disabled={!pagination.has_next || pageBusy}
-                className={ui.secondaryButton}
-              >
-                Siguiente
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        </section>
-      </main>
+          </section>
+        </main>
+      </div>
     </div>
   );
 }
 
-function StatusPill({ darkMode, active }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-extrabold ${
-        active
-          ? darkMode
+/* =========================================================
+   STATUS PILL
+========================================================= */
+
+function StatusPill({ tokens, darkMode, active }) {
+  if (active) {
+    return (
+      <span
+        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-extrabold ${
+          darkMode
             ? "border-emerald-300/20 bg-emerald-500/15 text-emerald-100"
             : "border-emerald-200 bg-emerald-100 text-emerald-800"
-          : darkMode
-            ? "border-white/15 bg-white/[0.06] text-white/60"
-            : "border-ra-marron/15 bg-white/60 text-ra-marron/60"
-      }`}
-    >
-      {active ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+        }`}
+      >
+        <CheckCircle2 className="h-4 w-4" />
+        Activo
+      </span>
+    );
+  }
 
-      {active ? "Activo" : "Inactivo"}
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-extrabold"
+      style={{
+        backgroundColor: tokens.surfaceSoft,
+        borderColor: tokens.border,
+        color: tokens.textMuted,
+      }}
+    >
+      <XCircle className="h-4 w-4" />
+      Inactivo
     </span>
   );
 }
 
-function LocationValue({ darkMode, value }) {
+/* =========================================================
+   LOCATION VALUE
+========================================================= */
+
+function LocationValue({ tokens, value }) {
   return (
     <div
-      className={`inline-flex items-center justify-center gap-1.5 text-[13px] font-semibold ${
-        value ? (darkMode ? "text-white/75" : "text-ra-marron/75") : darkMode ? "text-white/35" : "text-ra-marron/40"
-      }`}
+      className="inline-flex items-center justify-center gap-1.5 text-[13px] font-semibold"
+      style={{
+        color: value ? tokens.textMuted : `${tokens.textMuted}80`,
+      }}
     >
       <MapPin className="h-3.5 w-3.5" />
-
       {value || "Sin ubicación definida"}
     </div>
   );
 }
 
-function MobileLocationBox({ darkMode, label, value }) {
+/* =========================================================
+   MOBILE LOCATION BOX
+========================================================= */
+
+function MobileLocationBox({ tokens, label, value }) {
   return (
     <div
-      className={`rounded-xl border px-3 py-3 ${
-        darkMode ? "border-white/10 bg-black/10" : "border-ra-marron/10 bg-white/40"
-      }`}
+      className="rounded-xl border px-3 py-3"
+      style={{
+        backgroundColor: tokens.surfaceSoft,
+        borderColor: tokens.border,
+      }}
     >
       <div
-        className={`text-[11px] uppercase tracking-wide font-extrabold ${
-          darkMode ? "text-white/45" : "text-ra-marron/45"
-        }`}
+        className="text-[11px] uppercase tracking-wide font-extrabold"
+        style={{
+          color: tokens.textMuted,
+        }}
       >
         {label}
       </div>
 
       <div
-        className={`mt-1 text-[13px] font-bold ${
-          value ? (darkMode ? "text-white/80" : "text-ra-marron/80") : darkMode ? "text-white/35" : "text-ra-marron/40"
-        }`}
+        className="mt-1 text-[13px] font-bold"
+        style={{
+          color: value ? tokens.text : `${tokens.textMuted}80`,
+        }}
       >
         {value || "Sin ubicación definida"}
       </div>
@@ -1151,7 +1419,11 @@ function MobileLocationBox({ darkMode, label, value }) {
   );
 }
 
-function SummaryCard({ darkMode, label, value, type }) {
+/* =========================================================
+   SUMMARY CARD
+========================================================= */
+
+function SummaryCard({ tokens, label, value, type }) {
   const icon =
     type === "active" ? (
       <CheckCircle2 className="h-5 w-5" />
@@ -1163,20 +1435,39 @@ function SummaryCard({ darkMode, label, value, type }) {
       <Building2 className="h-5 w-5" />
     );
 
+  const iconColor = type === "active" ? "#16A34A" : type === "inactive" ? tokens.textMuted : tokens.icon;
+
   return (
     <div
-      className={`rounded-2xl border p-4 sm:p-5 shadow-[0_12px_34px_rgba(0,0,0,0.08)] ${
-        darkMode ? "bg-white/[0.07] border-white/10" : "bg-white/65 border-ra-marron/15"
-      }`}
+      className="rounded-2xl border p-4 sm:p-5 shadow-[0_12px_34px_rgba(0,0,0,0.08)] transition-colors duration-200"
+      style={{
+        backgroundColor: tokens.surface,
+        borderColor: tokens.border,
+        color: tokens.text,
+      }}
     >
-      <div className={`flex items-center justify-between gap-3 ${darkMode ? "text-white/60" : "text-ra-marron/60"}`}>
+      <div
+        className="flex items-center justify-between gap-3"
+        style={{
+          color: tokens.textMuted,
+        }}
+      >
         <span className="text-[11px] sm:text-[12px] uppercase tracking-[0.08em] font-extrabold">{label}</span>
 
-        {icon}
+        <span
+          style={{
+            color: iconColor,
+          }}
+        >
+          {icon}
+        </span>
       </div>
 
       <strong
-        className={`mt-2 block text-2xl sm:text-3xl font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}
+        className="mt-2 block text-2xl sm:text-3xl font-extrabold"
+        style={{
+          color: tokens.text,
+        }}
       >
         {value}
       </strong>

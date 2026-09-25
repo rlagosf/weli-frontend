@@ -1,31 +1,49 @@
 // src/pages/admin/ListarEstadisticas.jsx
+
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+
 import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
+
 import { useNavigate, useLocation } from "react-router-dom";
+
 import { useTheme } from "../../context/ThemeContext";
 import { Pencil } from "lucide-react";
 import { jwtDecode } from "jwt-decode";
+
 import IsLoading from "../../components/isLoading";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 import { formatRutWithDV } from "../../services/rut";
 
-/* ───────────────── Scope helpers ───────────────── */
+/* =========================================================
+   SCOPE HELPERS
+========================================================= */
+
 const STORAGE_KEY = "weli_selected_academia";
 
 const readSelectedAcademia = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const p = JSON.parse(raw);
 
-    const id = Number(p?.id ?? 0);
-    if (!Number.isFinite(id) || id <= 0) return null;
+    if (!raw) {
+      return null;
+    }
 
-    const deporte_id = Number(p?.deporte_id ?? 0);
+    const parsed = JSON.parse(raw);
+
+    const id = Number(parsed?.id ?? 0);
+
+    if (!Number.isFinite(id) || id <= 0) {
+      return null;
+    }
+
+    const deporte_id = Number(parsed?.deporte_id ?? 0);
+
     return {
       id,
+
       deporte_id: Number.isFinite(deporte_id) && deporte_id > 0 ? deporte_id : null,
-      nombre: p?.nombre ?? null,
+
+      nombre: parsed?.nombre ?? null,
     };
   } catch {
     return null;
@@ -34,445 +52,806 @@ const readSelectedAcademia = () => {
 
 const isSuperTreePath = (pathname) => String(pathname || "").startsWith("/super-dashboard/admin/dashboard");
 
-/* =======================
-   🎨 Conjunto X
-======================= */
-const PALETTE_X = {
-  copper: "#aa5013",
-  brown: "#6d5829",
-  gold: "#b79f69",
-  cream: "#e8dac4",
-  sand: "#ffdda1",
-  caramel: "#dda272",
-  terracotta: "#e2773b",
-};
+/* =========================================================
+   AUTH HELPERS
+========================================================= */
 
-/* ───────────────── Auth helpers ───────────────── */
 const isExpired = (decoded) => {
   const now = Math.floor(Date.now() / 1000);
+
   return !decoded?.exp || decoded.exp <= now;
 };
 
 const extractRol = (decoded) => {
   const raw = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : 0;
+
+  const number = Number(raw);
+
+  return Number.isFinite(number) ? number : 0;
 };
 
-/** Soporta "1" o JSON {"id":1} */
+/* =========================================================
+   ACADEMIA SUPERADMIN
+
+   Soporta:
+   "1"
+
+   o:
+   {
+     id: 1
+   }
+========================================================= */
+
 const getAcademiaIdFromStorage = () => {
   try {
     const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
-    if (!raw) return null;
+
+    if (!raw) {
+      return null;
+    }
 
     const direct = Number(raw);
-    if (Number.isFinite(direct) && direct > 0) return direct;
+
+    if (Number.isFinite(direct) && direct > 0) {
+      return direct;
+    }
 
     const parsed = JSON.parse(raw);
+
     const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
+
     return Number.isFinite(id) && id > 0 ? id : null;
   } catch {
     return null;
   }
 };
 
+/* =========================================================
+   HEADERS
+========================================================= */
+
 const buildHeaders = (rol) => {
   const token = getToken();
-  const h = token ? { Authorization: `Bearer ${token}` } : {};
+
+  const headers = token
+    ? {
+        Authorization: `Bearer ${token}`,
+      }
+    : {};
+
   if (rol === 3) {
-    const a = getAcademiaIdFromStorage();
-    if (a) h["x-academia-id"] = String(a);
+    const academiaId = getAcademiaIdFromStorage();
+
+    if (academiaId) {
+      headers["x-academia-id"] = String(academiaId);
+    }
   }
-  return h;
+
+  return headers;
 };
 
+/* =========================================================
+   COMPONENTE
+========================================================= */
+
 export default function ListarEstadisticas() {
-  const { darkMode } = useTheme();
+  const { darkMode, themeTokens } = useTheme();
+
   const navigate = useNavigate();
+
   const location = useLocation();
 
   const [jugadoresRaw, setJugadoresRaw] = useState([]);
+
   const [categoriasRaw, setCategoriasRaw] = useState([]);
+
   const [isLoading, setIsLoading] = useState(true);
+
   const [error, setError] = useState("");
 
   const [rol, setRol] = useState(null);
 
   const [scope, setScope] = useState({
     academia_id: null,
+
     deporte_id: null,
+
     academia_nombre: null,
   });
 
   useMobileAutoScrollTop();
 
-  // ✅ Estrategia dorada: detecta árbol actual
+  /* =======================================================
+     ÁRBOL ACTUAL
+  ======================================================= */
+
   const dashboardBase = useMemo(() => {
-    const p = location.pathname || "";
-    return p.startsWith("/super-dashboard/admin/dashboard") ? "/super-dashboard/admin/dashboard" : "/admin";
+    const path = location.pathname || "";
+
+    return path.startsWith("/super-dashboard/admin/dashboard") ? "/super-dashboard/admin/dashboard" : "/admin";
   }, [location.pathname]);
 
-  // ─────────────────────────────
-  // 🧭 Breadcrumb (ANTI-LOOP) — como PowerbiFinanzas
-  // ─────────────────────────────
+  /* =======================================================
+     BREADCRUMB ANTI-LOOP
+  ======================================================= */
+
   const breadcrumbBootRef = useRef(false);
 
   useEffect(() => {
-    if (breadcrumbBootRef.current) return;
+    if (breadcrumbBootRef.current) {
+      return;
+    }
 
     const currentPath = location.pathname + location.search;
-    const bc = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : [];
-    const last = bc[bc.length - 1];
+
+    const breadcrumb = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : [];
+
+    const last = breadcrumb[breadcrumb.length - 1];
 
     const label = "Registrar Estadísticas";
+
     if (!last || last.label !== label) {
       breadcrumbBootRef.current = true;
+
       navigate(currentPath, {
         replace: true,
-        state: { ...(location.state || {}), breadcrumb: [{ to: currentPath, label }] },
+
+        state: {
+          ...(location.state || {}),
+
+          breadcrumb: [
+            {
+              to: currentPath,
+
+              label,
+            },
+          ],
+        },
       });
     } else {
       breadcrumbBootRef.current = true;
     }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.search]);
 
-  /* ───────────────── Auth + Scope ───────────────── */
+  /* =======================================================
+     AUTH + SCOPE
+  ======================================================= */
+
   useEffect(() => {
     try {
       const token = getToken();
-      if (!token) throw new Error("no-token");
+
+      if (!token) {
+        throw new Error("no-token");
+      }
 
       const decoded = jwtDecode(token);
-      if (isExpired(decoded)) throw new Error("expired");
+
+      if (isExpired(decoded)) {
+        throw new Error("expired");
+      }
 
       const parsedRol = extractRol(decoded);
+
       if (![1, 2, 3].includes(parsedRol)) {
-        navigate(dashboardBase, { replace: true });
+        navigate(dashboardBase, {
+          replace: true,
+        });
+
         return;
       }
+
       setRol(parsedRol);
 
       const superTree = isSuperTreePath(location.pathname);
 
       if (superTree) {
-        const snap = readSelectedAcademia();
-        if (!snap?.id) {
-          navigate("/super-dashboard", { replace: true });
+        const snapshot = readSelectedAcademia();
+
+        if (!snapshot?.id) {
+          navigate("/super-dashboard", {
+            replace: true,
+          });
+
           return;
         }
 
         setScope({
-          academia_id: snap.id,
-          deporte_id: snap.deporte_id,
-          academia_nombre: snap.nombre ?? null,
+          academia_id: snapshot.id,
+
+          deporte_id: snapshot.deporte_id,
+
+          academia_nombre: snapshot.nombre ?? null,
         });
       } else {
-        const acad = Number(decoded?.academia_id ?? decoded?.academy_id ?? 0) || null;
-        const dep = Number(decoded?.deporte_id ?? decoded?.sport_id ?? 0) || null;
+        const academiaId = Number(decoded?.academia_id ?? decoded?.academy_id ?? 0) || null;
 
-        setScope({ academia_id: acad, deporte_id: dep, academia_nombre: null });
+        const deporteId = Number(decoded?.deporte_id ?? decoded?.sport_id ?? 0) || null;
+
+        setScope({
+          academia_id: academiaId,
+
+          deporte_id: deporteId,
+
+          academia_nombre: null,
+        });
       }
 
-      // ✅ si es rol 3 y falta academia target, lo tratamos como sesión inválida para este módulo
+      /*
+       * Si es rol 3 y falta academia target,
+       * se trata como sesión inválida para este módulo.
+       */
+
       if (parsedRol === 3) {
-        const a = getAcademiaIdFromStorage();
-        if (!a) throw new Error("missing-academia-target");
+        const academiaId = getAcademiaIdFromStorage();
+
+        if (!academiaId) {
+          throw new Error("missing-academia-target");
+        }
       }
     } catch {
       clearToken();
-      navigate("/login", { replace: true });
+
+      navigate("/login", {
+        replace: true,
+      });
     }
   }, [navigate, location.pathname, dashboardBase]);
 
-  /* ───────────────── Live update (super selector) ───────────────── */
+  /* =======================================================
+     LIVE UPDATE SUPERADMIN
+  ======================================================= */
+
   useEffect(() => {
     let alive = true;
 
     const tick = () => {
-      if (!alive) return;
-      if (!isSuperTreePath(location.pathname)) return;
+      if (!alive) {
+        return;
+      }
 
-      const snap = readSelectedAcademia();
-      if (snap?.id) {
-        setScope((prev) => {
+      if (!isSuperTreePath(location.pathname)) {
+        return;
+      }
+
+      const snapshot = readSelectedAcademia();
+
+      if (snapshot?.id) {
+        setScope((previous) => {
           const next = {
-            academia_id: snap.id,
-            deporte_id: snap.deporte_id,
-            academia_nombre: snap.nombre ?? null,
+            academia_id: snapshot.id,
+
+            deporte_id: snapshot.deporte_id,
+
+            academia_nombre: snapshot.nombre ?? null,
           };
+
           const same =
-            prev?.academia_id === next.academia_id &&
-            prev?.deporte_id === next.deporte_id &&
-            prev?.academia_nombre === next.academia_nombre;
-          return same ? prev : next;
+            previous?.academia_id === next.academia_id &&
+            previous?.deporte_id === next.deporte_id &&
+            previous?.academia_nombre === next.academia_nombre;
+
+          return same ? previous : next;
         });
       }
     };
 
     tick();
-    const iv = setInterval(tick, 1200);
+
+    const interval = setInterval(tick, 1200);
 
     const onStorage = () => tick();
+
     const onEvent = () => tick();
 
     window.addEventListener("storage", onStorage);
+
     window.addEventListener("weli:selectedAcademiaChanged", onEvent);
 
     return () => {
       alive = false;
-      clearInterval(iv);
+
+      clearInterval(interval);
+
       window.removeEventListener("storage", onStorage);
+
       window.removeEventListener("weli:selectedAcademiaChanged", onEvent);
     };
   }, [location.pathname]);
 
-  /* ───────────────── Helpers fetch ───────────────── */
+  /* =======================================================
+     HELPERS FETCH
+  ======================================================= */
+
   const normalizeListResponse = (res) => {
-    if (!res || res.status === 204) return [];
-    const d = res?.data ?? res;
-    if (Array.isArray(d)) return d;
-    if (Array.isArray(d?.results)) return d.results;
-    if (Array.isArray(d?.items)) return d.items;
-    if (Array.isArray(d?.rows)) return d.rows;
-    if (d?.ok && Array.isArray(d.items)) return d.items;
-    if (d?.ok && Array.isArray(d.data)) return d.data;
+    if (!res || res.status === 204) {
+      return [];
+    }
+
+    const data = res?.data ?? res;
+
+    if (Array.isArray(data)) {
+      return data;
+    }
+
+    if (Array.isArray(data?.results)) {
+      return data.results;
+    }
+
+    if (Array.isArray(data?.items)) {
+      return data.items;
+    }
+
+    if (Array.isArray(data?.rows)) {
+      return data.rows;
+    }
+
+    if (data?.ok && Array.isArray(data.items)) {
+      return data.items;
+    }
+
+    if (data?.ok && Array.isArray(data.data)) {
+      return data.data;
+    }
+
     return [];
   };
 
-  const getErrStatus = (e) => e?.status ?? e?.response?.status ?? 0;
+  const getErrStatus = (requestError) => requestError?.status ?? requestError?.response?.status ?? 0;
 
   const tryGetList = async (paths, { signal, headers } = {}) => {
     const list = Array.isArray(paths) ? paths : [paths];
 
     const variants = [];
-    for (const p0 of list) {
-      const p = String(p0 || "");
-      const base = p.startsWith("/") ? p : `/${p}`;
-      variants.push(base, base.endsWith("/") ? base.slice(0, -1) : `${base}/`);
-    }
-    const uniq = [...new Set(variants)];
 
-    for (const url of uniq) {
+    for (const pathRaw of list) {
+      const path = String(pathRaw || "");
+
+      const base = path.startsWith("/") ? path : `/${path}`;
+
+      variants.push(
+        base,
+
+        base.endsWith("/") ? base.slice(0, -1) : `${base}/`
+      );
+    }
+
+    const uniqueUrls = [...new Set(variants)];
+
+    for (const url of uniqueUrls) {
       try {
-        const r = await api.get(url, { signal, headers });
-        return normalizeListResponse(r);
-      } catch (e) {
-        const st = getErrStatus(e);
-        if (st === 401 || st === 403) throw e;
+        const response = await api.get(url, {
+          signal,
+          headers,
+        });
+
+        return normalizeListResponse(response);
+      } catch (requestError) {
+        const status = getErrStatus(requestError);
+
+        if (status === 401 || status === 403) {
+          throw requestError;
+        }
       }
     }
+
     return [];
   };
 
-  /* ───────────────── Carga de datos ───────────────── */
+  /* =======================================================
+     CARGA DE DATOS
+  ======================================================= */
+
   useEffect(() => {
-    if (rol == null) return;
+    if (rol == null) {
+      return;
+    }
 
     const abort = new AbortController();
+
     const headers = buildHeaders(rol);
 
     (async () => {
       setIsLoading(true);
+
       setError("");
 
       try {
-        const acadId = scope.academia_id;
-        const depId = scope.deporte_id;
+        const academiaId = scope.academia_id;
+
+        const deporteId = scope.deporte_id;
 
         const jugadoresPaths = [];
 
-        if (acadId && depId) {
+        if (academiaId && deporteId) {
           if (rol === 2) {
-            jugadoresPaths.push(`/jugadores/staff?academia_id=${acadId}&deporte_id=${depId}`);
-            jugadoresPaths.push(`/jugadores/staff?academia_id=${acadId}`);
+            jugadoresPaths.push(`/jugadores/staff?academia_id=${academiaId}&deporte_id=${deporteId}`);
+
+            jugadoresPaths.push(`/jugadores/staff?academia_id=${academiaId}`);
           } else {
-            jugadoresPaths.push(`/jugadores?academia_id=${acadId}&deporte_id=${depId}`);
-            jugadoresPaths.push(`/jugadores?academia_id=${acadId}`);
+            jugadoresPaths.push(`/jugadores?academia_id=${academiaId}&deporte_id=${deporteId}`);
+
+            jugadoresPaths.push(`/jugadores?academia_id=${academiaId}`);
           }
-        } else if (acadId) {
-          if (rol === 2) jugadoresPaths.push(`/jugadores/staff?academia_id=${acadId}`);
-          else jugadoresPaths.push(`/jugadores?academia_id=${acadId}`);
+        } else if (academiaId) {
+          if (rol === 2) {
+            jugadoresPaths.push(`/jugadores/staff?academia_id=${academiaId}`);
+          } else {
+            jugadoresPaths.push(`/jugadores?academia_id=${academiaId}`);
+          }
         }
 
-        if (rol === 2) jugadoresPaths.push("/jugadores/staff");
+        if (rol === 2) {
+          jugadoresPaths.push("/jugadores/staff");
+        }
+
         jugadoresPaths.push("/jugadores");
 
         const [jugadores, categorias] = await Promise.all([
-          tryGetList(jugadoresPaths, { signal: abort.signal, headers }),
-          tryGetList(["/categorias"], { signal: abort.signal, headers }),
+          tryGetList(jugadoresPaths, {
+            signal: abort.signal,
+
+            headers,
+          }),
+
+          tryGetList(["/categorias"], {
+            signal: abort.signal,
+
+            headers,
+          }),
         ]);
 
-        if (abort.signal.aborted) return;
+        if (abort.signal.aborted) {
+          return;
+        }
 
         const jugadoresArr = Array.isArray(jugadores) ? jugadores : [];
+
         setJugadoresRaw(jugadoresArr);
+
         setCategoriasRaw(Array.isArray(categorias) ? categorias : []);
 
         if ((!scope.academia_id || !scope.deporte_id) && jugadoresArr.length) {
-          const j0 = jugadoresArr.find((x) => x && (x.academia_id || x.deporte_id));
-          const a0 = Number(j0?.academia_id ?? 0) || null;
-          const d0 = Number(j0?.deporte_id ?? 0) || null;
+          const jugadorScope = jugadoresArr.find((item) => item && (item.academia_id || item.deporte_id));
 
-          if (a0 || d0) {
-            setScope((prev) => ({
-              ...prev,
-              academia_id: prev.academia_id ?? a0,
-              deporte_id: prev.deporte_id ?? d0,
+          const academiaInferida = Number(jugadorScope?.academia_id ?? 0) || null;
+
+          const deporteInferido = Number(jugadorScope?.deporte_id ?? 0) || null;
+
+          if (academiaInferida || deporteInferido) {
+            setScope((previous) => ({
+              ...previous,
+
+              academia_id: previous.academia_id ?? academiaInferida,
+
+              deporte_id: previous.deporte_id ?? deporteInferido,
             }));
           }
         }
-      } catch (err) {
-        if (abort.signal.aborted) return;
+      } catch (requestError) {
+        if (abort.signal.aborted) {
+          return;
+        }
 
-        const st = getErrStatus(err);
-        if (st === 401 || st === 403) {
+        const status = getErrStatus(requestError);
+
+        if (status === 401 || status === 403) {
           clearToken();
-          navigate("/login", { replace: true });
+
+          navigate("/login", {
+            replace: true,
+          });
+
           return;
         }
 
         setError("❌ Error al cargar los jugadores/categorías");
       } finally {
-        if (!abort.signal.aborted) setIsLoading(false);
+        if (!abort.signal.aborted) {
+          setIsLoading(false);
+        }
       }
     })();
 
     return () => abort.abort();
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rol, scope.academia_id, scope.deporte_id, navigate, location.pathname]);
 
-  /* ───────────────── Categoria maps ───────────────── */
+  /* =======================================================
+     CATEGORY MAPS
+  ======================================================= */
+
   const categoriaMap = useMemo(() => {
     const map = new Map();
-    (Array.isArray(categoriasRaw) ? categoriasRaw : []).forEach((c) => {
-      const id = c?.id ?? c?.categoria_id;
-      const nombre = c?.nombre ?? c?.descripcion;
-      if (id != null && nombre) map.set(Number(id), String(nombre));
+
+    (Array.isArray(categoriasRaw) ? categoriasRaw : []).forEach((categoria) => {
+      const id = categoria?.id ?? categoria?.categoria_id;
+
+      const nombre = categoria?.nombre ?? categoria?.descripcion;
+
+      if (id != null && nombre) {
+        map.set(Number(id), String(nombre));
+      }
     });
+
     return map;
   }, [categoriasRaw]);
 
   const categoriaOrder = useMemo(() => {
     const order = new Map();
-    (Array.isArray(categoriasRaw) ? categoriasRaw : []).forEach((c, i) => {
-      const nombre = (c?.nombre ?? c?.descripcion ?? "").toString();
-      if (nombre) order.set(nombre, i);
+
+    (Array.isArray(categoriasRaw) ? categoriasRaw : []).forEach((categoria, index) => {
+      const nombre = (categoria?.nombre ?? categoria?.descripcion ?? "").toString();
+
+      if (nombre) {
+        order.set(nombre, index);
+      }
     });
+
     return order;
   }, [categoriasRaw]);
 
   const toCategoria = useCallback(
-    (j) => {
-      if (j?.categoria?.nombre) return String(j.categoria.nombre);
-      if (j?.categoria_nombre) return String(j.categoria_nombre);
+    (jugador) => {
+      if (jugador?.categoria?.nombre) {
+        return String(jugador.categoria.nombre);
+      }
 
-      const cid = j?.categoria_id ?? j?.categoria?.id ?? j?.categoriaId;
-      const nombre = cid != null ? categoriaMap.get(Number(cid)) : undefined;
+      if (jugador?.categoria_nombre) {
+        return String(jugador.categoria_nombre);
+      }
+
+      const categoriaId = jugador?.categoria_id ?? jugador?.categoria?.id ?? jugador?.categoriaId;
+
+      const nombre = categoriaId != null ? categoriaMap.get(Number(categoriaId)) : undefined;
+
       return nombre || "Sin categoría";
     },
     [categoriaMap]
   );
 
-  /* ───────────────── Normalizar jugadores ───────────────── */
+  /* =======================================================
+     NORMALIZAR JUGADORES
+  ======================================================= */
+
   const jugadores = useMemo(() => {
-    const toNombre = (j) =>
-      j?.nombre_jugador ||
-      j?.nombre_completo ||
-      j?.nombre ||
-      [j?.nombres, j?.apellidos].filter(Boolean).join(" ") ||
+    const toNombre = (jugador) =>
+      jugador?.nombre_jugador ||
+      jugador?.nombre_completo ||
+      jugador?.nombre ||
+      [jugador?.nombres, jugador?.apellidos].filter(Boolean).join(" ") ||
       "—";
 
     const base = Array.isArray(jugadoresRaw) ? jugadoresRaw : [];
 
-    const a = scope.academia_id;
-    const d = scope.deporte_id;
+    const academiaId = scope.academia_id;
+
+    const deporteId = scope.deporte_id;
 
     const scoped =
-      !a && !d
+      !academiaId && !deporteId
         ? base
-        : base.filter((j) => {
-            const aj = Number(j?.academia_id ?? 0);
-            const dj = Number(j?.deporte_id ?? 0);
-            if (a && aj !== a) return false;
-            if (d && dj !== d) return false;
+        : base.filter((jugador) => {
+            const jugadorAcademiaId = Number(jugador?.academia_id ?? 0);
+
+            const jugadorDeporteId = Number(jugador?.deporte_id ?? 0);
+
+            if (academiaId && jugadorAcademiaId !== academiaId) {
+              return false;
+            }
+
+            if (deporteId && jugadorDeporteId !== deporteId) {
+              return false;
+            }
+
             return true;
           });
 
-    return scoped.map((j, idx) => {
-      const jugador_id = Number(j?.id ?? j?.jugador_id ?? 0) || null;
+    return scoped.map((jugador, index) => {
+      const jugador_id = Number(jugador?.id ?? jugador?.jugador_id ?? 0) || null;
 
       const rutBase =
-        j?.rut_jugador ?? j?.rut ?? j?.rutJugador ?? j?.rut_base ?? (jugador_id ? String(jugador_id) : `tmp-${idx}`);
+        jugador?.rut_jugador ??
+        jugador?.rut ??
+        jugador?.rutJugador ??
+        jugador?.rut_base ??
+        (jugador_id ? String(jugador_id) : `tmp-${index}`);
 
       const rutStr = String(rutBase);
 
       return {
         jugador_id,
+
         rut: rutStr,
+
         rutConDV: formatRutWithDV(rutStr),
-        nombre: toNombre(j),
-        categoriaNombre: toCategoria(j),
+
+        nombre: toNombre(jugador),
+
+        categoriaNombre: toCategoria(jugador),
       };
     });
   }, [jugadoresRaw, scope.academia_id, scope.deporte_id, toCategoria]);
 
-  /* ───────────────── Grupos ───────────────── */
+  /* =======================================================
+     GRUPOS
+  ======================================================= */
+
   const grupos = useMemo(() => {
     const map = new Map();
-    for (const j of jugadores) {
-      const cat = j.categoriaNombre || "Sin categoría";
-      if (!map.has(cat)) map.set(cat, []);
-      map.get(cat).push(j);
+
+    for (const jugador of jugadores) {
+      const categoria = jugador.categoriaNombre || "Sin categoría";
+
+      if (!map.has(categoria)) {
+        map.set(categoria, []);
+      }
+
+      map.get(categoria).push(jugador);
     }
 
     const entries = [...map.entries()];
+
     entries.sort((a, b) => {
-      const [na] = a;
-      const [nb] = b;
+      const [categoriaA] = a;
 
-      if (na === "Sin categoría" && nb !== "Sin categoría") return 1;
-      if (nb === "Sin categoría" && na !== "Sin categoría") return -1;
+      const [categoriaB] = b;
 
-      const ia = categoriaOrder.has(na) ? categoriaOrder.get(na) : Number.MAX_SAFE_INTEGER;
-      const ib = categoriaOrder.has(nb) ? categoriaOrder.get(nb) : Number.MAX_SAFE_INTEGER;
+      if (categoriaA === "Sin categoría" && categoriaB !== "Sin categoría") {
+        return 1;
+      }
 
-      return ia - ib || na.localeCompare(nb, "es");
+      if (categoriaB === "Sin categoría" && categoriaA !== "Sin categoría") {
+        return -1;
+      }
+
+      const indexA = categoriaOrder.has(categoriaA) ? categoriaOrder.get(categoriaA) : Number.MAX_SAFE_INTEGER;
+
+      const indexB = categoriaOrder.has(categoriaB) ? categoriaOrder.get(categoriaB) : Number.MAX_SAFE_INTEGER;
+
+      return indexA - indexB || categoriaA.localeCompare(categoriaB, "es");
     });
 
-    return entries.map(([cat, list]) => ({
-      categoria: cat,
-      items: [...list].sort((x, y) => x.nombre.localeCompare(y.nombre, "es")),
+    return entries.map(([categoria, list]) => ({
+      categoria,
+
+      items: [...list].sort((a, b) => a.nombre.localeCompare(b.nombre, "es")),
     }));
   }, [jugadores, categoriaOrder]);
 
-  /* ───────────────── UI (SuperDashboard style + tablas notorias) ───────────────── */
+  /* =======================================================
+     TOKENS DE APARIENCIA
+
+     ThemeContext es la fuente visual principal.
+     Dashboard mantiene el fondo general.
+  ======================================================= */
+
+  const tokens = useMemo(() => {
+    if (themeTokens) {
+      return themeTokens;
+    }
+
+    if (darkMode) {
+      return {
+        surface: "#1F2937",
+
+        surfaceSoft: "#172033",
+
+        surface2: "#263244",
+
+        surfaceHover: "#374151",
+
+        primary: "#FFDDA1",
+
+        primaryHover: "#FFE5B8",
+
+        primaryContrast: "#3F2D18",
+
+        secondary: "#B79F69",
+
+        secondaryHover: "#C8B27F",
+
+        secondaryContrast: "#111827",
+
+        text: "#F9FAFB",
+
+        textMuted: "#D1D5DB",
+
+        icon: "#FFDDA1",
+
+        border: "#374151",
+
+        borderStrong: "#4B5563",
+
+        inputBg: "#111827",
+
+        inputText: "#F9FAFB",
+
+        inputBorder: "#4B5563",
+
+        tableHead: "#172033",
+
+        focus: "#FFDDA1",
+
+        overlay: "rgba(0,0,0,.65)",
+      };
+    }
+
+    return {
+      surface: "#FFFFFF",
+
+      surfaceSoft: "#FAF6EE",
+
+      surface2: "#F7EAD4",
+
+      surfaceHover: "#FFF9F2",
+
+      primary: "#AA5013",
+
+      primaryHover: "#994812",
+
+      primaryContrast: "#FFFFFF",
+
+      secondary: "#6D5829",
+
+      secondaryHover: "#5E4B23",
+
+      secondaryContrast: "#FFFFFF",
+
+      text: "#3B2A1E",
+
+      textMuted: "#766657",
+
+      icon: "#AA5013",
+
+      border: "#D8C7AE",
+
+      borderStrong: "#BFA684",
+
+      inputBg: "#FFFFFF",
+
+      inputText: "#3B2A1E",
+
+      inputBorder: "#9B7B50",
+
+      tableHead: "#F7EAD4",
+
+      focus: "#AA5013",
+
+      overlay: "rgba(0,0,0,.55)",
+    };
+  }, [themeTokens, darkMode]);
+
+  /* =======================================================
+     UI
+
+     Homologado con listarPagos.jsx.
+
+     - Fondo transparente.
+     - Tarjetas usan surface.
+     - Cabecera usa tableHead.
+     - Hover usa surfaceHover.
+     - Acción usa primary.
+     - Textos usan text / textMuted.
+  ======================================================= */
+
   const ui = useMemo(() => {
-    const shell = darkMode
-      ? "bg-[#111827] text-white"
-      : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
+    const page = "min-h-[calc(100vh-100px)] w-full bg-transparent px-3 sm:px-5 lg:px-7 2xl:px-10 pt-4 pb-16";
 
-    const titleMain = darkMode ? "text-white" : "text-ra-marron";
-    const subText = darkMode ? "text-white/70" : "text-ra-marron/70";
+    const content = "w-full max-w-[1700px] mx-auto";
 
-    const card =
-      "rounded-2xl border shadow-lg transition " +
-      (darkMode ? "bg-white/10 border-white/15" : "bg-white/60 border-ra-marron/15");
+    const card = "rounded-2xl border shadow-[0_14px_42px_rgba(0,0,0,0.12)] transition-colors duration-200";
 
-    const thead =
-      "text-[10px] sm:text-xs " +
-      (darkMode
-        ? "bg-black/30 text-white border-b border-white/25"
-        : "bg-[rgba(109,88,41,0.14)] text-[rgba(109,88,41,0.95)] border-b border-[rgba(109,88,41,0.28)]");
+    const thead = "text-[10px] sm:text-xs";
 
-    const th =
-      "p-2 text-center whitespace-nowrap border-r " + (darkMode ? "border-white/20" : "border-[rgba(109,88,41,0.28)]");
+    const th = "p-2 text-center whitespace-nowrap font-extrabold border-r";
 
-    const td = "p-2 text-center border-r " + (darkMode ? "border-white/15" : "border-[rgba(109,88,41,0.22)]");
+    const td = "p-2 text-center border-r";
 
-    const tr =
-      "border-b cursor-pointer transition " +
-      (darkMode ? "border-white/15 hover:bg-white/5" : "border-[rgba(109,88,41,0.18)] hover:bg-[rgba(109,88,41,0.06)]");
+    const tr = "weli-estadisticas-row border-b transition-colors duration-200";
 
     const warn =
       "rounded-2xl border px-5 py-4 font-semibold " +
@@ -485,146 +864,323 @@ export default function ListarEstadisticas() {
       (darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
 
     const actionBtn =
-      "inline-flex items-center justify-center p-2 rounded-lg border transition-all " +
-      "hover:brightness-110 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed";
+      "weli-estadisticas-action inline-flex items-center justify-center p-2 rounded-lg border transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed";
 
-    const actionStyle = {
-      background: `linear-gradient(135deg, ${PALETTE_X.copper}, ${PALETTE_X.terracotta})`,
-      color: "#1a1208",
-      borderColor: darkMode ? "rgba(255,255,255,0.20)" : "rgba(109,88,41,0.18)",
+    return {
+      page,
+      content,
+      card,
+      thead,
+      th,
+      td,
+      tr,
+      warn,
+      danger,
+      actionBtn,
+
+      rootStyle: {
+        color: tokens.text,
+      },
+
+      titleStyle: {
+        color: tokens.text,
+      },
+
+      subTextStyle: {
+        color: tokens.textMuted,
+      },
+
+      cardStyle: {
+        backgroundColor: tokens.surface,
+
+        borderColor: tokens.border,
+
+        color: tokens.text,
+      },
+
+      theadStyle: {
+        backgroundColor: tokens.tableHead,
+
+        color: tokens.text,
+      },
+
+      thStyle: {
+        borderColor: tokens.border,
+
+        color: tokens.text,
+      },
+
+      tdStyle: {
+        borderColor: tokens.border,
+
+        color: tokens.text,
+      },
+
+      actionStyle: {
+        backgroundColor: tokens.primary,
+
+        borderColor: tokens.primary,
+
+        color: tokens.primaryContrast,
+      },
+
+      cssVars: {
+        "--weli-estadisticas-row-border": tokens.border,
+
+        "--weli-estadisticas-row-hover": tokens.surfaceHover,
+
+        "--weli-estadisticas-focus": tokens.focus,
+      },
     };
+  }, [darkMode, tokens]);
 
-    return { shell, titleMain, subText, card, thead, th, td, tr, warn, danger, actionBtn, actionStyle };
-  }, [darkMode]);
+  /* =======================================================
+     LOADING
+  ======================================================= */
 
-  if (isLoading) return <IsLoading />;
+  if (isLoading) {
+    return <IsLoading />;
+  }
+
+  /* =======================================================
+     ERROR
+  ======================================================= */
 
   if (error) {
     return (
-      <div className={`${ui.shell} min-h-screen font-sans flex items-center justify-center px-6`}>
-        <div className={`${ui.card} p-6 max-w-xl w-full`}>
-          <div className={ui.danger}>{error}</div>
+      <div className={`${ui.page} font-sans`} style={ui.rootStyle}>
+        <div className={`${ui.content} min-h-[70vh] flex items-center justify-center`}>
+          <div className={`${ui.card} p-6 max-w-xl w-full`} style={ui.cardStyle}>
+            <div className={ui.danger}>{error}</div>
+          </div>
         </div>
       </div>
     );
   }
 
+  /* =======================================================
+     SCOPE LABEL
+  ======================================================= */
+
   const scopeLabelParts = [];
-  if (scope.academia_id) scopeLabelParts.push(`Academia #${scope.academia_id}`);
-  if (scope.academia_nombre) scopeLabelParts.push(String(scope.academia_nombre));
-  if (scope.deporte_id) scopeLabelParts.push(`Deporte #${scope.deporte_id}`);
+
+  if (scope.academia_id) {
+    scopeLabelParts.push(`Academia #${scope.academia_id}`);
+  }
+
+  if (scope.academia_nombre) {
+    scopeLabelParts.push(String(scope.academia_nombre));
+  }
+
+  if (scope.deporte_id) {
+    scopeLabelParts.push(`Deporte #${scope.deporte_id}`);
+  }
+
   const scopeLabel = scopeLabelParts.join(" · ");
 
+  /* =======================================================
+     RENDER
+  ======================================================= */
+
   return (
-    <div className={`${ui.shell} min-h-screen font-sans`}>
-      <header className="px-6 pt-6 text-center">
-        <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>
-          Registrar Estadísticas de Jugadores
-        </h1>
-        {!!scopeLabel && <p className={`text-sm mt-2 ${ui.subText}`}>{scopeLabel}</p>}
-      </header>
+    <div className={`${ui.page} font-sans`} style={ui.rootStyle}>
+      <style>
+        {`
+          .weli-estadisticas-row {
+            border-color: var(--weli-estadisticas-row-border);
+          }
 
-      <main className="px-6 pb-20">
-        {!scope.deporte_id && (
-          <div className="max-w-5xl mx-auto mt-6">
-            <div className={ui.warn}>
-              Falta <b>deporte_id</b> en el scope. Si estás en super-dashboard, selecciona una academia con deporte
-              asignado.
+          .weli-estadisticas-row:hover {
+            background-color: var(--weli-estadisticas-row-hover);
+          }
+
+          .weli-estadisticas-action:focus-visible {
+            outline: 2px solid var(--weli-estadisticas-focus);
+            outline-offset: 3px;
+          }
+        `}
+      </style>
+
+      <div className={ui.content}>
+        {/* =================================================
+            HEADER
+        ================================================= */}
+
+        <header className="text-center">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight" style={ui.titleStyle}>
+            Registrar Estadísticas de Jugadores
+          </h1>
+
+          {!!scopeLabel && (
+            <p className="text-sm sm:text-[15px] mt-2" style={ui.subTextStyle}>
+              {scopeLabel}
+            </p>
+          )}
+        </header>
+
+        {/* =================================================
+            MAIN
+        ================================================= */}
+
+        <main>
+          {/* ===============================================
+              SIN DEPORTE
+          =============================================== */}
+
+          {!scope.deporte_id && (
+            <div className="max-w-5xl mx-auto mt-5">
+              <div className={ui.warn}>
+                Falta <b>deporte_id</b> en el scope. Si estás en super-dashboard, selecciona una academia con deporte
+                asignado.
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {grupos.length === 0 ? (
-          <div className="max-w-5xl mx-auto mt-8">
-            <div className={`${ui.card} p-6 text-center ${darkMode ? "text-white/75" : "text-ra-marron/80"}`}>
-              No hay jugadores registrados para este contexto.
+          {/* ===============================================
+              SIN JUGADORES
+          =============================================== */}
+
+          {grupos.length === 0 ? (
+            <div className="max-w-5xl mx-auto mt-5">
+              <div className={`${ui.card} p-6 text-center`} style={ui.cardStyle}>
+                <span style={ui.subTextStyle}>No hay jugadores registrados para este contexto.</span>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {grupos.map(({ categoria, items }) => (
-              <section key={categoria} className={`${ui.card} p-6`}>
-                <header className="mb-4 flex items-baseline justify-between">
-                  <h2
-                    className="text-lg font-extrabold"
-                    style={{ color: darkMode ? PALETTE_X.cream : PALETTE_X.brown }}
-                  >
-                    {categoria}
-                  </h2>
-                  <span className={darkMode ? "text-xs text-white/70" : "text-xs text-ra-marron/70"}>
-                    {items.length} jugador{items.length !== 1 ? "es" : ""}
-                  </span>
-                </header>
+          ) : (
+            /* =============================================
+               GRUPOS POR CATEGORÍA
+            ============================================= */
 
-                {/* ✅ SIN SCROLL HORIZONTAL: no overflow-x-auto, no min-w */}
-                <div className="w-full">
-                  <table className="w-full text-xs sm:text-sm table-fixed">
-                    <thead className={ui.thead}>
-                      <tr>
-                        {/* ✅ un pelín más compacto */}
-                        <th className={`${ui.th} w-28`}>RUT</th>
-                        <th className={ui.th}>Nombre</th>
+            <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {grupos.map(({ categoria, items }) => (
+                <section key={categoria} className={`${ui.card} p-5 sm:p-6`} style={ui.cardStyle}>
+                  {/* =====================================
+                        CABECERA
+                    ===================================== */}
 
-                        {/* ✅ FIX corte: ancho real suficiente + nowrap */}
-                        <th className={`${ui.th} w-20 whitespace-nowrap`}>Acciones</th>
-                      </tr>
-                    </thead>
+                  <header className="mb-4 flex items-baseline justify-between gap-3">
+                    <h2 className="text-lg font-extrabold" style={ui.titleStyle}>
+                      {categoria}
+                    </h2>
 
-                    <tbody>
-                      {items.map((j) => {
-                        const isSuperTree = isSuperTreePath(location.pathname);
-                        const basePath = isSuperTree ? "/super-dashboard/admin/dashboard" : "/admin";
+                    <span className="text-xs" style={ui.subTextStyle}>
+                      {items.length} jugador
+                      {items.length !== 1 ? "es" : ""}
+                    </span>
+                  </header>
 
-                        const to = `${basePath}/registrar-estadisticas/detalle-estadistica`;
-                        const from = `${basePath}/registrar-estadisticas`;
+                  {/* =====================================
+                        TABLA
+                        SIN SCROLL HORIZONTAL
+                    ===================================== */}
 
-                        return (
-                          <tr key={String(j.jugador_id ?? j.rut)} className={ui.tr}>
-                            <td className={`${ui.td} break-all`}>{j.rutConDV}</td>
+                  <div className="w-full">
+                    <table className="w-full text-xs sm:text-sm table-fixed border-separate border-spacing-0">
+                      <thead className={ui.thead} style={ui.theadStyle}>
+                        <tr>
+                          <th className={`${ui.th} w-28`} style={ui.thStyle}>
+                            RUT
+                          </th>
 
-                            {/* ✅ Nombre no empuja: se trunca */}
-                            <td className={`${ui.td}`}>
-                              <span className="block truncate" title={j.nombre}>
-                                {j.nombre}
-                              </span>
-                            </td>
+                          <th className={ui.th} style={ui.thStyle}>
+                            Nombre
+                          </th>
 
-                            <td className={`${ui.td} w-24`}>
-                              <button
-                                onClick={() =>
-                                  navigate(to, {
-                                    state: {
-                                      from,
-                                      rut: String(j.rut ?? ""),
-                                      jugador_id: j.jugador_id ?? null,
-                                      scope: { ...scope },
-                                      breadcrumb: [
-                                        { label: "Registrar Estadísticas", to: from },
-                                        { label: "Detalle Estadística", to },
-                                      ],
-                                    },
-                                  })
-                                }
-                                className={ui.actionBtn}
-                                style={ui.actionStyle}
-                                aria-label={`Editar estadísticas de ${j.nombre}`}
-                                title={`Editar estadísticas de ${j.nombre}`}
-                                disabled={!j.jugador_id && !j.rut}
+                          <th
+                            className={`${ui.th} w-20 whitespace-nowrap border-r-0`}
+                            style={{
+                              ...ui.thStyle,
+
+                              borderRightColor: "transparent",
+                            }}
+                          >
+                            Acciones
+                          </th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {items.map((jugador) => {
+                          const isSuperTree = isSuperTreePath(location.pathname);
+
+                          const basePath = isSuperTree ? "/super-dashboard/admin/dashboard" : "/admin";
+
+                          const to = `${basePath}/registrar-estadisticas/detalle-estadistica`;
+
+                          const from = `${basePath}/registrar-estadisticas`;
+
+                          return (
+                            <tr key={String(jugador.jugador_id ?? jugador.rut)} className={ui.tr} style={ui.cssVars}>
+                              <td className={`${ui.td} break-all`} style={ui.tdStyle}>
+                                {jugador.rutConDV}
+                              </td>
+
+                              <td className={ui.td} style={ui.tdStyle}>
+                                <span className="block truncate" title={jugador.nombre}>
+                                  {jugador.nombre}
+                                </span>
+                              </td>
+
+                              <td
+                                className={`${ui.td} w-24 border-r-0`}
+                                style={{
+                                  ...ui.tdStyle,
+
+                                  borderRightColor: "transparent",
+                                }}
                               >
-                                <Pencil size={16} />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            ))}
-          </div>
-        )}
-      </main>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    navigate(to, {
+                                      state: {
+                                        from,
+
+                                        rut: String(jugador.rut ?? ""),
+
+                                        jugador_id: jugador.jugador_id ?? null,
+
+                                        scope: {
+                                          ...scope,
+                                        },
+
+                                        breadcrumb: [
+                                          {
+                                            label: "Registrar Estadísticas",
+
+                                            to: from,
+                                          },
+
+                                          {
+                                            label: "Detalle Estadística",
+
+                                            to,
+                                          },
+                                        ],
+                                      },
+                                    })
+                                  }
+                                  className={ui.actionBtn}
+                                  style={ui.actionStyle}
+                                  aria-label={`Editar estadísticas de ${jugador.nombre}`}
+                                  title={`Editar estadísticas de ${jugador.nombre}`}
+                                  disabled={!jugador.jugador_id && !jugador.rut}
+                                >
+                                  <Pencil size={16} />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }

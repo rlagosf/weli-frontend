@@ -1,11 +1,8 @@
 // src/pages/admin/detalleEstadistica.jsx
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
-
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-
 import { jwtDecode } from "jwt-decode";
-
 import { LoaderCircle } from "lucide-react";
 
 import { useTheme } from "../../context/ThemeContext";
@@ -13,24 +10,7 @@ import { useTheme } from "../../context/ThemeContext";
 import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
 
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
-
 import { formatRutWithDV } from "../../services/rut";
-
-/* =========================================================
-   🎨 CONJUNTO X
-========================================================= */
-
-const PALETTE = {
-  copper: "#aa5013",
-  brown: "#6d5829",
-  gold: "#b79f69",
-  cream: "#e8dac4",
-  sand: "#ffdda1",
-  caramel: "#dda272",
-  terracotta: "#e2773b",
-};
-
-const ACCENT = PALETTE.copper;
 
 /* =========================================================
    RUTAS
@@ -55,20 +35,11 @@ const readSelectedAcademiaId = () => {
       return 0;
     }
 
-    /* ===============================================
-         Formato histórico:
-         "12"
-      =============================================== */
-
     const direct = Number(raw);
 
     if (Number.isInteger(direct) && direct > 0) {
       return direct;
     }
-
-    /* ===============================================
-         Snapshot JSON
-      =============================================== */
 
     const parsed = JSON.parse(raw);
 
@@ -98,9 +69,9 @@ const isExpired = (decoded) => {
   return exp <= now;
 };
 
-/* ─────────────────────────────────────────────────────────
+/* =========================================================
    ROL
-───────────────────────────────────────────────────────── */
+========================================================= */
 
 const extractRol = (decoded) => {
   const rawRol = decoded?.rol_id ?? decoded?.user?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol ?? 0;
@@ -110,10 +81,10 @@ const extractRol = (decoded) => {
   return Number.isInteger(parsed) && [1, 2, 3].includes(parsed) ? parsed : 0;
 };
 
-/* ─────────────────────────────────────────────────────────
+/* =========================================================
    ACADEMIA JWT
    ADMIN / STAFF
-───────────────────────────────────────────────────────── */
+========================================================= */
 
 const extractTokenAcademiaId = (decoded) => {
   const academiaId = Number(decoded?.academia_id ?? decoded?.user?.academia_id ?? 0);
@@ -129,24 +100,10 @@ const getErrStatus = (error) => error?.status ?? error?.response?.status ?? 0;
 
 /* =========================================================
    GUARD
-
-   REGLAS:
-
-   ADMIN / STAFF
-   → academia desde JWT.
-
-   SUPERADMIN
-   → academia desde selector.
-
-   selectedAcademia NO se exige a roles 1/2.
 ========================================================= */
 
 const ensureScopeOrRedirect = ({ navigate, isSuperTree }) => {
   const token = getToken?.() || "";
-
-  /* ===============================================
-       SIN TOKEN
-    =============================================== */
 
   if (!token) {
     clearToken?.();
@@ -165,10 +122,6 @@ const ensureScopeOrRedirect = ({ navigate, isSuperTree }) => {
   try {
     const decoded = jwtDecode(token);
 
-    /* ===============================================
-         TOKEN EXPIRADO
-      =============================================== */
-
     if (isExpired(decoded)) {
       clearToken?.();
 
@@ -185,15 +138,7 @@ const ensureScopeOrRedirect = ({ navigate, isSuperTree }) => {
 
     const rol = extractRol(decoded);
 
-    /* ===============================================
-         ROL INVÁLIDO
-      =============================================== */
-
     if (![1, 2, 3].includes(rol)) {
-      /*
-       * Token decodificable pero rol ajeno
-       * a este panel.
-       */
       navigate("/admin", {
         replace: true,
       });
@@ -205,17 +150,11 @@ const ensureScopeOrRedirect = ({ navigate, isSuperTree }) => {
       };
     }
 
-    /* =================================================
-         SUPERADMIN TREE
-      ================================================= */
+    /* =====================================================
+       SUPERADMIN TREE
+    ===================================================== */
 
     if (isSuperTree) {
-      /*
-       * Roles 1 y 2 no pueden utilizar
-       * el árbol interno del Superadmin.
-       *
-       * NO se destruye sesión.
-       */
       if (rol !== 3) {
         navigate("/admin", {
           replace: true,
@@ -230,12 +169,6 @@ const ensureScopeOrRedirect = ({ navigate, isSuperTree }) => {
 
       const academiaId = readSelectedAcademiaId();
 
-      /*
-       * Superadmin válido, pero sin
-       * academia objetivo seleccionada.
-       *
-       * NO logout.
-       */
       if (academiaId <= 0) {
         navigate("/super-dashboard", {
           replace: true,
@@ -255,16 +188,10 @@ const ensureScopeOrRedirect = ({ navigate, isSuperTree }) => {
       };
     }
 
-    /* =================================================
-         ADMIN TREE
-      ================================================= */
+    /* =====================================================
+       SUPERADMIN FUERA DE SU ÁRBOL
+    ===================================================== */
 
-    /*
-     * Superadmin debe ingresar por su propio
-     * árbol tenantizado.
-     *
-     * NO destruimos sesión.
-     */
     if (rol === 3) {
       navigate("/super-dashboard", {
         replace: true,
@@ -277,19 +204,12 @@ const ensureScopeOrRedirect = ({ navigate, isSuperTree }) => {
       };
     }
 
-    /* =================================================
-         ADMIN / STAFF
-         roles 1 / 2
-
-         ACADEMIA DESDE JWT.
-      ================================================= */
+    /* =====================================================
+       ADMIN / STAFF
+    ===================================================== */
 
     const academiaId = extractTokenAcademiaId(decoded);
 
-    /*
-     * Un token Admin/Staff del contrato vigente
-     * debe contener academia_id.
-     */
     if (academiaId <= 0) {
       clearToken?.();
 
@@ -333,10 +253,6 @@ const BASE_GROUP = {
 };
 
 const SPORT_CONFIG = {
-  /* =======================================================
-     FÚTBOL
-  ======================================================= */
-
   1: {
     nombre: "Fútbol",
 
@@ -371,10 +287,6 @@ const SPORT_CONFIG = {
     },
   },
 
-  /* =======================================================
-     VÓLEIBOL
-  ======================================================= */
-
   2: {
     nombre: "Vóleibol",
 
@@ -395,10 +307,6 @@ const SPORT_CONFIG = {
     },
   },
 
-  /* =======================================================
-     TENIS
-  ======================================================= */
-
   3: {
     nombre: "Tenis",
 
@@ -412,10 +320,6 @@ const SPORT_CONFIG = {
       Totales: ["puntos_ganados_total", "juegos_ganados_total"],
     },
   },
-
-  /* =======================================================
-     PÁDEL
-  ======================================================= */
 
   4: {
     nombre: "Pádel",
@@ -435,10 +339,6 @@ const SPORT_CONFIG = {
     },
   },
 
-  /* =======================================================
-     TENIS DE MESA
-  ======================================================= */
-
   5: {
     nombre: "Tenis de mesa",
 
@@ -455,10 +355,6 @@ const SPORT_CONFIG = {
     },
   },
 
-  /* =======================================================
-     BÁSQUETBOL
-  ======================================================= */
-
   6: {
     nombre: "Básquetbol",
 
@@ -474,6 +370,24 @@ const SPORT_CONFIG = {
       Eficiencia: ["ts_pct", "efg_pct", "usg_pct"],
     },
   },
+
+  7: {
+    nombre: "Fútbol Americano",
+
+    grupos: {
+      Pases: ["pases_completos", "pases_intentados", "pases_yardas", "pases_touchdowns", "pases_intercepciones"],
+
+      Acarreos: ["acarreos_intentos", "acarreos_yardas", "acarreos_touchdowns"],
+
+      Recepciones: ["recepciones_total", "recepciones_yardas", "recepciones_touchdowns"],
+
+      Defensa: ["tackles_totales", "sacks", "intercepciones_defensivas", "fumbles_recuperados"],
+
+      Generales: ["yardas_totales", "perdidas_balon", "tiempo_posesion_segundos"],
+
+      "Tercer Down": ["tercer_down_intentos", "tercer_down_conversiones", "tercer_down_efectividad_pct"],
+    },
+  },
 };
 
 /* =========================================================
@@ -481,10 +395,6 @@ const SPORT_CONFIG = {
 ========================================================= */
 
 const FIELD_LABELS = {
-  /* =======================
-     Base
-  ======================= */
-
   minutos_jugados: "Minutos jugados",
 
   partidos_jugados: "Partidos jugados",
@@ -494,10 +404,6 @@ const FIELD_LABELS = {
   dias_baja: "Días de baja",
 
   sanciones_federativas: "Sanciones federativas",
-
-  /* =======================
-     Fútbol
-  ======================= */
 
   goles: "Goles",
 
@@ -557,10 +463,6 @@ const FIELD_LABELS = {
 
   titular_partidos: "Partidos como titular",
 
-  /* =======================
-     Vóleibol
-  ======================= */
-
   ataque_intentos: "Intentos de ataque",
 
   ataque_puntos: "Puntos de ataque",
@@ -597,10 +499,6 @@ const FIELD_LABELS = {
 
   errores_totales: "Errores totales",
 
-  /* =======================
-     Tenis
-  ======================= */
-
   primer_servicio_pct: "Primer servicio (%)",
 
   puntos_primer_servicio: "Puntos con primer servicio",
@@ -624,10 +522,6 @@ const FIELD_LABELS = {
   puntos_ganados_total: "Puntos ganados",
 
   juegos_ganados_total: "Juegos ganados",
-
-  /* =======================
-     Pádel
-  ======================= */
 
   primer_saque_pct: "Primer saque (%)",
 
@@ -661,10 +555,6 @@ const FIELD_LABELS = {
 
   remates_errores: "Errores de remate",
 
-  /* =======================
-     Tenis de mesa
-  ======================= */
-
   efectividad_servicio_pct: "Efectividad de servicio (%)",
 
   efectividad_devolucion_pct: "Efectividad de devolución (%)",
@@ -682,10 +572,6 @@ const FIELD_LABELS = {
   fc_max: "Frecuencia cardíaca máxima",
 
   lactato: "Lactato",
-
-  /* =======================
-     Básquetbol
-  ======================= */
 
   puntos: "Puntos",
 
@@ -710,6 +596,46 @@ const FIELD_LABELS = {
   pir: "PIR",
 
   per: "PER",
+
+  pases_completos: "Pases completos",
+
+  pases_intentados: "Pases intentados",
+
+  pases_yardas: "Yardas por pase",
+
+  pases_touchdowns: "Touchdowns por pase",
+
+  pases_intercepciones: "Intercepciones sufridas",
+
+  acarreos_intentos: "Intentos de acarreo",
+
+  acarreos_yardas: "Yardas por acarreo",
+
+  acarreos_touchdowns: "Touchdowns por acarreo",
+
+  recepciones_yardas: "Yardas por recepción",
+
+  recepciones_touchdowns: "Touchdowns por recepción",
+
+  tackles_totales: "Tackles totales",
+
+  sacks: "Sacks",
+
+  intercepciones_defensivas: "Intercepciones defensivas",
+
+  fumbles_recuperados: "Fumbles recuperados",
+
+  yardas_totales: "Yardas totales",
+
+  perdidas_balon: "Pérdidas de balón",
+
+  tiempo_posesion_segundos: "Tiempo de posesión (segundos)",
+
+  tercer_down_intentos: "Tercer down - intentos",
+
+  tercer_down_conversiones: "Tercer down - conversiones",
+
+  tercer_down_efectividad_pct: "Tercer down - efectividad (%)",
 };
 
 /* =========================================================
@@ -732,16 +658,13 @@ const DECIMAL_FIELDS = new Set([
   "usg_pct",
   "pir",
   "per",
+  "tercer_down_efectividad_pct",
 ]);
-
-/* =========================================================
-   CAMPOS CON SIGNO
-========================================================= */
 
 const SIGNED_FIELDS = new Set(["plus_minus"]);
 
 /* =========================================================
-   CONFIG DEPORTE
+   CONFIGURACIÓN AUXILIAR
 ========================================================= */
 
 const getSportConfig = (deporteId) =>
@@ -750,10 +673,6 @@ const getSportConfig = (deporteId) =>
 
     grupos: {},
   };
-
-/* =========================================================
-   GRUPOS
-========================================================= */
 
 const getGroupsForSport = (deporteId) => {
   const config = getSportConfig(deporteId);
@@ -764,15 +683,7 @@ const getGroupsForSport = (deporteId) => {
   };
 };
 
-/* =========================================================
-   CAMPOS DEL DEPORTE
-========================================================= */
-
 const getAllFieldsForSport = (deporteId) => Array.from(new Set(Object.values(getGroupsForSport(deporteId)).flat()));
-
-/* =========================================================
-   FORM VACÍO
-========================================================= */
 
 const blankFormForSport = (deporteId, sid = null) => {
   const output = {
@@ -785,10 +696,6 @@ const blankFormForSport = (deporteId, sid = null) => {
 
   return output;
 };
-
-/* =========================================================
-   JOIN → FLAT
-========================================================= */
 
 const flattenJoinedForSport = (joined, deporteId) => {
   const baseStats = joined?.base || {};
@@ -813,10 +720,6 @@ const flattenJoinedForSport = (joined, deporteId) => {
   return output;
 };
 
-/* =========================================================
-   NORMALIZACIÓN NUMÉRICA
-========================================================= */
-
 const normalizeNumeric = (campo, value) => {
   const raw = String(value ?? "").trim();
 
@@ -834,10 +737,6 @@ const normalizeNumeric = (campo, value) => {
 
   return Number.isFinite(number) ? number : 0;
 };
-
-/* =========================================================
-   PAYLOAD EDITABLE
-========================================================= */
 
 const pickEditablePayloadForSport = (object, deporteId) => {
   const output = {};
@@ -858,7 +757,7 @@ const pickEditablePayloadForSport = (object, deporteId) => {
 ========================================================= */
 
 export default function DetalleEstadistica() {
-  const { darkMode } = useTheme();
+  const { darkMode, themeTokens } = useTheme();
 
   const { rut } = useParams();
 
@@ -868,34 +767,18 @@ export default function DetalleEstadistica() {
 
   const mountedRef = useRef(true);
 
-  /* =======================================================
-     ÁRBOL
-  ======================================================= */
-
   const superTree = useMemo(() => isSuperTreePath(location.pathname), [location.pathname]);
 
   const basePath = superTree ? SUPER_ADMIN_ROOT : "/admin";
-
-  /* =======================================================
-     VOLVER
-  ======================================================= */
 
   const backTo = useMemo(
     () => location.state?.from || `${basePath}/registrar-estadisticas`,
     [location.state, basePath]
   );
 
-  /* =======================================================
-     AUTH / PERMISOS
-  ======================================================= */
-
   const [rol, setRol] = useState(null);
 
   const [canWrite, setCanWrite] = useState(false);
-
-  /* =======================================================
-     JUGADOR
-  ======================================================= */
 
   const [jugador, setJugador] = useState(null);
 
@@ -903,19 +786,11 @@ export default function DetalleEstadistica() {
 
   const [deporteId, setDeporteId] = useState(null);
 
-  /* =======================================================
-     STATS
-  ======================================================= */
-
   const [statsId, setStatsId] = useState(null);
 
   const [formData, setFormData] = useState({});
 
   const [statsExistentes, setStatsExistentes] = useState(null);
-
-  /* =======================================================
-     UI STATE
-  ======================================================= */
 
   const [loading, setLoading] = useState(true);
 
@@ -984,90 +859,252 @@ export default function DetalleEstadistica() {
   }, [location.pathname, location.search]);
 
   /* =======================================================
+     TOKENS DE APARIENCIA
+  ======================================================= */
+
+  const tokens = useMemo(() => {
+    if (themeTokens) {
+      return themeTokens;
+    }
+
+    if (darkMode) {
+      return {
+        surface: "#1F2937",
+
+        surfaceSoft: "#172033",
+
+        surface2: "#263244",
+
+        surfaceHover: "#374151",
+
+        primary: "#FFDDA1",
+
+        primaryHover: "#FFE5B8",
+
+        primaryContrast: "#3F2D18",
+
+        secondary: "#B79F69",
+
+        secondaryHover: "#C8B27F",
+
+        secondaryContrast: "#111827",
+
+        text: "#F9FAFB",
+
+        textMuted: "#D1D5DB",
+
+        icon: "#FFDDA1",
+
+        border: "#374151",
+
+        borderStrong: "#4B5563",
+
+        inputBg: "#111827",
+
+        inputText: "#F9FAFB",
+
+        inputBorder: "#4B5563",
+
+        tableHead: "#172033",
+
+        focus: "#FFDDA1",
+
+        overlay: "rgba(0,0,0,.65)",
+      };
+    }
+
+    return {
+      surface: "#FFFFFF",
+
+      surfaceSoft: "#FAF6EE",
+
+      surface2: "#F7EAD4",
+
+      surfaceHover: "#FFF9F2",
+
+      primary: "#AA5013",
+
+      primaryHover: "#994812",
+
+      primaryContrast: "#FFFFFF",
+
+      secondary: "#6D5829",
+
+      secondaryHover: "#5E4B23",
+
+      secondaryContrast: "#FFFFFF",
+
+      text: "#3B2A1E",
+
+      textMuted: "#766657",
+
+      icon: "#AA5013",
+
+      border: "#D8C7AE",
+
+      borderStrong: "#BFA684",
+
+      inputBg: "#FFFFFF",
+
+      inputText: "#3B2A1E",
+
+      inputBorder: "#9B7B50",
+
+      tableHead: "#F7EAD4",
+
+      focus: "#AA5013",
+
+      overlay: "rgba(0,0,0,.55)",
+    };
+  }, [themeTokens, darkMode]);
+
+  /* =======================================================
      UI
+
+     Dashboard es dueño del fondo global.
+     Esta página permanece transparente.
   ======================================================= */
 
   const ui = useMemo(() => {
-    const shell =
-      "min-h-screen font-sans " +
-      (darkMode
-        ? "bg-[#111827] text-white"
-        : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron");
+    const page = "min-h-[calc(100vh-100px)] w-full bg-transparent px-3 sm:px-5 lg:px-7 2xl:px-10 pt-4 pb-16 font-sans";
 
-    const titleMain = darkMode ? "text-white" : "text-ra-marron";
-
-    const subText = darkMode ? "text-white/70" : "text-ra-marron/70";
+    const content = "w-full max-w-[1700px] mx-auto";
 
     const panel =
-      "max-w-6xl mx-auto mt-6 rounded-2xl border shadow-lg overflow-hidden " +
-      (darkMode ? "bg-white/10 border-white/15" : "bg-white/60 border-ra-marron/15");
+      "mt-4 rounded-2xl border overflow-hidden shadow-[0_14px_42px_rgba(0,0,0,0.12)] transition-colors duration-200";
 
-    const card =
-      "rounded-2xl border p-4 " + (darkMode ? "bg-white/8 border-white/15" : "bg-white/55 border-ra-marron/15");
+    const card = "rounded-2xl border p-4 transition-colors duration-200";
 
-    const baseCard =
-      "rounded-2xl border p-4 " +
-      (darkMode ? "bg-amber-500/[0.07] border-amber-300/15" : "bg-amber-50/70 border-amber-700/15");
+    const baseCard = "rounded-2xl border p-4 transition-colors duration-200";
 
-    const pill =
-      "rounded-xl border px-3 py-2 " + (darkMode ? "bg-black/20 border-white/15" : "bg-white/55 border-ra-marron/15");
+    const pill = "rounded-xl border px-3 py-2 transition-colors duration-200";
 
     const input =
-      "w-full p-2 rounded-lg text-sm outline-none border transition " +
-      "focus:ring-2 focus:ring-[rgba(170,80,19,0.22)] focus:border-[rgba(170,80,19,0.35)] " +
-      (darkMode
-        ? "bg-black/25 text-white border-white/15 placeholder-white/60"
-        : "bg-white/70 text-ra-marron border-ra-marron/20 placeholder-ra-marron/50");
-
-    const sectionTitleStyle = {
-      color: darkMode ? PALETTE.cream : PALETTE.brown,
-    };
+      "weli-stat-input w-full h-11 sm:h-12 px-3.5 rounded-xl border text-[14px] sm:text-[15px] font-medium outline-none transition focus:ring-2 disabled:opacity-60 disabled:cursor-not-allowed";
 
     const btnGhost =
-      "px-6 py-2 rounded-xl font-extrabold border transition-all shadow-sm " +
-      (darkMode
-        ? "bg-white/10 border-white/15 hover:bg-white/15"
-        : "bg-white/70 border-ra-marron/20 hover:bg-white/80");
+      "weli-stat-ghost inline-flex min-h-11 items-center justify-center rounded-xl border px-5 py-2.5 text-[14px] sm:text-[15px] font-extrabold transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed";
 
     const btnPrimary =
-      "px-6 py-2 rounded-xl font-extrabold transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
-
-    const btnPrimaryStyle = {
-      background: `linear-gradient(135deg, ${PALETTE.copper}, ${PALETTE.terracotta})`,
-
-      color: "#1a1208",
-
-      border: darkMode ? "1px solid rgba(255,255,255,0.20)" : "1px solid rgba(109,88,41,0.18)",
-    };
+      "weli-stat-primary inline-flex min-h-11 items-center justify-center rounded-xl border px-5 py-2.5 text-[14px] sm:text-[15px] font-extrabold transition hover:opacity-90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed";
 
     const danger =
-      "rounded-2xl border px-5 py-4 font-semibold text-center " +
-      (darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-800");
+      "rounded-xl border px-4 py-3 text-[14px] sm:text-[15px] font-semibold text-center " +
+      (darkMode ? "border-red-300/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-800");
 
     const info =
-      "rounded-2xl border px-5 py-4 " +
+      "rounded-2xl border px-4 sm:px-5 py-4 " +
       (darkMode ? "border-sky-300/15 bg-sky-500/[0.07] text-sky-100" : "border-sky-700/15 bg-sky-50/80 text-sky-900");
 
     return {
-      shell,
-      titleMain,
-      subText,
+      page,
+      content,
       panel,
       card,
       baseCard,
       pill,
       input,
-      sectionTitleStyle,
       btnGhost,
       btnPrimary,
-      btnPrimaryStyle,
       danger,
       info,
+
+      pageStyle: {
+        color: tokens.text,
+      },
+
+      titleStyle: {
+        color: tokens.text,
+      },
+
+      subTextStyle: {
+        color: tokens.textMuted,
+      },
+
+      panelStyle: {
+        backgroundColor: tokens.surface,
+
+        borderColor: tokens.border,
+
+        color: tokens.text,
+      },
+
+      cardStyle: {
+        backgroundColor: tokens.surfaceSoft,
+
+        borderColor: tokens.border,
+
+        color: tokens.text,
+      },
+
+      baseCardStyle: {
+        backgroundColor: tokens.surface2,
+
+        borderColor: tokens.borderStrong,
+
+        color: tokens.text,
+      },
+
+      pillStyle: {
+        backgroundColor: tokens.surface,
+
+        borderColor: tokens.border,
+
+        color: tokens.text,
+      },
+
+      inputStyle: {
+        backgroundColor: tokens.inputBg,
+
+        borderColor: tokens.inputBorder,
+
+        color: tokens.inputText,
+
+        "--tw-ring-color": `${tokens.focus}33`,
+      },
+
+      sectionTitleStyle: {
+        color: tokens.text,
+      },
+
+      fieldLabelStyle: {
+        color: tokens.text,
+      },
+
+      ghostStyle: {
+        backgroundColor: tokens.surfaceSoft,
+
+        borderColor: tokens.borderStrong,
+
+        color: tokens.text,
+
+        "--weli-stat-ghost-hover": tokens.surfaceHover,
+
+        "--weli-stat-focus": tokens.focus,
+      },
+
+      primaryStyle: {
+        backgroundColor: tokens.primary,
+
+        borderColor: tokens.primary,
+
+        color: tokens.primaryContrast,
+
+        "--weli-stat-focus": tokens.focus,
+      },
+
+      mutedStyle: {
+        color: tokens.textMuted,
+      },
+
+      valueStyle: {
+        color: tokens.text,
+      },
     };
-  }, [darkMode]);
+  }, [tokens, darkMode]);
 
   /* =======================================================
-     DERIVADOS
+     SPORT CONFIG
   ======================================================= */
 
   const sportConfig = useMemo(() => getSportConfig(deporteId), [deporteId]);
@@ -1084,10 +1121,6 @@ export default function DetalleEstadistica() {
         .replace(/\b\w/g, (match) => match.toUpperCase()),
     []
   );
-
-  /* =======================================================
-     RUT
-  ======================================================= */
 
   const rutConDV = useMemo(() => {
     if (!jugador) {
@@ -1114,19 +1147,12 @@ export default function DetalleEstadistica() {
     if (mountedRef.current) {
       setRol(guard.rol);
 
-      /*
-       * Roles:
-       *
-       * 1 Admin       → escritura
-       * 2 Staff       → lectura
-       * 3 Superadmin  → escritura
-       */
       setCanWrite([1, 3].includes(guard.rol));
     }
   }, [navigate, superTree]);
 
   /* =======================================================
-     CARGAR JUGADOR + STATS
+     CARGAR JUGADOR + ESTADÍSTICAS
   ======================================================= */
 
   useEffect(() => {
@@ -1138,7 +1164,6 @@ export default function DetalleEstadistica() {
 
     (async () => {
       setLoading(true);
-
       setError("");
 
       try {
@@ -1148,9 +1173,9 @@ export default function DetalleEstadistica() {
 
         let jRaw = null;
 
-        /* =================================================
-             1. INTENTAR POR ID
-          ================================================= */
+        /* ===============================================
+           BUSCAR POR ID
+        =============================================== */
 
         if (jid) {
           try {
@@ -1169,33 +1194,15 @@ export default function DetalleEstadistica() {
           } catch (jugadorIdError) {
             const status = getErrStatus(jugadorIdError);
 
-            /*
-             * IMPORTANTE:
-             *
-             * 401/403 NO son motivo para intentar
-             * otro endpoint.
-             *
-             * Deben llegar al manejador principal.
-             */
             if (status === 401 || status === 403) {
               throw jugadorIdError;
             }
-
-            /*
-             * 404:
-             * permitimos fallback por RUT.
-             *
-             * Para mantener la compatibilidad del
-             * flujo existente, otros errores de
-             * resolución del ID también permiten
-             * intentar por RUT.
-             */
           }
         }
 
-        /* =================================================
-             2. FALLBACK POR RUT
-          ================================================= */
+        /* ===============================================
+           FALLBACK POR RUT
+        =============================================== */
 
         if (!jRaw) {
           const jugadorRes = await api.get(`/jugadores/rut/${encodeURIComponent(String(rut))}`, {
@@ -1214,19 +1221,11 @@ export default function DetalleEstadistica() {
           return;
         }
 
-        /* =================================================
-             JUGADOR NO ENCONTRADO
-          ================================================= */
-
         if (!jRaw) {
           setError("El jugador no existe.");
 
           return;
         }
-
-        /* =================================================
-             RESOLVER ID
-          ================================================= */
 
         const inferredJugadorId = Number(jRaw?.id ?? jRaw?.jugador_id ?? 0) || null;
 
@@ -1240,17 +1239,11 @@ export default function DetalleEstadistica() {
           return;
         }
 
-        /* =================================================
-             DEPORTE
-          ================================================= */
-
         const depId = Number(jRaw?.deporte_id ?? location.state?.scope?.deporte_id ?? 0) || null;
 
         if (!depId) {
           setJugador(jRaw);
-
           setJugadorId(jid);
-
           setDeporteId(null);
 
           setError("No se pudo determinar el deporte del jugador.");
@@ -1258,15 +1251,9 @@ export default function DetalleEstadistica() {
           return;
         }
 
-        /* =================================================
-             DEPORTE NO CONFIGURADO
-          ================================================= */
-
         if (!SPORT_CONFIG[depId]) {
           setJugador(jRaw);
-
           setJugadorId(jid);
-
           setDeporteId(depId);
 
           setError(`El deporte_id ${depId} todavía no tiene formulario de estadísticas configurado.`);
@@ -1275,14 +1262,12 @@ export default function DetalleEstadistica() {
         }
 
         setJugador(jRaw);
-
         setJugadorId(jid);
-
         setDeporteId(depId);
 
-        /* =================================================
-             STATS
-          ================================================= */
+        /* ===============================================
+           ESTADÍSTICAS
+        =============================================== */
 
         const joinedRes = await api.get(`/estadisticas/by-jugador/${encodeURIComponent(String(jid))}`, {
           meta: {
@@ -1296,10 +1281,6 @@ export default function DetalleEstadistica() {
 
         const joined = joinedRes?.data?.item ?? joinedRes?.data?.data?.item ?? null;
 
-        /* =================================================
-             SIN ESTADÍSTICAS
-          ================================================= */
-
         if (!joined) {
           setStatsExistentes({});
 
@@ -1310,10 +1291,6 @@ export default function DetalleEstadistica() {
           return;
         }
 
-        /* =================================================
-             STATS EXISTENTES
-          ================================================= */
-
         const flat = flattenJoinedForSport(joined, depId);
 
         const sid = Number(flat?.stats_id ?? flat?.id ?? 0) || null;
@@ -1322,20 +1299,9 @@ export default function DetalleEstadistica() {
 
         setStatsExistentes(flat);
 
-        /*
-         * Modo acumulativo:
-         *
-         * El formulario comienza en cero
-         * y cada valor ingresado se suma
-         * al acumulado actual.
-         */
         setFormData(blankFormForSport(depId, sid));
       } catch (err) {
         const status = getErrStatus(err);
-
-        /* ===============================================
-             401
-          =============================================== */
 
         if (status === 401) {
           clearToken?.();
@@ -1346,12 +1312,6 @@ export default function DetalleEstadistica() {
 
           return;
         }
-
-        /* ===============================================
-             403
-
-             NO LOGOUT
-          =============================================== */
 
         if (status === 403) {
           setError("No tienes permisos para ver/editar estadísticas en esta academia.");
@@ -1366,10 +1326,6 @@ export default function DetalleEstadistica() {
 
           return;
         }
-
-        /* ===============================================
-             404
-          =============================================== */
 
         if (status === 404) {
           setError("El jugador o sus estadísticas no existen.");
@@ -1389,7 +1345,7 @@ export default function DetalleEstadistica() {
   }, [rol, rut, navigate, location.state, backTo]);
 
   /* =======================================================
-     CAMBIO DE CAMPO
+     INPUT
   ======================================================= */
 
   const handleChange = (campo, value) => {
@@ -1401,7 +1357,7 @@ export default function DetalleEstadistica() {
   };
 
   /* =======================================================
-     RESET LOCAL
+     LIMPIAR FORMULARIO LOCAL
   ======================================================= */
 
   const handleResetLocal = () => {
@@ -1427,10 +1383,6 @@ export default function DetalleEstadistica() {
       return;
     }
 
-    /* =================================================
-         PERMISO DE ESCRITURA
-      ================================================= */
-
     if (!canWrite) {
       setError("No tienes permisos para guardar (solo roles 1 y 3).");
 
@@ -1450,19 +1402,10 @@ export default function DetalleEstadistica() {
     }
 
     setSubmitting(true);
-
     setError("");
 
     try {
-      /* =================================================
-           ACUMULADOS ACTUALES
-        ================================================= */
-
       const currentStats = statsExistentes && typeof statsExistentes === "object" ? statsExistentes : {};
-
-      /* =================================================
-           INCREMENTOS
-        ================================================= */
 
       const incStats = formData && typeof formData === "object" ? formData : {};
 
@@ -1482,9 +1425,9 @@ export default function DetalleEstadistica() {
 
       const payload = pickEditablePayloadForSport(sumado, deporteId);
 
-      /* =================================================
+      /* ===============================================
            UPDATE
-        ================================================= */
+        =============================================== */
 
       if (statsId) {
         await api.put(`/estadisticas/${encodeURIComponent(String(statsId))}`, payload, {
@@ -1493,13 +1436,10 @@ export default function DetalleEstadistica() {
           },
         });
       } else {
+        /* =============================================
+             CREATE
+          ============================================= */
 
-      /* =================================================
-           CREATE
-
-           Se conserva exactamente el contrato existente
-           del componente.
-        ================================================= */
         const academia_id =
           Number(jugador?.academia_id ?? 0) || Number(location.state?.scope?.academia_id ?? 0) || null;
 
@@ -1535,10 +1475,6 @@ export default function DetalleEstadistica() {
     } catch (err) {
       const status = getErrStatus(err);
 
-      /* ===============================================
-           401
-        =============================================== */
-
       if (status === 401) {
         clearToken?.();
 
@@ -1548,12 +1484,6 @@ export default function DetalleEstadistica() {
 
         return;
       }
-
-      /* ===============================================
-           403
-
-           NO LOGOUT
-        =============================================== */
 
       if (status === 403) {
         setError("No tienes permisos para guardar estadísticas en esta academia.");
@@ -1575,25 +1505,27 @@ export default function DetalleEstadistica() {
 
   if (loading) {
     return (
-      <div className={`${ui.shell} flex justify-center items-center`}>
-        <LoaderCircle
-          className="animate-spin w-12 h-12"
-          style={{
-            color: ACCENT,
-          }}
-        />
+      <div className={ui.page} style={ui.pageStyle}>
+        <div className={`${ui.content} min-h-[70vh] flex justify-center items-center`}>
+          <LoaderCircle
+            className="animate-spin w-12 h-12"
+            style={{
+              color: tokens.primary,
+            }}
+          />
+        </div>
       </div>
     );
   }
 
   /* =======================================================
-     PRESENTACIÓN JUGADOR
+     DATOS PRESENTACIÓN
   ======================================================= */
 
   const nombreJugador = jugador?.nombre_jugador ?? jugador?.nombre ?? "Jugador";
 
   /* =======================================================
-     RENDER CAMPO
+     CAMPO
   ======================================================= */
 
   const renderField = (campo) => {
@@ -1602,8 +1534,8 @@ export default function DetalleEstadistica() {
     const isSigned = SIGNED_FIELDS.has(campo);
 
     return (
-      <div key={campo} className="space-y-1">
-        <label className={`block text-xs sm:text-sm font-semibold ${darkMode ? "text-white/85" : "text-ra-marron/85"}`}>
+      <div key={campo} className="space-y-1.5">
+        <label className="block text-[13px] sm:text-sm font-extrabold" style={ui.fieldLabelStyle}>
           {pretty(campo)}
         </label>
 
@@ -1614,6 +1546,7 @@ export default function DetalleEstadistica() {
           value={formData?.[campo] ?? 0}
           onChange={(event) => handleChange(campo, event.target.value)}
           className={ui.input}
+          style={ui.inputStyle}
           disabled={!canWrite}
         />
       </div>
@@ -1625,186 +1558,227 @@ export default function DetalleEstadistica() {
   ======================================================= */
 
   return (
-    <div className={ui.shell}>
-      {/* =================================================
-          HEADER
-      ================================================= */}
+    <div className={ui.page} style={ui.pageStyle}>
+      <style>
+        {`
+          .weli-stat-input::placeholder {
+            color: ${tokens.textMuted};
+            opacity: .72;
+          }
 
-      <header className="px-6 pt-6 text-center">
-        <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>Registrar Estadísticas</h1>
+          .weli-stat-input:focus {
+            border-color: ${tokens.focus} !important;
+          }
 
-        <p className={`text-xl sm:text-2xl mt-2 ${ui.subText}`}>
-          {nombreJugador}
-          {" · "}
-          RUT: <span className="font-semibold">{rutConDV}</span>
-        </p>
+          .weli-stat-input:disabled {
+            background-color: ${tokens.surfaceSoft} !important;
+            color: ${tokens.textMuted} !important;
+          }
 
-        <div className={`mt-2 text-sm sm:text-base ${ui.subText}`}>
-          <span className="font-extrabold">{sportConfig.nombre}</span>
+          .weli-stat-ghost:hover:not(:disabled) {
+            background-color: var(--weli-stat-ghost-hover) !important;
+          }
 
-          {jugadorId ? ` · Jugador ID: ${jugadorId}` : ""}
+          .weli-stat-ghost:focus-visible,
+          .weli-stat-primary:focus-visible {
+            outline: 2px solid var(--weli-stat-focus);
+            outline-offset: 3px;
+          }
+        `}
+      </style>
 
-          {statsId ? ` · Stats ID: ${statsId}` : " · Stats: nuevo"}
+      <div className={ui.content}>
+        {/* =================================================
+            HEADER
+        ================================================= */}
 
-          {!canWrite ? " · Solo lectura" : ""}
-        </div>
-      </header>
+        <header className="text-center">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight" style={ui.titleStyle}>
+            Registrar Estadísticas
+          </h1>
 
-      {/* =================================================
-          MAIN
-      ================================================= */}
+          <p className="text-lg sm:text-xl mt-2" style={ui.subTextStyle}>
+            {nombreJugador}
+            {" · "}
+            RUT: <span className="font-semibold">{rutConDV}</span>
+          </p>
 
-      <main className="px-6 pb-20">
-        {/* ===============================================
-            ERROR
-        =============================================== */}
+          <div className="mt-2 text-sm sm:text-base" style={ui.subTextStyle}>
+            <span className="font-extrabold">{sportConfig.nombre}</span>
 
-        {error && (
-          <div className="max-w-6xl mx-auto mt-6">
-            <div className={ui.danger}>{error}</div>
+            {jugadorId ? ` · Jugador ID: ${jugadorId}` : ""}
+
+            {statsId ? ` · Stats ID: ${statsId}` : " · Stats: nuevo"}
+
+            {!canWrite ? " · Solo lectura" : ""}
           </div>
-        )}
+        </header>
 
-        {/* ===============================================
-            INFO
-        =============================================== */}
+        <main>
+          {/* =================================================
+              ERROR
+          ================================================= */}
 
-        <div className="max-w-6xl mx-auto mt-6">
-          <div className={ui.info}>
-            <div className="font-extrabold">Estadísticas de {sportConfig.nombre}</div>
+          {error && (
+            <div className="mt-5">
+              <div className={ui.danger}>{error}</div>
+            </div>
+          )}
 
-            <div className="text-sm mt-1 opacity-80">
-              Las métricas de <b>Base / Generales</b> pertenecen a <code>stats_base</code>. Las demás corresponden al
-              bloque específico de {sportConfig.nombre}.
+          {/* =================================================
+              INFO
+          ================================================= */}
+
+          <div className="mt-4">
+            <div className={ui.info}>
+              <div className="font-extrabold">Estadísticas de {sportConfig.nombre}</div>
+
+              <div className="text-sm mt-1 opacity-80">
+                Las métricas de <b>Base / Generales</b> pertenecen a <code>stats_base</code>. Las demás corresponden al
+                bloque específico de {sportConfig.nombre}.
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* ===============================================
-            PANEL
-        =============================================== */}
+          {/* =================================================
+              PANEL PRINCIPAL
+          ================================================= */}
 
-        <div className={ui.panel}>
-          <div className="p-4 md:p-6">
-            {/* ===========================================
-                VALORES ACTUALES
-            =========================================== */}
+          <div className={ui.panel} style={ui.panelStyle}>
+            <div className="p-4 md:p-6">
+              {/* =============================================
+                  VALORES ACTUALES
+              ============================================= */}
 
-            {statsExistentes && typeof statsExistentes === "object" && Object.keys(statsExistentes).length > 0 && (
-              <div className={`${ui.card} mb-5`}>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div>
-                    <h2 className="text-lg font-extrabold" style={ui.sectionTitleStyle}>
-                      Valores actuales (acumulados)
-                    </h2>
+              {statsExistentes && typeof statsExistentes === "object" && Object.keys(statsExistentes).length > 0 && (
+                <div className={`${ui.card} mb-5`} style={ui.cardStyle}>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-extrabold" style={ui.sectionTitleStyle}>
+                        Valores actuales (acumulados)
+                      </h2>
 
-                    <p className={`text-xs mt-1 ${ui.subText}`}>
-                      Solo se muestran métricas pertinentes a {sportConfig.nombre}.
-                    </p>
+                      <p className="text-xs mt-1" style={ui.subTextStyle}>
+                        Solo se muestran métricas pertinentes a {sportConfig.nombre}.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate(backTo, {
+                          replace: true,
+                        })
+                      }
+                      className={ui.btnGhost}
+                      style={ui.ghostStyle}
+                    >
+                      Volver
+                    </button>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      navigate(backTo, {
-                        replace: true,
-                      })
-                    }
-                    className={ui.btnGhost}
-                  >
-                    Volver
-                  </button>
+                  <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 text-xs">
+                    {allFields.map((campo) => (
+                      <div
+                        key={campo}
+                        className={`flex items-center justify-between gap-2 ${ui.pill}`}
+                        style={ui.pillStyle}
+                      >
+                        <span style={ui.mutedStyle}>{pretty(campo)}</span>
+
+                        <span className="font-extrabold" style={ui.valueStyle}>
+                          {DECIMAL_FIELDS.has(campo)
+                            ? Number(statsExistentes?.[campo] ?? 0).toFixed(2)
+                            : Number(statsExistentes?.[campo] ?? 0)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className="mt-3 text-[12px]" style={ui.subTextStyle}>
+                    Lo que ingreses abajo se <b>suma</b> a estos valores.
+                  </p>
                 </div>
+              )}
 
-                <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 text-xs">
-                  {allFields.map((campo) => (
-                    <div key={campo} className={`flex items-center justify-between gap-2 ${ui.pill}`}>
-                      <span className={darkMode ? "text-white/80" : "text-ra-marron/80"}>{pretty(campo)}</span>
+              {/* =============================================
+                  CAMPOS POR DEPORTE
+              ============================================= */}
 
-                      <span className={darkMode ? "text-white font-extrabold" : "text-ra-marron font-extrabold"}>
-                        {DECIMAL_FIELDS.has(campo)
-                          ? Number(statsExistentes?.[campo] ?? 0).toFixed(2)
-                          : Number(statsExistentes?.[campo] ?? 0)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {Object.entries(campos).map(([categoria, listaCampos]) => {
+                  const isBase = categoria === "Base / Generales";
 
-                <p className={`mt-3 text-[12px] ${ui.subText}`}>
-                  Lo que ingreses abajo se <b>suma</b> a estos valores.
-                </p>
+                  return (
+                    <section
+                      key={categoria}
+                      className={isBase ? ui.baseCard : ui.card}
+                      style={isBase ? ui.baseCardStyle : ui.cardStyle}
+                    >
+                      <div className="mb-3">
+                        <h3 className="text-base font-extrabold" style={ui.sectionTitleStyle}>
+                          {categoria}
+                        </h3>
+
+                        {isBase && (
+                          <p className="text-[11px] mt-1" style={ui.subTextStyle}>
+                            Común a todos los deportes
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{listaCampos.map(renderField)}</div>
+                    </section>
+                  );
+                })}
               </div>
-            )}
 
-            {/* ===========================================
-                FORMULARIO DINÁMICO
-            =========================================== */}
+              {/* =============================================
+                  BOTONES
+              ============================================= */}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-              {Object.entries(campos).map(([categoria, listaCampos]) => {
-                const isBase = categoria === "Base / Generales";
+              <div className="flex flex-wrap justify-center gap-3 mt-7">
+                <button
+                  type="button"
+                  onClick={handleResetLocal}
+                  className={ui.btnGhost}
+                  style={ui.ghostStyle}
+                  disabled={!canWrite}
+                  title={!canWrite ? "Solo lectura" : "Limpiar"}
+                >
+                  Limpiar a 0
+                </button>
 
-                return (
-                  <section key={categoria} className={isBase ? ui.baseCard : ui.card}>
-                    <div className="mb-3">
-                      <h3 className="text-base font-extrabold" style={ui.sectionTitleStyle}>
-                        {categoria}
-                      </h3>
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={submitting || !canWrite || !deporteId || !SPORT_CONFIG[deporteId]}
+                  className={ui.btnPrimary}
+                  style={ui.primaryStyle}
+                  title={
+                    !canWrite ? "Solo roles 1 y 3 pueden guardar" : `Guardar estadísticas de ${sportConfig.nombre}`
+                  }
+                >
+                  {submitting ? "Guardando..." : "Acumular y Guardar"}
+                </button>
 
-                      {isBase && <p className={`text-[11px] mt-1 ${ui.subText}`}>Común a todos los deportes</p>}
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{listaCampos.map(renderField)}</div>
-                  </section>
-                );
-              })}
-            </div>
-
-            {/* ===========================================
-                ACCIONES
-            =========================================== */}
-
-            <div className="flex flex-wrap justify-center gap-3 mt-7">
-              <button
-                type="button"
-                onClick={handleResetLocal}
-                className={ui.btnGhost}
-                disabled={!canWrite}
-                title={!canWrite ? "Solo lectura" : "Limpiar"}
-              >
-                Limpiar a 0
-              </button>
-
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={submitting || !canWrite || !deporteId || !SPORT_CONFIG[deporteId]}
-                className={ui.btnPrimary}
-                style={{
-                  ...(ui.btnPrimaryStyle || {}),
-
-                  opacity: submitting || !canWrite ? 0.6 : 1,
-                }}
-                title={!canWrite ? "Solo roles 1 y 3 pueden guardar" : `Guardar estadísticas de ${sportConfig.nombre}`}
-              >
-                {submitting ? "Guardando..." : "Acumular y Guardar"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(backTo, {
-                    replace: true,
-                  })
-                }
-                className={ui.btnGhost}
-              >
-                Volver
-              </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(backTo, {
+                      replace: true,
+                    })
+                  }
+                  className={ui.btnGhost}
+                  style={ui.ghostStyle}
+                >
+                  Volver
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

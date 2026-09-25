@@ -54,7 +54,8 @@ const getEstadoAcademia = (item) => {
 };
 
 export default function PrevisionMedica() {
-  const { darkMode } = useTheme();
+  const { darkMode, themeTokens } = useTheme();
+
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -140,7 +141,10 @@ export default function PrevisionMedica() {
 
   const handleAuth = useCallback(() => {
     clearToken();
-    navigate("/login", { replace: true });
+
+    navigate("/login", {
+      replace: true,
+    });
   }, [navigate]);
 
   /* =======================================================
@@ -151,6 +155,7 @@ export default function PrevisionMedica() {
     if (breadcrumbBootRef.current) return;
 
     const currentPath = location.pathname;
+
     const breadcrumb = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : [];
 
     const last = breadcrumb[breadcrumb.length - 1];
@@ -209,6 +214,7 @@ export default function PrevisionMedica() {
         navigate(dashboardBase, {
           replace: true,
         });
+
         return;
       }
 
@@ -291,6 +297,7 @@ export default function PrevisionMedica() {
 
     if (estadoGlobal !== ESTADO_ACTIVO) {
       setError("La previsión médica está deshabilitada globalmente y no puede activarse para la academia.");
+
       return;
     }
 
@@ -360,11 +367,9 @@ export default function PrevisionMedica() {
             ...item,
             id: Number(item?.id ?? 0),
             nombre: String(item?.nombre ?? item?.descripcion ?? `Previsión #${item?.id ?? ""}`).trim(),
-
             estado_id: estadoGlobal,
             estado_global_id: estadoGlobal,
             estado_academia_id: estadoAcademia,
-
             disponible: estadoGlobal === ESTADO_ACTIVO && estadoAcademia === ESTADO_ACTIVO,
           };
         })
@@ -406,404 +411,625 @@ export default function PrevisionMedica() {
   }, [previsionesNormalizadas]);
 
   /* =======================================================
+     TOKENS DE APARIENCIA
+  ======================================================= */
+
+  const tokens = useMemo(() => {
+    if (themeTokens) {
+      return themeTokens;
+    }
+
+    if (darkMode) {
+      return {
+        surface: "#1F2937",
+        surfaceSoft: "#172033",
+        surface2: "#263244",
+        surfaceHover: "#374151",
+        primary: "#FFDDA1",
+        primaryContrast: "#3F2D18",
+        text: "#F9FAFB",
+        textMuted: "#D1D5DB",
+        icon: "#FFDDA1",
+        border: "#374151",
+        borderStrong: "#4B5563",
+        inputBg: "#111827",
+        inputText: "#F9FAFB",
+        inputBorder: "#4B5563",
+        tableHead: "#172033",
+        focus: "#FFDDA1",
+      };
+    }
+
+    return {
+      surface: "#FFFFFF",
+      surfaceSoft: "#FAF6EE",
+      surface2: "#F7EAD4",
+      surfaceHover: "#FFF9F2",
+      primary: "#AA5013",
+      primaryContrast: "#FFFFFF",
+      text: "#3B2A1E",
+      textMuted: "#766657",
+      icon: "#AA5013",
+      border: "#D8C7AE",
+      borderStrong: "#BFA684",
+      inputBg: "#FFFFFF",
+      inputText: "#3B2A1E",
+      inputBorder: "#9B7B50",
+      tableHead: "#F7EAD4",
+      focus: "#AA5013",
+    };
+  }, [themeTokens, darkMode]);
+
+  /* =======================================================
      UI
+
+     MISMA BASE VISUAL DE listarPagos.jsx.
+
+     REGLAS:
+     - Dashboard controla el fondo general.
+     - Este componente NO pinta fondo de página.
+     - Sólo tarjetas, tabla, inputs y elementos internos
+       poseen superficies propias.
+     - Todas las superficies consumen themeTokens.
   ======================================================= */
 
   const ui = useMemo(() => {
-    const shell = darkMode
-      ? "bg-[#111827] text-white"
-      : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
+    const page = "min-h-[calc(100vh-100px)] w-full bg-transparent px-3 sm:px-5 lg:px-7 2xl:px-10 pt-4 pb-16";
 
-    const titleMain = darkMode ? "text-white" : "text-ra-marron";
+    const content = "w-full max-w-[1700px] mx-auto";
 
-    const subText = darkMode ? "text-white/65" : "text-ra-marron/65";
+    const card = "rounded-2xl border shadow-[0_14px_42px_rgba(0,0,0,0.12)] transition-colors duration-200";
 
-    const card =
-      "rounded-2xl border shadow-[0_14px_42px_rgba(0,0,0,0.10)] " +
-      (darkMode ? "bg-white/[0.07] border-white/10" : "bg-white/65 border-ra-marron/15");
+    const label = "block mb-1.5 text-[13px] sm:text-[14px] font-extrabold";
 
     const control =
-      "w-full h-11 sm:h-12 px-3.5 rounded-xl text-[14px] sm:text-[15px] font-medium outline-none transition " +
-      (darkMode
-        ? "border border-white/15 bg-[#111827] text-white placeholder:text-white/40 focus:border-[#ffdda1] focus:ring-2 focus:ring-[#ffdda1]/15"
-        : "border border-ra-marron/20 bg-white/80 text-ra-marron placeholder:text-ra-marron/45 focus:border-[#aa5013] focus:ring-2 focus:ring-[#aa5013]/10");
+      "w-full h-11 sm:h-12 px-3.5 rounded-xl border text-[14px] sm:text-[15px] font-medium outline-none transition focus:ring-2";
 
     const secondaryButton =
-      "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] font-bold transition disabled:opacity-50 disabled:cursor-not-allowed " +
-      (darkMode ? "border-white/15 text-white hover:bg-white/10" : "border-ra-marron/20 text-ra-marron hover:bg-white");
+      "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] sm:text-[15px] font-bold transition hover:opacity-90 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed";
+
+    const iconBox =
+      "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors duration-200";
+
+    const innerCard = "rounded-2xl border p-4 transition-colors duration-200";
+
+    const stateBox = "rounded-xl border px-3 py-3 transition-colors duration-200";
 
     const ok =
-      "rounded-2xl border px-4 py-3 text-[14px] font-semibold " +
+      "rounded-xl border px-4 py-3 text-[14px] sm:text-[15px] font-semibold " +
       (darkMode
-        ? "border-emerald-200/20 bg-emerald-500/10 text-emerald-100"
-        : "border-emerald-200 bg-emerald-50 text-emerald-900");
+        ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100"
+        : "border-emerald-200 bg-emerald-50 text-emerald-800");
 
     const danger =
-      "rounded-2xl border px-4 py-3 text-[14px] font-semibold " +
-      (darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
+      "rounded-xl border px-4 py-3 text-[14px] sm:text-[15px] font-semibold " +
+      (darkMode ? "border-red-300/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
 
     return {
-      shell,
-      titleMain,
-      subText,
+      page,
+      content,
       card,
+      label,
       control,
       secondaryButton,
+      iconBox,
+      innerCard,
+      stateBox,
       ok,
       danger,
+
+      pageStyle: {
+        color: tokens.text,
+      },
+
+      cardStyle: {
+        backgroundColor: tokens.surface,
+        borderColor: tokens.border,
+        color: tokens.text,
+      },
+
+      innerCardStyle: {
+        backgroundColor: tokens.surfaceSoft,
+        borderColor: tokens.border,
+        color: tokens.text,
+      },
+
+      stateBoxStyle: {
+        backgroundColor: tokens.surfaceSoft,
+        borderColor: tokens.border,
+        color: tokens.text,
+      },
+
+      titleStyle: {
+        color: tokens.text,
+      },
+
+      subTextStyle: {
+        color: tokens.textMuted,
+      },
+
+      labelStyle: {
+        color: tokens.text,
+      },
+
+      controlStyle: {
+        backgroundColor: tokens.inputBg,
+        borderColor: tokens.inputBorder,
+        color: tokens.inputText,
+        "--tw-ring-color": `${tokens.focus}33`,
+      },
+
+      secondaryButtonStyle: {
+        backgroundColor: tokens.surfaceSoft,
+        borderColor: tokens.borderStrong,
+        color: tokens.text,
+      },
+
+      iconBoxStyle: {
+        backgroundColor: tokens.surface2,
+        borderColor: tokens.border,
+        color: tokens.icon,
+      },
+
+      tableHeadStyle: {
+        backgroundColor: tokens.tableHead,
+        color: tokens.text,
+      },
+
+      dividerStyle: {
+        borderColor: tokens.border,
+      },
     };
-  }, [darkMode]);
+  }, [darkMode, tokens]);
+
+  /* =======================================================
+     LOADING
+  ======================================================= */
 
   if (loading) {
     return (
-      <div className={`${ui.shell} min-h-screen font-sans`}>
-        <div className="min-h-[70vh] flex items-center justify-center">
-          <div className={`text-sm font-semibold ${ui.subText}`}>Cargando previsiones médicas…</div>
+      <div className={`${ui.page} font-sans`} style={ui.pageStyle}>
+        <div className={`${ui.content} min-h-[70vh] flex items-center justify-center`}>
+          <div className="text-sm font-semibold" style={ui.subTextStyle}>
+            Cargando previsiones médicas…
+          </div>
         </div>
       </div>
     );
   }
 
+  /* =======================================================
+     RENDER
+  ======================================================= */
+
   return (
-    <div className={`${ui.shell} min-h-screen font-sans`}>
-      <header className="px-4 sm:px-6 lg:px-8 pt-6 text-center">
-        <div className="mx-auto max-w-4xl">
-          <div
-            className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border ${
-              darkMode
-                ? "border-white/10 bg-white/[0.06] text-[#ffdda1]"
-                : "border-ra-marron/15 bg-white/60 text-[#aa5013]"
-            }`}
-          >
-            <HeartPulse className="h-6 w-6" />
-          </div>
+    <div className={`${ui.page} font-sans`} style={ui.pageStyle}>
+      <div className={ui.content}>
+        {/* =================================================
+            HEADER
+        ================================================= */}
 
-          <h1 className={`text-3xl sm:text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>Previsión Médica</h1>
-
-          <p className={`mx-auto mt-2 max-w-3xl text-[14px] sm:text-[15px] leading-relaxed ${ui.subText}`}>
-            Selecciona qué previsiones médicas estarán disponibles para los jugadores de tu academia. El catálogo
-            general se administra de forma centralizada.
-          </p>
-        </div>
-      </header>
-
-      <main className="px-4 sm:px-6 lg:px-8 pb-20">
-        {/* RESUMEN */}
-
-        <section className="mx-auto mt-7 max-w-7xl grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <SummaryCard darkMode={darkMode} label="Configuradas" value={resumen.total} type="total" />
-
-          <SummaryCard darkMode={darkMode} label="Activas" value={resumen.activas} type="active" />
-
-          <SummaryCard darkMode={darkMode} label="Inactivas" value={resumen.inactivas} type="inactive" />
-        </section>
-
-        <div className="mx-auto mt-4 max-w-7xl space-y-3">
-          {!!mensaje && <div className={ui.ok}>{mensaje}</div>}
-          {!!error && <div className={ui.danger}>{error}</div>}
-        </div>
-
-        {/* GOBERNANZA */}
-
-        <section className={`${ui.card} mx-auto mt-4 max-w-7xl p-4 sm:p-5`}>
-          <div className="flex items-start gap-3">
+        <header className="text-center">
+          <div className="mx-auto max-w-4xl">
             <div
-              className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
-                darkMode ? "bg-[#ffdda1]/10 text-[#ffdda1]" : "bg-[#aa5013]/10 text-[#aa5013]"
-              }`}
+              className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border transition-colors duration-200"
+              style={ui.iconBoxStyle}
             >
-              <ShieldCheck className="h-5 w-5" />
+              <HeartPulse className="h-6 w-6" />
             </div>
 
-            <div>
-              <h2 className={`text-[15px] sm:text-base font-extrabold ${ui.titleMain}`}>
-                Catálogo institucional centralizado
-              </h2>
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight" style={ui.titleStyle}>
+              Previsión Médica
+            </h1>
 
-              <p className={`mt-1 text-[13px] sm:text-sm leading-relaxed ${ui.subText}`}>
-                El administrador de academia puede habilitar o deshabilitar previsiones médicas para su operación, pero
-                no crear, renombrar ni eliminar registros del catálogo general.
-              </p>
-            </div>
+            <p
+              className="mx-auto mt-2 max-w-4xl text-[14px] sm:text-[15px] lg:text-base leading-relaxed"
+              style={ui.subTextStyle}
+            >
+              Selecciona qué previsiones médicas estarán disponibles para los jugadores de tu academia. El catálogo
+              general se administra de forma centralizada.
+            </p>
           </div>
-        </section>
+        </header>
 
-        {/* FILTROS */}
+        <main>
+          {/* =================================================
+              RESUMEN
+          ================================================= */}
 
-        <section className={`${ui.card} mx-auto mt-4 max-w-7xl p-4 sm:p-5`}>
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_180px_auto] gap-3 md:items-end">
-            <div>
-              <label className={`block mb-1.5 text-[13px] sm:text-sm font-extrabold ${ui.titleMain}`}>
-                Buscar previsión médica
-              </label>
+          <section className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <SummaryCard tokens={tokens} label="Configuradas" value={resumen.total} type="total" />
 
-              <div className="relative">
-                <Search
-                  className={`absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 ${
-                    darkMode ? "text-white/40" : "text-ra-marron/45"
-                  }`}
-                />
+            <SummaryCard tokens={tokens} label="Activas" value={resumen.activas} type="active" />
 
-                <input
-                  type="text"
-                  value={filtroTexto}
-                  onChange={(event) => setFiltroTexto(event.target.value)}
-                  placeholder="Nombre o ID"
-                  className={`${ui.control} !pl-10`}
-                />
+            <SummaryCard tokens={tokens} label="Inactivas" value={resumen.inactivas} type="inactive" />
+          </section>
+
+          {/* =================================================
+              MENSAJES
+          ================================================= */}
+
+          <div className="mt-4 space-y-3">
+            {!!mensaje && <div className={ui.ok}>{mensaje}</div>}
+
+            {!!error && <div className={ui.danger}>{error}</div>}
+          </div>
+
+          {/* =================================================
+              GOBERNANZA
+          ================================================= */}
+
+          <section className={`${ui.card} mt-4 p-4 sm:p-5`} style={ui.cardStyle}>
+            <div className="flex items-start gap-3">
+              <div className={`${ui.iconBox} mt-0.5`} style={ui.iconBoxStyle}>
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+
+              <div>
+                <h2 className="text-[15px] sm:text-base font-extrabold" style={ui.titleStyle}>
+                  Catálogo institucional centralizado
+                </h2>
+
+                <p className="mt-1 text-[13px] sm:text-sm leading-relaxed" style={ui.subTextStyle}>
+                  El administrador de academia puede habilitar o deshabilitar previsiones médicas para su operación,
+                  pero no crear, renombrar ni eliminar registros del catálogo general.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* =================================================
+              FILTROS
+          ================================================= */}
+
+          <section className={`${ui.card} mt-4 p-4 sm:p-5`} style={ui.cardStyle}>
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_180px_auto] gap-3 md:items-end">
+              <div>
+                <label className={ui.label} style={ui.labelStyle}>
+                  Buscar previsión médica
+                </label>
+
+                <div className="relative">
+                  <Search
+                    className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 pointer-events-none"
+                    style={{
+                      color: tokens.textMuted,
+                    }}
+                  />
+
+                  <input
+                    type="text"
+                    value={filtroTexto}
+                    onChange={(event) => setFiltroTexto(event.target.value)}
+                    placeholder="Nombre o ID"
+                    className={`${ui.control} !pl-10`}
+                    style={ui.controlStyle}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className={ui.label} style={ui.labelStyle}>
+                  Disponibilidad
+                </label>
+
+                <select
+                  value={filtroEstado}
+                  onChange={(event) => setFiltroEstado(event.target.value)}
+                  className={ui.control}
+                  style={ui.controlStyle}
+                >
+                  <option value="">Todas</option>
+
+                  <option value="1">Activas</option>
+
+                  <option value="0">Inactivas</option>
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={refresh}
+                disabled={reloadBusy}
+                className={ui.secondaryButton}
+                style={ui.secondaryButtonStyle}
+              >
+                <RefreshCw className={`h-4 w-4 ${reloadBusy ? "animate-spin" : ""}`} />
+                Actualizar
+              </button>
+            </div>
+          </section>
+
+          {/* =================================================
+              TABLA
+          ================================================= */}
+
+          <section className={`${ui.card} mt-4 overflow-hidden`} style={ui.cardStyle}>
+            <div
+              className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b px-4 sm:px-5 py-4"
+              style={ui.dividerStyle}
+            >
+              <div>
+                <h2 className="text-lg sm:text-xl font-extrabold" style={ui.titleStyle}>
+                  Catálogo de previsiones médicas
+                </h2>
+
+                <p className="mt-1 text-[13px] sm:text-sm" style={ui.subTextStyle}>
+                  {previsionesFiltradas.length} de {previsionesNormalizadas.length} previsiones mostradas.
+                </p>
               </div>
             </div>
 
-            <div>
-              <label className={`block mb-1.5 text-[13px] sm:text-sm font-extrabold ${ui.titleMain}`}>
-                Disponibilidad
-              </label>
+            {/* ===============================================
+                DESKTOP
+            =============================================== */}
 
-              <select
-                value={filtroEstado}
-                onChange={(event) => setFiltroEstado(event.target.value)}
-                className={ui.control}
-              >
-                <option value="">Todas</option>
-                <option value="1">Activas</option>
-                <option value="0">Inactivas</option>
-              </select>
-            </div>
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-[14px]">
+                <thead style={ui.tableHeadStyle}>
+                  <tr>
+                    <th className="px-5 py-3 text-center font-extrabold">Previsión médica</th>
 
-            <button type="button" onClick={refresh} disabled={reloadBusy} className={ui.secondaryButton}>
-              <RefreshCw className={`h-4 w-4 ${reloadBusy ? "animate-spin" : ""}`} />
-              Actualizar
-            </button>
-          </div>
-        </section>
+                    <th className="px-5 py-3 text-center font-extrabold">Estado global</th>
 
-        {/* TABLA */}
+                    <th className="px-5 py-3 text-center font-extrabold">Disponibilidad</th>
 
-        <section className={`${ui.card} mx-auto mt-4 max-w-7xl overflow-hidden`}>
-          <div
-            className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b px-4 sm:px-5 py-4 ${
-              darkMode ? "border-white/10" : "border-ra-marron/10"
-            }`}
-          >
-            <div>
-              <h2 className={`text-lg sm:text-xl font-extrabold ${ui.titleMain}`}>Catálogo de previsiones médicas</h2>
+                    <th className="px-5 py-3 text-center font-extrabold">Acción</th>
+                  </tr>
+                </thead>
 
-              <p className={`mt-1 text-[13px] sm:text-sm ${ui.subText}`}>
-                {previsionesFiltradas.length} de {previsionesNormalizadas.length} previsiones mostradas.
-              </p>
-            </div>
-          </div>
+                <tbody>
+                  {previsionesFiltradas.map((item) => {
+                    const activoGlobal = item.estado_global_id === ESTADO_ACTIVO;
 
-          {/* DESKTOP */}
+                    const activoAcademia = item.estado_academia_id === ESTADO_ACTIVO;
 
-          <div className="hidden lg:block overflow-x-auto">
-            <table className="w-full text-[14px]">
-              <thead className={darkMode ? "bg-black/20 text-[#ffdda1]" : "bg-[#f7ead4] text-[#6d5829]"}>
-                <tr>
-                  <th className="px-5 py-3 text-center font-extrabold">Previsión médica</th>
+                    const procesando = busyId === item.id;
 
-                  <th className="px-5 py-3 text-center font-extrabold">Estado global</th>
+                    return (
+                      <tr
+                        key={item.id}
+                        className="border-t transition hover:bg-[var(--weli-surface-hover)]"
+                        style={{
+                          borderColor: tokens.border,
+                        }}
+                      >
+                        <td className="px-5 py-4 text-center">
+                          <div
+                            className="font-extrabold"
+                            style={{
+                              color: tokens.text,
+                            }}
+                          >
+                            {item.nombre}
+                          </div>
 
-                  <th className="px-5 py-3 text-center font-extrabold">Disponibilidad</th>
+                          <div
+                            className="mt-0.5 text-[12px]"
+                            style={{
+                              color: tokens.textMuted,
+                            }}
+                          >
+                            ID {item.id}
+                          </div>
+                        </td>
 
-                  <th className="px-5 py-3 text-center font-extrabold">Acción</th>
-                </tr>
-              </thead>
+                        <td className="px-5 py-4 text-center">
+                          <StatusPill tokens={tokens} darkMode={darkMode} active={activoGlobal} />
+                        </td>
 
-              <tbody>
-                {previsionesFiltradas.map((item) => {
-                  const activoGlobal = item.estado_global_id === ESTADO_ACTIVO;
+                        <td className="px-5 py-4 text-center">
+                          <StatusPill tokens={tokens} darkMode={darkMode} active={activoGlobal && activoAcademia} />
+                        </td>
 
-                  const activoAcademia = item.estado_academia_id === ESTADO_ACTIVO;
+                        <td className="px-5 py-4 text-center">
+                          <button
+                            type="button"
+                            onClick={() => cambiarEstado(item)}
+                            disabled={procesando || !activoGlobal}
+                            className={`inline-flex min-h-10 min-w-[150px] items-center justify-center gap-2 rounded-xl border px-4 py-2 text-[13px] font-extrabold transition disabled:opacity-50 disabled:cursor-not-allowed ${
+                              activoAcademia
+                                ? darkMode
+                                  ? "border-red-300/20 bg-red-500/10 text-red-100 hover:bg-red-500/15"
+                                  : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                                : darkMode
+                                  ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/15"
+                                  : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                            }`}
+                          >
+                            <Power className="h-4 w-4" />
 
-                  const procesando = busyId === item.id;
+                            {procesando
+                              ? "Procesando…"
+                              : !activoGlobal
+                                ? "No disponible"
+                                : activoAcademia
+                                  ? "Desactivar"
+                                  : "Activar"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
 
-                  return (
-                    <tr
-                      key={item.id}
-                      className={`border-t ${
-                        darkMode ? "border-white/10 hover:bg-white/[0.04]" : "border-ra-marron/10 hover:bg-white/50"
-                      }`}
-                    >
-                      <td className="px-5 py-4 text-center">
-                        <div className={`font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}>
-                          {item.nombre}
-                        </div>
-
-                        <div className={`mt-0.5 text-[12px] ${ui.subText}`}>ID {item.id}</div>
-                      </td>
-
-                      <td className="px-5 py-4 text-center">
-                        <StatusPill darkMode={darkMode} active={activoGlobal} />
-                      </td>
-
-                      <td className="px-5 py-4 text-center">
-                        <StatusPill darkMode={darkMode} active={activoGlobal && activoAcademia} />
-                      </td>
-
-                      <td className="px-5 py-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() => cambiarEstado(item)}
-                          disabled={procesando || !activoGlobal}
-                          className={`inline-flex min-h-10 min-w-[150px] items-center justify-center gap-2 rounded-xl border px-4 py-2 text-[13px] font-extrabold transition disabled:opacity-50 disabled:cursor-not-allowed ${
-                            activoAcademia
-                              ? darkMode
-                                ? "border-red-300/20 bg-red-500/10 text-red-100 hover:bg-red-500/15"
-                                : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-                              : darkMode
-                                ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/15"
-                                : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                          }`}
-                        >
-                          <Power className="h-4 w-4" />
-
-                          {procesando
-                            ? "Procesando…"
-                            : !activoGlobal
-                              ? "No disponible"
-                              : activoAcademia
-                                ? "Desactivar"
-                                : "Activar"}
-                        </button>
+                  {!previsionesFiltradas.length && (
+                    <tr>
+                      <td
+                        colSpan={4}
+                        className="px-6 py-12 text-center text-[14px]"
+                        style={{
+                          color: tokens.textMuted,
+                        }}
+                      >
+                        No existen previsiones médicas para los filtros seleccionados.
                       </td>
                     </tr>
-                  );
-                })}
+                  )}
+                </tbody>
+              </table>
+            </div>
 
-                {!previsionesFiltradas.length && (
-                  <tr>
-                    <td colSpan={4} className={`px-6 py-12 text-center text-[14px] ${ui.subText}`}>
-                      No existen previsiones médicas para los filtros seleccionados.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+            {/* ===============================================
+                MOBILE / TABLET
+            =============================================== */}
 
-          {/* MOBILE / TABLET */}
+            <div className="lg:hidden p-3 sm:p-4 space-y-3">
+              {previsionesFiltradas.map((item) => {
+                const activoGlobal = item.estado_global_id === ESTADO_ACTIVO;
 
-          <div className="lg:hidden p-3 sm:p-4 space-y-3">
-            {previsionesFiltradas.map((item) => {
-              const activoGlobal = item.estado_global_id === ESTADO_ACTIVO;
+                const activoAcademia = item.estado_academia_id === ESTADO_ACTIVO;
 
-              const activoAcademia = item.estado_academia_id === ESTADO_ACTIVO;
+                const procesando = busyId === item.id;
 
-              const procesando = busyId === item.id;
+                return (
+                  <article key={item.id} className={ui.innerCard} style={ui.innerCardStyle}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3
+                          className="text-base font-extrabold break-words"
+                          style={{
+                            color: tokens.text,
+                          }}
+                        >
+                          {item.nombre}
+                        </h3>
 
-              return (
-                <article
-                  key={item.id}
-                  className={`rounded-2xl border p-4 ${
-                    darkMode ? "border-white/10 bg-black/10" : "border-ra-marron/10 bg-white/45"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className={`text-base font-extrabold break-words ${ui.titleMain}`}>{item.nombre}</h3>
+                        <p
+                          className="mt-1 text-[12px]"
+                          style={{
+                            color: tokens.textMuted,
+                          }}
+                        >
+                          ID {item.id}
+                        </p>
+                      </div>
 
-                      <p className={`mt-1 text-[12px] ${ui.subText}`}>ID {item.id}</p>
+                      <StatusPill tokens={tokens} darkMode={darkMode} active={activoGlobal && activoAcademia} />
                     </div>
 
-                    <StatusPill darkMode={darkMode} active={activoGlobal && activoAcademia} />
-                  </div>
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                      <MobileStateBox tokens={tokens} darkMode={darkMode} label="Estado global" active={activoGlobal} />
 
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <MobileStateBox darkMode={darkMode} label="Estado global" active={activoGlobal} />
+                      <MobileStateBox
+                        tokens={tokens}
+                        darkMode={darkMode}
+                        label="Disponibilidad"
+                        active={activoGlobal && activoAcademia}
+                      />
+                    </div>
 
-                    <MobileStateBox
-                      darkMode={darkMode}
-                      label="Disponibilidad"
-                      active={activoGlobal && activoAcademia}
-                    />
-                  </div>
+                    <button
+                      type="button"
+                      onClick={() => cambiarEstado(item)}
+                      disabled={procesando || !activoGlobal}
+                      className={`mt-4 w-full min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] font-extrabold transition disabled:opacity-50 ${
+                        activoAcademia
+                          ? darkMode
+                            ? "border-red-300/20 bg-red-500/10 text-red-100"
+                            : "border-red-200 bg-red-50 text-red-700"
+                          : darkMode
+                            ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100"
+                            : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      }`}
+                    >
+                      <Power className="h-4 w-4" />
 
-                  <button
-                    type="button"
-                    onClick={() => cambiarEstado(item)}
-                    disabled={procesando || !activoGlobal}
-                    className={`mt-4 w-full min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] font-extrabold transition disabled:opacity-50 ${
-                      activoAcademia
-                        ? darkMode
-                          ? "border-red-300/20 bg-red-500/10 text-red-100"
-                          : "border-red-200 bg-red-50 text-red-700"
-                        : darkMode
-                          ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100"
-                          : "border-emerald-200 bg-emerald-50 text-emerald-800"
-                    }`}
-                  >
-                    <Power className="h-4 w-4" />
+                      {procesando
+                        ? "Procesando…"
+                        : !activoGlobal
+                          ? "No disponible globalmente"
+                          : activoAcademia
+                            ? "Desactivar previsión"
+                            : "Activar previsión"}
+                    </button>
+                  </article>
+                );
+              })}
 
-                    {procesando
-                      ? "Procesando…"
-                      : !activoGlobal
-                        ? "No disponible globalmente"
-                        : activoAcademia
-                          ? "Desactivar previsión"
-                          : "Activar previsión"}
-                  </button>
-                </article>
-              );
-            })}
-
-            {!previsionesFiltradas.length && (
-              <div className={`py-10 text-center text-[14px] ${ui.subText}`}>
-                No existen previsiones médicas para los filtros seleccionados.
-              </div>
-            )}
-          </div>
-        </section>
-      </main>
+              {!previsionesFiltradas.length && (
+                <div
+                  className="py-10 text-center text-[14px]"
+                  style={{
+                    color: tokens.textMuted,
+                  }}
+                >
+                  No existen previsiones médicas para los filtros seleccionados.
+                </div>
+              )}
+            </div>
+          </section>
+        </main>
+      </div>
     </div>
   );
 }
 
-function StatusPill({ darkMode, active }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-extrabold ${
-        active
-          ? darkMode
+/* =========================================================
+   STATUS PILL
+========================================================= */
+
+function StatusPill({ tokens, darkMode, active }) {
+  if (active) {
+    return (
+      <span
+        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-extrabold ${
+          darkMode
             ? "border-emerald-300/20 bg-emerald-500/15 text-emerald-100"
             : "border-emerald-200 bg-emerald-100 text-emerald-800"
-          : darkMode
-            ? "border-white/15 bg-white/[0.06] text-white/60"
-            : "border-ra-marron/15 bg-white/60 text-ra-marron/60"
-      }`}
-    >
-      {active ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+        }`}
+      >
+        <CheckCircle2 className="h-4 w-4" />
+        Activa
+      </span>
+    );
+  }
 
-      {active ? "Activa" : "Inactiva"}
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-extrabold"
+      style={{
+        backgroundColor: tokens.surfaceSoft,
+        borderColor: tokens.border,
+        color: tokens.textMuted,
+      }}
+    >
+      <XCircle className="h-4 w-4" />
+      Inactiva
     </span>
   );
 }
 
-function MobileStateBox({ darkMode, label, active }) {
+/* =========================================================
+   MOBILE STATE BOX
+========================================================= */
+
+function MobileStateBox({ tokens, darkMode, label, active }) {
   return (
     <div
-      className={`rounded-xl border px-3 py-3 ${
-        darkMode ? "border-white/10 bg-black/10" : "border-ra-marron/10 bg-white/40"
-      }`}
+      className="rounded-xl border px-3 py-3 transition-colors duration-200"
+      style={{
+        backgroundColor: tokens.surfaceSoft,
+        borderColor: tokens.border,
+      }}
     >
       <div
-        className={`text-[11px] uppercase tracking-wide font-extrabold ${
-          darkMode ? "text-white/45" : "text-ra-marron/45"
-        }`}
+        className="text-[11px] uppercase tracking-wide font-extrabold"
+        style={{
+          color: tokens.textMuted,
+        }}
       >
         {label}
       </div>
 
       <div
-        className={`mt-1 text-[13px] font-bold ${
+        className={`mt-1 text-[13px] font-bold ${active ? (darkMode ? "text-emerald-100" : "text-emerald-800") : ""}`}
+        style={
           active
-            ? darkMode
-              ? "text-emerald-100"
-              : "text-emerald-800"
-            : darkMode
-              ? "text-white/55"
-              : "text-ra-marron/60"
-        }`}
+            ? undefined
+            : {
+                color: tokens.textMuted,
+              }
+        }
       >
         {active ? "Activa" : "Inactiva"}
       </div>
@@ -811,7 +1037,11 @@ function MobileStateBox({ darkMode, label, active }) {
   );
 }
 
-function SummaryCard({ darkMode, label, value, type }) {
+/* =========================================================
+   SUMMARY CARD
+========================================================= */
+
+function SummaryCard({ tokens, label, value, type }) {
   const icon =
     type === "active" ? (
       <CheckCircle2 className="h-5 w-5" />
@@ -821,20 +1051,39 @@ function SummaryCard({ darkMode, label, value, type }) {
       <HeartPulse className="h-5 w-5" />
     );
 
+  const iconColor = type === "active" ? "#16A34A" : type === "inactive" ? tokens.textMuted : tokens.icon;
+
   return (
     <div
-      className={`rounded-2xl border p-4 sm:p-5 shadow-[0_12px_34px_rgba(0,0,0,0.08)] ${
-        darkMode ? "bg-white/[0.07] border-white/10" : "bg-white/65 border-ra-marron/15"
-      }`}
+      className="rounded-2xl border p-4 sm:p-5 shadow-[0_12px_34px_rgba(0,0,0,0.08)] transition-colors duration-200"
+      style={{
+        backgroundColor: tokens.surface,
+        borderColor: tokens.border,
+        color: tokens.text,
+      }}
     >
-      <div className={`flex items-center justify-between gap-3 ${darkMode ? "text-white/60" : "text-ra-marron/60"}`}>
+      <div
+        className="flex items-center justify-between gap-3"
+        style={{
+          color: tokens.textMuted,
+        }}
+      >
         <span className="text-[11px] sm:text-[12px] uppercase tracking-[0.08em] font-extrabold">{label}</span>
 
-        {icon}
+        <span
+          style={{
+            color: iconColor,
+          }}
+        >
+          {icon}
+        </span>
       </div>
 
       <strong
-        className={`mt-2 block text-2xl sm:text-3xl font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}
+        className="mt-2 block text-2xl sm:text-3xl font-extrabold"
+        style={{
+          color: tokens.text,
+        }}
       >
         {value}
       </strong>

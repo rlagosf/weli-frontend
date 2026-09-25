@@ -14,6 +14,7 @@ import { useMobileAutoScrollTop } from "../../../hooks/useMobileScrollTop";
    WELI - SUCURSALES
 
    IMPORTANTE:
+
    Las sucursales NO son un catálogo global como Categorías,
    Posiciones o Previsión Médica.
 
@@ -38,14 +39,14 @@ const asList = (response) => {
 };
 
 export default function Sucursales() {
-  const { darkMode } = useTheme();
+  const { darkMode, themeTokens } = useTheme();
+
   const navigate = useNavigate();
   const location = useLocation();
 
   useMobileAutoScrollTop();
 
   const [rolActual, setRolActual] = useState(0);
-
   const [sucursales, setSucursales] = useState([]);
 
   const [nuevo, setNuevo] = useState("");
@@ -131,7 +132,10 @@ export default function Sucursales() {
 
   const handleAuth = useCallback(() => {
     clearToken();
-    navigate("/login", { replace: true });
+
+    navigate("/login", {
+      replace: true,
+    });
   }, [navigate]);
 
   const sanitizar = useCallback((texto) => {
@@ -149,6 +153,7 @@ export default function Sucursales() {
     if (breadcrumbBootRef.current) return;
 
     const currentPath = location.pathname;
+
     const breadcrumb = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : [];
 
     const last = breadcrumb[breadcrumb.length - 1];
@@ -207,6 +212,7 @@ export default function Sucursales() {
         navigate(dashboardBase, {
           replace: true,
         });
+
         return;
       }
 
@@ -322,6 +328,7 @@ export default function Sucursales() {
   const iniciarEdicion = (sucursal) => {
     setEditarId(Number(sucursal?.id));
     setEditarNombre(String(sucursal?.nombre ?? ""));
+
     setError("");
     setMensaje("");
   };
@@ -379,6 +386,7 @@ export default function Sucursales() {
   const solicitarEliminar = (sucursal) => {
     setSeleccionado(sucursal);
     setMostrarModal(true);
+
     setError("");
     setMensaje("");
   };
@@ -458,454 +466,682 @@ export default function Sucursales() {
   }, [sucursalesNormalizadas, filtroTexto]);
 
   /* =======================================================
+     TOKENS DE APARIENCIA
+  ======================================================= */
+
+  const tokens = useMemo(() => {
+    if (themeTokens) {
+      return themeTokens;
+    }
+
+    if (darkMode) {
+      return {
+        surface: "#1F2937",
+        surfaceSoft: "#172033",
+        surface2: "#263244",
+        surfaceHover: "#374151",
+        primary: "#FFDDA1",
+        primaryHover: "#FFE5B8",
+        primaryContrast: "#3F2D18",
+        text: "#F9FAFB",
+        textMuted: "#D1D5DB",
+        icon: "#FFDDA1",
+        border: "#374151",
+        borderStrong: "#4B5563",
+        inputBg: "#111827",
+        inputText: "#F9FAFB",
+        inputBorder: "#4B5563",
+        tableHead: "#172033",
+        focus: "#FFDDA1",
+      };
+    }
+
+    return {
+      surface: "#FFFFFF",
+      surfaceSoft: "#FAF6EE",
+      surface2: "#F7EAD4",
+      surfaceHover: "#FFF9F2",
+      primary: "#AA5013",
+      primaryHover: "#994812",
+      primaryContrast: "#FFFFFF",
+      text: "#3B2A1E",
+      textMuted: "#766657",
+      icon: "#AA5013",
+      border: "#D8C7AE",
+      borderStrong: "#BFA684",
+      inputBg: "#FFFFFF",
+      inputText: "#3B2A1E",
+      inputBorder: "#9B7B50",
+      tableHead: "#F7EAD4",
+      focus: "#AA5013",
+    };
+  }, [themeTokens, darkMode]);
+
+  /* =======================================================
      UI
+
+     HOMOLOGACIÓN CON listarPagos.jsx
+
+     REGLAS:
+     - Dashboard controla el fondo general.
+     - Este componente permanece transparente.
+     - Tarjetas, controles y tabla consumen themeTokens.
+     - No se modifica CRUD, seguridad ni endpoints.
   ======================================================= */
 
   const ui = useMemo(() => {
-    const shell = darkMode
-      ? "bg-[#111827] text-white"
-      : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
+    const page = "min-h-[calc(100vh-100px)] w-full bg-transparent px-3 sm:px-5 lg:px-7 2xl:px-10 pt-4 pb-16";
 
-    const titleMain = darkMode ? "text-white" : "text-ra-marron";
+    const content = "w-full max-w-[1700px] mx-auto";
 
-    const subText = darkMode ? "text-white/65" : "text-ra-marron/65";
+    const card = "rounded-2xl border shadow-[0_14px_42px_rgba(0,0,0,0.12)] transition-colors duration-200";
 
-    const card =
-      "rounded-2xl border shadow-[0_14px_42px_rgba(0,0,0,0.10)] " +
-      (darkMode ? "bg-white/[0.07] border-white/10" : "bg-white/65 border-ra-marron/15");
+    const label = "block mb-1.5 text-[13px] sm:text-[14px] font-extrabold";
 
     const control =
-      "w-full h-11 sm:h-12 px-3.5 rounded-xl text-[14px] sm:text-[15px] font-medium outline-none transition " +
-      (darkMode
-        ? "border border-white/15 bg-[#111827] text-white placeholder:text-white/40 focus:border-[#ffdda1] focus:ring-2 focus:ring-[#ffdda1]/15"
-        : "border border-ra-marron/20 bg-white/80 text-ra-marron placeholder:text-ra-marron/45 focus:border-[#aa5013] focus:ring-2 focus:ring-[#aa5013]/10");
+      "w-full h-11 sm:h-12 px-3.5 rounded-xl border text-[14px] sm:text-[15px] font-medium outline-none transition focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed";
 
     const secondaryButton =
-      "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] font-bold transition disabled:opacity-50 disabled:cursor-not-allowed " +
-      (darkMode ? "border-white/15 text-white hover:bg-white/10" : "border-ra-marron/20 text-ra-marron hover:bg-white");
+      "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] sm:text-[15px] font-bold transition hover:opacity-90 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed";
+
+    const primaryButton =
+      "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] sm:text-[15px] font-extrabold transition hover:opacity-90 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed";
+
+    const iconBox =
+      "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors duration-200";
+
+    const itemCard = "rounded-2xl border p-4 transition-colors duration-200";
 
     const ok =
-      "rounded-2xl border px-4 py-3 text-[14px] font-semibold " +
+      "rounded-xl border px-4 py-3 text-[14px] sm:text-[15px] font-semibold " +
       (darkMode
-        ? "border-emerald-200/20 bg-emerald-500/10 text-emerald-100"
-        : "border-emerald-200 bg-emerald-50 text-emerald-900");
+        ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100"
+        : "border-emerald-200 bg-emerald-50 text-emerald-800");
 
     const danger =
-      "rounded-2xl border px-4 py-3 text-[14px] font-semibold " +
-      (darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
+      "rounded-xl border px-4 py-3 text-[14px] sm:text-[15px] font-semibold " +
+      (darkMode ? "border-red-300/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
 
     return {
-      shell,
-      titleMain,
-      subText,
+      page,
+      content,
       card,
+      label,
       control,
       secondaryButton,
+      primaryButton,
+      iconBox,
+      itemCard,
       ok,
       danger,
+
+      pageStyle: {
+        color: tokens.text,
+      },
+
+      cardStyle: {
+        backgroundColor: tokens.surface,
+        borderColor: tokens.border,
+        color: tokens.text,
+      },
+
+      titleStyle: {
+        color: tokens.text,
+      },
+
+      subTextStyle: {
+        color: tokens.textMuted,
+      },
+
+      labelStyle: {
+        color: tokens.text,
+      },
+
+      controlStyle: {
+        backgroundColor: tokens.inputBg,
+        borderColor: tokens.inputBorder,
+        color: tokens.inputText,
+        "--tw-ring-color": `${tokens.focus}33`,
+      },
+
+      secondaryButtonStyle: {
+        backgroundColor: tokens.surfaceSoft,
+        borderColor: tokens.borderStrong,
+        color: tokens.text,
+      },
+
+      primaryButtonStyle: {
+        backgroundColor: tokens.primary,
+        borderColor: tokens.primary,
+        color: tokens.primaryContrast,
+      },
+
+      iconBoxStyle: {
+        backgroundColor: tokens.surface2,
+        borderColor: tokens.border,
+        color: tokens.icon,
+      },
+
+      itemCardStyle: {
+        backgroundColor: tokens.surfaceSoft,
+        borderColor: tokens.border,
+        color: tokens.text,
+      },
+
+      tableHeadStyle: {
+        backgroundColor: tokens.tableHead,
+        color: tokens.text,
+      },
+
+      dividerStyle: {
+        borderColor: tokens.border,
+      },
     };
-  }, [darkMode]);
+  }, [darkMode, tokens]);
+
+  /* =======================================================
+     LOADING
+  ======================================================= */
 
   if (loading) {
     return (
-      <div className={`${ui.shell} min-h-screen font-sans`}>
-        <div className="min-h-[70vh] flex items-center justify-center">
-          <div className={`text-sm font-semibold ${ui.subText}`}>Cargando sucursales…</div>
+      <div className={`${ui.page} font-sans`} style={ui.pageStyle}>
+        <div className={`${ui.content} min-h-[70vh] flex items-center justify-center`}>
+          <div className="text-sm font-semibold" style={ui.subTextStyle}>
+            Cargando sucursales…
+          </div>
         </div>
       </div>
     );
   }
 
+  /* =======================================================
+     RENDER
+  ======================================================= */
+
   return (
-    <div className={`${ui.shell} min-h-screen font-sans`}>
-      <header className="px-4 sm:px-6 lg:px-8 pt-6 text-center">
-        <div className="mx-auto max-w-4xl">
-          <div
-            className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border ${
-              darkMode
-                ? "border-white/10 bg-white/[0.06] text-[#ffdda1]"
-                : "border-ra-marron/15 bg-white/60 text-[#aa5013]"
-            }`}
-          >
-            <Building2 className="h-6 w-6" />
-          </div>
+    <div className={`${ui.page} font-sans`} style={ui.pageStyle}>
+      <div className={ui.content}>
+        {/* =================================================
+            HEADER
+        ================================================= */}
 
-          <h1 className={`text-3xl sm:text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>Sucursales</h1>
-
-          <p className={`mx-auto mt-2 max-w-3xl text-[14px] sm:text-[15px] leading-relaxed ${ui.subText}`}>
-            Administra las sedes operativas de tu academia y mantén su estructura organizada para jugadores, staff y
-            procesos internos.
-          </p>
-        </div>
-      </header>
-
-      <main className="px-4 sm:px-6 lg:px-8 pb-20">
-        {/* RESUMEN */}
-
-        <section className="mx-auto mt-7 max-w-7xl grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <SummaryCard
-            darkMode={darkMode}
-            label="Sucursales registradas"
-            value={sucursalesNormalizadas.length}
-            type="total"
-          />
-
-          <SummaryCard
-            darkMode={darkMode}
-            label="Resultados visibles"
-            value={sucursalesFiltradas.length}
-            type="visible"
-          />
-        </section>
-
-        <div className="mx-auto mt-4 max-w-7xl space-y-3">
-          {!!mensaje && <div className={ui.ok}>{mensaje}</div>}
-          {!!error && <div className={ui.danger}>{error}</div>}
-        </div>
-
-        {/* GOBERNANZA */}
-
-        <section className={`${ui.card} mx-auto mt-4 max-w-7xl p-4 sm:p-5`}>
-          <div className="flex items-start gap-3">
+        <header className="text-center">
+          <div className="mx-auto max-w-4xl">
             <div
-              className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
-                darkMode ? "bg-[#ffdda1]/10 text-[#ffdda1]" : "bg-[#aa5013]/10 text-[#aa5013]"
-              }`}
+              className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border transition-colors duration-200"
+              style={ui.iconBoxStyle}
             >
-              <ShieldCheck className="h-5 w-5" />
+              <Building2 className="h-6 w-6" />
             </div>
 
-            <div>
-              <h2 className={`text-[15px] sm:text-base font-extrabold ${ui.titleMain}`}>
-                Estructura propia de la academia
-              </h2>
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight" style={ui.titleStyle}>
+              Sucursales
+            </h1>
 
-              <p className={`mt-1 text-[13px] sm:text-sm leading-relaxed ${ui.subText}`}>
-                Las sucursales pertenecen a la estructura operativa de cada academia. A diferencia de los catálogos
-                globales, el administrador puede crear, editar y eliminar las sucursales correspondientes a su propia
-                organización.
-              </p>
-            </div>
+            <p
+              className="mx-auto mt-2 max-w-4xl text-[14px] sm:text-[15px] lg:text-base leading-relaxed"
+              style={ui.subTextStyle}
+            >
+              Administra las sedes operativas de tu academia y mantén su estructura organizada para jugadores, staff y
+              procesos internos.
+            </p>
           </div>
-        </section>
+        </header>
 
-        {/* CREACIÓN + FILTRO */}
+        <main>
+          {/* =================================================
+              RESUMEN
+          ================================================= */}
 
-        <section className={`${ui.card} mx-auto mt-4 max-w-7xl p-4 sm:p-5`}>
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr_auto] gap-3 lg:items-end">
-            <div>
-              <label className={`block mb-1.5 text-[13px] sm:text-sm font-extrabold ${ui.titleMain}`}>
-                Nueva sucursal
-              </label>
+          <section className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <SummaryCard
+              tokens={tokens}
+              label="Sucursales registradas"
+              value={sucursalesNormalizadas.length}
+              type="total"
+            />
 
-              <input
-                type="text"
-                value={nuevo}
-                onChange={(event) => {
-                  setNuevo(event.target.value);
-                  setError("");
-                  setMensaje("");
-                }}
-                placeholder="Nombre de la sucursal"
-                className={ui.control}
-                disabled={busyAction === "create"}
-              />
-            </div>
+            <SummaryCard
+              tokens={tokens}
+              label="Resultados visibles"
+              value={sucursalesFiltradas.length}
+              type="visible"
+            />
+          </section>
 
-            <button
-              type="button"
-              onClick={crear}
-              disabled={busyAction === "create"}
-              className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] font-extrabold transition disabled:opacity-50 disabled:cursor-not-allowed ${
-                darkMode
-                  ? "border-[#ffdda1]/25 bg-[#ffdda1]/10 text-[#ffdda1] hover:bg-[#ffdda1]/15"
-                  : "border-[#aa5013]/20 bg-[#aa5013] text-white hover:brightness-105"
-              }`}
-            >
-              <Plus className="h-4 w-4" />
-              {busyAction === "create" ? "Guardando…" : "Crear sucursal"}
-            </button>
+          {/* =================================================
+              MENSAJES
+          ================================================= */}
 
-            <div>
-              <label className={`block mb-1.5 text-[13px] sm:text-sm font-extrabold ${ui.titleMain}`}>
-                Buscar sucursal
-              </label>
+          <div className="mt-4 space-y-3">
+            {!!mensaje && <div className={ui.ok}>{mensaje}</div>}
 
-              <div className="relative">
-                <Search
-                  className={`absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 ${
-                    darkMode ? "text-white/40" : "text-ra-marron/45"
-                  }`}
-                />
+            {!!error && <div className={ui.danger}>{error}</div>}
+          </div>
 
-                <input
-                  type="text"
-                  value={filtroTexto}
-                  onChange={(event) => setFiltroTexto(event.target.value)}
-                  placeholder="Nombre o ID"
-                  className={`${ui.control} !pl-10`}
-                />
+          {/* =================================================
+              GOBERNANZA
+          ================================================= */}
+
+          <section className={`${ui.card} mt-4 p-4 sm:p-5`} style={ui.cardStyle}>
+            <div className="flex items-start gap-3">
+              <div className={`${ui.iconBox} mt-0.5`} style={ui.iconBoxStyle}>
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+
+              <div>
+                <h2 className="text-[15px] sm:text-base font-extrabold" style={ui.titleStyle}>
+                  Estructura propia de la academia
+                </h2>
+
+                <p className="mt-1 text-[13px] sm:text-sm leading-relaxed" style={ui.subTextStyle}>
+                  Las sucursales pertenecen a la estructura operativa de cada academia. A diferencia de los catálogos
+                  globales, el administrador puede crear, editar y eliminar las sucursales correspondientes a su propia
+                  organización.
+                </p>
               </div>
             </div>
+          </section>
 
-            <button type="button" onClick={refresh} disabled={reloadBusy} className={ui.secondaryButton}>
-              <RefreshCw className={`h-4 w-4 ${reloadBusy ? "animate-spin" : ""}`} />
-              Actualizar
-            </button>
-          </div>
-        </section>
+          {/* =================================================
+              CREACIÓN + FILTRO
+          ================================================= */}
 
-        {/* EDICIÓN ACTIVA */}
+          <section className={`${ui.card} mt-4 p-4 sm:p-5`} style={ui.cardStyle}>
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr_auto] gap-3 lg:items-end">
+              {/* NUEVA SUCURSAL */}
 
-        {editarId && (
-          <section className={`${ui.card} mx-auto mt-4 max-w-7xl p-4 sm:p-5`}>
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto] gap-3 lg:items-end">
               <div>
-                <label className={`block mb-1.5 text-[13px] sm:text-sm font-extrabold ${ui.titleMain}`}>
-                  Editando sucursal ID {editarId}
+                <label className={ui.label} style={ui.labelStyle}>
+                  Nueva sucursal
                 </label>
 
                 <input
                   type="text"
-                  value={editarNombre}
+                  value={nuevo}
                   onChange={(event) => {
-                    setEditarNombre(event.target.value);
+                    setNuevo(event.target.value);
                     setError("");
                     setMensaje("");
                   }}
+                  placeholder="Nombre de la sucursal"
                   className={ui.control}
-                  disabled={busyAction === "edit"}
+                  style={ui.controlStyle}
+                  disabled={busyAction === "create"}
                 />
               </div>
 
               <button
                 type="button"
-                onClick={actualizar}
-                disabled={busyAction === "edit"}
-                className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] font-extrabold transition disabled:opacity-50 ${
-                  darkMode
-                    ? "border-amber-300/20 bg-amber-500/10 text-amber-100"
-                    : "border-amber-200 bg-amber-50 text-amber-800"
-                }`}
+                onClick={crear}
+                disabled={busyAction === "create"}
+                className={ui.primaryButton}
+                style={ui.primaryButtonStyle}
               >
-                <Pencil className="h-4 w-4" />
-                {busyAction === "edit" ? "Guardando…" : "Guardar cambios"}
+                <Plus className="h-4 w-4" />
+
+                {busyAction === "create" ? "Guardando…" : "Crear sucursal"}
               </button>
+
+              {/* BUSCAR */}
+
+              <div>
+                <label className={ui.label} style={ui.labelStyle}>
+                  Buscar sucursal
+                </label>
+
+                <div className="relative">
+                  <Search
+                    className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 pointer-events-none"
+                    style={{
+                      color: tokens.textMuted,
+                    }}
+                  />
+
+                  <input
+                    type="text"
+                    value={filtroTexto}
+                    onChange={(event) => setFiltroTexto(event.target.value)}
+                    placeholder="Nombre o ID"
+                    className={`${ui.control} !pl-10`}
+                    style={ui.controlStyle}
+                  />
+                </div>
+              </div>
 
               <button
                 type="button"
-                onClick={cancelarEdicion}
-                disabled={busyAction === "edit"}
+                onClick={refresh}
+                disabled={reloadBusy}
                 className={ui.secondaryButton}
+                style={ui.secondaryButtonStyle}
               >
-                Cancelar
+                <RefreshCw className={`h-4 w-4 ${reloadBusy ? "animate-spin" : ""}`} />
+                Actualizar
               </button>
             </div>
           </section>
-        )}
 
-        {/* TABLA */}
+          {/* =================================================
+              EDICIÓN ACTIVA
+          ================================================= */}
 
-        <section className={`${ui.card} mx-auto mt-4 max-w-7xl overflow-hidden`}>
-          <div
-            className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b px-4 sm:px-5 py-4 ${
-              darkMode ? "border-white/10" : "border-ra-marron/10"
-            }`}
-          >
-            <div>
-              <h2 className={`text-lg sm:text-xl font-extrabold ${ui.titleMain}`}>Directorio de sucursales</h2>
+          {editarId && (
+            <section className={`${ui.card} mt-4 p-4 sm:p-5`} style={ui.cardStyle}>
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto] gap-3 lg:items-end">
+                <div>
+                  <label className={ui.label} style={ui.labelStyle}>
+                    Editando sucursal ID {editarId}
+                  </label>
 
-              <p className={`mt-1 text-[13px] sm:text-sm ${ui.subText}`}>
-                {sucursalesFiltradas.length} de {sucursalesNormalizadas.length} sucursales mostradas.
-              </p>
-            </div>
-          </div>
+                  <input
+                    type="text"
+                    value={editarNombre}
+                    onChange={(event) => {
+                      setEditarNombre(event.target.value);
+                      setError("");
+                      setMensaje("");
+                    }}
+                    className={ui.control}
+                    style={ui.controlStyle}
+                    disabled={busyAction === "edit"}
+                  />
+                </div>
 
-          {/* DESKTOP */}
-
-          <div className="hidden lg:block overflow-x-auto">
-            <table className="w-full text-[14px]">
-              <thead className={darkMode ? "bg-black/20 text-[#ffdda1]" : "bg-[#f7ead4] text-[#6d5829]"}>
-                <tr>
-                  <th className="px-5 py-3 text-center font-extrabold">Sucursal</th>
-
-                  <th className="px-5 py-3 text-center font-extrabold">Identificador</th>
-
-                  <th className="px-5 py-3 text-center font-extrabold">Acciones</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {sucursalesFiltradas.map((item) => {
-                  const procesando = busyId === item.id;
-
-                  return (
-                    <tr
-                      key={item.id}
-                      className={`border-t ${
-                        darkMode ? "border-white/10 hover:bg-white/[0.04]" : "border-ra-marron/10 hover:bg-white/50"
-                      }`}
-                    >
-                      <td className="px-5 py-4 text-center">
-                        <div
-                          className={`inline-flex items-center justify-center gap-2 font-extrabold ${
-                            darkMode ? "text-white" : "text-ra-marron"
-                          }`}
-                        >
-                          <MapPin className="h-4 w-4 opacity-60" />
-                          {item.nombre}
-                        </div>
-                      </td>
-
-                      <td className={`px-5 py-4 text-center font-semibold ${ui.subText}`}>ID {item.id}</td>
-
-                      <td className="px-5 py-4">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => iniciarEdicion(item)}
-                            disabled={procesando}
-                            className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-4 py-2 text-[13px] font-extrabold transition disabled:opacity-50 ${
-                              darkMode
-                                ? "border-amber-300/20 bg-amber-500/10 text-amber-100 hover:bg-amber-500/15"
-                                : "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
-                            }`}
-                          >
-                            <Pencil className="h-4 w-4" />
-                            Editar
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => solicitarEliminar(item)}
-                            disabled={procesando}
-                            className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-4 py-2 text-[13px] font-extrabold transition disabled:opacity-50 ${
-                              darkMode
-                                ? "border-red-300/20 bg-red-500/10 text-red-100 hover:bg-red-500/15"
-                                : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-                            }`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            {procesando && busyAction === "delete" ? "Eliminando…" : "Eliminar"}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-
-                {!sucursalesFiltradas.length && (
-                  <tr>
-                    <td colSpan={3} className={`px-6 py-12 text-center text-[14px] ${ui.subText}`}>
-                      No existen sucursales para la búsqueda seleccionada.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* MOBILE / TABLET */}
-
-          <div className="lg:hidden p-3 sm:p-4 space-y-3">
-            {sucursalesFiltradas.map((item) => {
-              const procesando = busyId === item.id;
-
-              return (
-                <article
-                  key={item.id}
-                  className={`rounded-2xl border p-4 ${
-                    darkMode ? "border-white/10 bg-black/10" : "border-ra-marron/10 bg-white/45"
+                <button
+                  type="button"
+                  onClick={actualizar}
+                  disabled={busyAction === "edit"}
+                  className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] font-extrabold transition disabled:opacity-50 ${
+                    darkMode
+                      ? "border-amber-300/20 bg-amber-500/10 text-amber-100 hover:bg-amber-500/15"
+                      : "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
                   }`}
                 >
-                  <div className="flex items-start gap-3">
-                    <div
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
-                        darkMode ? "bg-white/[0.06] text-[#ffdda1]" : "bg-[#aa5013]/10 text-[#aa5013]"
-                      }`}
-                    >
-                      <MapPin className="h-4 w-4" />
-                    </div>
+                  <Pencil className="h-4 w-4" />
 
-                    <div className="min-w-0">
-                      <h3 className={`text-base font-extrabold break-words ${ui.titleMain}`}>{item.nombre}</h3>
+                  {busyAction === "edit" ? "Guardando…" : "Guardar cambios"}
+                </button>
 
-                      <p className={`mt-1 text-[12px] ${ui.subText}`}>ID {item.id}</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => iniciarEdicion(item)}
-                      disabled={procesando}
-                      className={`min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-[14px] font-extrabold transition disabled:opacity-50 ${
-                        darkMode
-                          ? "border-amber-300/20 bg-amber-500/10 text-amber-100"
-                          : "border-amber-200 bg-amber-50 text-amber-800"
-                      }`}
-                    >
-                      <Pencil className="h-4 w-4" />
-                      Editar
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => solicitarEliminar(item)}
-                      disabled={procesando}
-                      className={`min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-[14px] font-extrabold transition disabled:opacity-50 ${
-                        darkMode
-                          ? "border-red-300/20 bg-red-500/10 text-red-100"
-                          : "border-red-200 bg-red-50 text-red-700"
-                      }`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      {procesando && busyAction === "delete" ? "Eliminando…" : "Eliminar"}
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-
-            {!sucursalesFiltradas.length && (
-              <div className={`py-10 text-center text-[14px] ${ui.subText}`}>
-                No existen sucursales para la búsqueda seleccionada.
+                <button
+                  type="button"
+                  onClick={cancelarEdicion}
+                  disabled={busyAction === "edit"}
+                  className={ui.secondaryButton}
+                  style={ui.secondaryButtonStyle}
+                >
+                  Cancelar
+                </button>
               </div>
-            )}
-          </div>
-        </section>
+            </section>
+          )}
 
-        <Modal
-          visible={mostrarModal}
-          onConfirm={eliminar}
-          onCancel={() => {
-            if (busyAction === "delete") return;
-            setMostrarModal(false);
-            setSeleccionado(null);
-          }}
-        />
-      </main>
+          {/* =================================================
+              DIRECTORIO
+          ================================================= */}
+
+          <section className={`${ui.card} mt-4 overflow-hidden`} style={ui.cardStyle}>
+            <div
+              className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b px-4 sm:px-5 py-4"
+              style={ui.dividerStyle}
+            >
+              <div>
+                <h2 className="text-lg sm:text-xl font-extrabold" style={ui.titleStyle}>
+                  Directorio de sucursales
+                </h2>
+
+                <p className="mt-1 text-[13px] sm:text-sm" style={ui.subTextStyle}>
+                  {sucursalesFiltradas.length} de {sucursalesNormalizadas.length} sucursales mostradas.
+                </p>
+              </div>
+            </div>
+
+            {/* ===============================================
+                DESKTOP
+            =============================================== */}
+
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-[14px]">
+                <thead style={ui.tableHeadStyle}>
+                  <tr>
+                    <th className="px-5 py-3 text-center font-extrabold">Sucursal</th>
+
+                    <th className="px-5 py-3 text-center font-extrabold">Identificador</th>
+
+                    <th className="px-5 py-3 text-center font-extrabold">Acciones</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {sucursalesFiltradas.map((item) => {
+                    const procesando = busyId === item.id;
+
+                    return (
+                      <tr
+                        key={item.id}
+                        className="border-t transition hover:bg-[var(--weli-surface-hover)]"
+                        style={{
+                          borderColor: tokens.border,
+                        }}
+                      >
+                        <td className="px-5 py-4 text-center">
+                          <div
+                            className="inline-flex items-center justify-center gap-2 font-extrabold"
+                            style={{
+                              color: tokens.text,
+                            }}
+                          >
+                            <MapPin
+                              className="h-4 w-4 opacity-60"
+                              style={{
+                                color: tokens.icon,
+                              }}
+                            />
+
+                            {item.nombre}
+                          </div>
+                        </td>
+
+                        <td
+                          className="px-5 py-4 text-center font-semibold"
+                          style={{
+                            color: tokens.textMuted,
+                          }}
+                        >
+                          ID {item.id}
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => iniciarEdicion(item)}
+                              disabled={procesando}
+                              className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-4 py-2 text-[13px] font-extrabold transition disabled:opacity-50 ${
+                                darkMode
+                                  ? "border-amber-300/20 bg-amber-500/10 text-amber-100 hover:bg-amber-500/15"
+                                  : "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                              }`}
+                            >
+                              <Pencil className="h-4 w-4" />
+                              Editar
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => solicitarEliminar(item)}
+                              disabled={procesando}
+                              className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-4 py-2 text-[13px] font-extrabold transition disabled:opacity-50 ${
+                                darkMode
+                                  ? "border-red-300/20 bg-red-500/10 text-red-100 hover:bg-red-500/15"
+                                  : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                              }`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+
+                              {procesando && busyAction === "delete" ? "Eliminando…" : "Eliminar"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {!sucursalesFiltradas.length && (
+                    <tr>
+                      <td
+                        colSpan={3}
+                        className="px-6 py-12 text-center text-[14px]"
+                        style={{
+                          color: tokens.textMuted,
+                        }}
+                      >
+                        No existen sucursales para la búsqueda seleccionada.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ===============================================
+                MOBILE / TABLET
+            =============================================== */}
+
+            <div className="lg:hidden p-3 sm:p-4 space-y-3">
+              {sucursalesFiltradas.map((item) => {
+                const procesando = busyId === item.id;
+
+                return (
+                  <article key={item.id} className={ui.itemCard} style={ui.itemCardStyle}>
+                    <div className="flex items-start gap-3">
+                      <div className={ui.iconBox} style={ui.iconBoxStyle}>
+                        <MapPin className="h-4 w-4" />
+                      </div>
+
+                      <div className="min-w-0">
+                        <h3
+                          className="text-base font-extrabold break-words"
+                          style={{
+                            color: tokens.text,
+                          }}
+                        >
+                          {item.nombre}
+                        </h3>
+
+                        <p
+                          className="mt-1 text-[12px]"
+                          style={{
+                            color: tokens.textMuted,
+                          }}
+                        >
+                          ID {item.id}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => iniciarEdicion(item)}
+                        disabled={procesando}
+                        className={`min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-[14px] font-extrabold transition disabled:opacity-50 ${
+                          darkMode
+                            ? "border-amber-300/20 bg-amber-500/10 text-amber-100"
+                            : "border-amber-200 bg-amber-50 text-amber-800"
+                        }`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                        Editar
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => solicitarEliminar(item)}
+                        disabled={procesando}
+                        className={`min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-[14px] font-extrabold transition disabled:opacity-50 ${
+                          darkMode
+                            ? "border-red-300/20 bg-red-500/10 text-red-100"
+                            : "border-red-200 bg-red-50 text-red-700"
+                        }`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+
+                        {procesando && busyAction === "delete" ? "Eliminando…" : "Eliminar"}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+
+              {!sucursalesFiltradas.length && (
+                <div
+                  className="py-10 text-center text-[14px]"
+                  style={{
+                    color: tokens.textMuted,
+                  }}
+                >
+                  No existen sucursales para la búsqueda seleccionada.
+                </div>
+              )}
+            </div>
+          </section>
+
+          <Modal
+            visible={mostrarModal}
+            onConfirm={eliminar}
+            onCancel={() => {
+              if (busyAction === "delete") return;
+
+              setMostrarModal(false);
+              setSeleccionado(null);
+            }}
+          />
+        </main>
+      </div>
     </div>
   );
 }
 
-function SummaryCard({ darkMode, label, value, type }) {
+/* =========================================================
+   SUMMARY CARD
+========================================================= */
+
+function SummaryCard({ tokens, label, value, type }) {
   const icon = type === "visible" ? <Search className="h-5 w-5" /> : <Building2 className="h-5 w-5" />;
 
   return (
     <div
-      className={`rounded-2xl border p-4 sm:p-5 shadow-[0_12px_34px_rgba(0,0,0,0.08)] ${
-        darkMode ? "bg-white/[0.07] border-white/10" : "bg-white/65 border-ra-marron/15"
-      }`}
+      className="rounded-2xl border p-4 sm:p-5 shadow-[0_12px_34px_rgba(0,0,0,0.08)] transition-colors duration-200"
+      style={{
+        backgroundColor: tokens.surface,
+        borderColor: tokens.border,
+        color: tokens.text,
+      }}
     >
-      <div className={`flex items-center justify-between gap-3 ${darkMode ? "text-white/60" : "text-ra-marron/60"}`}>
+      <div
+        className="flex items-center justify-between gap-3"
+        style={{
+          color: tokens.textMuted,
+        }}
+      >
         <span className="text-[11px] sm:text-[12px] uppercase tracking-[0.08em] font-extrabold">{label}</span>
 
-        {icon}
+        <span
+          style={{
+            color: tokens.icon,
+          }}
+        >
+          {icon}
+        </span>
       </div>
 
       <strong
-        className={`mt-2 block text-2xl sm:text-3xl font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}
+        className="mt-2 block text-2xl sm:text-3xl font-extrabold"
+        style={{
+          color: tokens.text,
+        }}
       >
         {value}
       </strong>

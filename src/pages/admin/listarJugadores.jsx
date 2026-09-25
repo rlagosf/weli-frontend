@@ -1,23 +1,21 @@
 // src/pages/admin/listarJugadores.jsx
 
 import { useEffect, useMemo, useState } from "react";
-
 import { useNavigate, useLocation } from "react-router-dom";
-
 import { useTheme } from "../../context/ThemeContext";
 
 import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
 
 import IsLoading from "../../components/isLoading";
-
 import { jwtDecode } from "jwt-decode";
-
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
-
 import { formatRutWithDV } from "../../services/rut";
 
 /* =======================
    🎨 Conjunto X
+
+   Se conserva como referencia histórica del componente.
+   La UI efectiva utiliza themeTokens.
 ======================= */
 
 const PALETTE = {
@@ -35,9 +33,7 @@ const PALETTE = {
 ========================================================= */
 
 const ADMIN_HOME = "/admin";
-
 const SUPER_HOME = "/super-dashboard";
-
 const SUPER_ADMIN_ROOT = "/super-dashboard/admin/dashboard";
 
 /* =========================================================
@@ -107,6 +103,7 @@ const isSuperTreePath = (pathname) => {
  *   id: 1
  * }
  */
+
 const getAcademiaIdFromStorage = () => {
   try {
     const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
@@ -116,8 +113,8 @@ const getAcademiaIdFromStorage = () => {
     }
 
     /* ===============================================
-         FORMATO DIRECTO
-      =============================================== */
+       FORMATO DIRECTO
+    =============================================== */
 
     const direct = Number(raw);
 
@@ -126,8 +123,8 @@ const getAcademiaIdFromStorage = () => {
     }
 
     /* ===============================================
-         SNAPSHOT JSON
-      =============================================== */
+       SNAPSHOT JSON
+    =============================================== */
 
     const parsed = JSON.parse(raw);
 
@@ -238,11 +235,7 @@ const tryGetList = async (paths, { signal, headers } = {}) => {
 
     const base = raw.startsWith("/") ? raw : `/${raw}`;
 
-    variants.push(
-      base,
-
-      base.endsWith("/") ? base.slice(0, -1) : `${base}/`
-    );
+    variants.push(base, base.endsWith("/") ? base.slice(0, -1) : `${base}/`);
   }
 
   const uniqueUrls = [...new Set(variants)];
@@ -306,10 +299,9 @@ const tryGetList = async (paths, { signal, headers } = {}) => {
 ========================================================= */
 
 export default function ListarJugadores() {
-  const { darkMode } = useTheme();
+  const { darkMode, themeTokens } = useTheme();
 
   const navigate = useNavigate();
-
   const location = useLocation();
 
   const [rolActual, setRolActual] = useState(0);
@@ -426,6 +418,7 @@ export default function ListarJugadores() {
          * Sesión válida:
          * NO logout.
          */
+
         if (!superTree) {
           navigate(SUPER_HOME, {
             replace: true,
@@ -442,6 +435,7 @@ export default function ListarJugadores() {
          *
          * NO logout.
          */
+
         if (!academiaId) {
           navigate(SUPER_HOME, {
             replace: true,
@@ -466,6 +460,7 @@ export default function ListarJugadores() {
        *
        * NO logout.
        */
+
       if (superTree) {
         navigate(ADMIN_HOME, {
           replace: true,
@@ -478,6 +473,7 @@ export default function ListarJugadores() {
        * Academia exclusivamente
        * desde JWT firmado.
        */
+
       const academiaId = extractTokenAcademiaId(decoded);
 
       /*
@@ -485,6 +481,7 @@ export default function ListarJugadores() {
        * según el contrato actual debe
        * contener academia_id.
        */
+
       if (!academiaId) {
         clearToken?.();
 
@@ -520,7 +517,6 @@ export default function ListarJugadores() {
 
     (async () => {
       setIsLoading(true);
-
       setError("");
 
       try {
@@ -558,7 +554,7 @@ export default function ListarJugadores() {
 
         /* =============================================
              POSICIONES
-          ============================================= */
+        ============================================= */
 
         const posMap = new Map(
           (posList ?? [])
@@ -572,7 +568,7 @@ export default function ListarJugadores() {
 
         /* =============================================
              CATEGORÍAS
-          ============================================= */
+        ============================================= */
 
         const catMap = new Map(
           (catList ?? [])
@@ -586,7 +582,7 @@ export default function ListarJugadores() {
 
         /* =============================================
              ESTADOS
-          ============================================= */
+        ============================================= */
 
         const estMap = new Map(
           (estList ?? [])
@@ -600,7 +596,7 @@ export default function ListarJugadores() {
 
         /* =============================================
              NORMALIZAR JUGADORES
-          ============================================= */
+        ============================================= */
 
         const safeJugadores = Array.isArray(rawJugadores) ? rawJugadores : [];
 
@@ -659,7 +655,7 @@ export default function ListarJugadores() {
              401
 
              Sesión inválida.
-          ============================================= */
+        ============================================= */
 
         if (status === 401) {
           clearToken?.();
@@ -675,9 +671,8 @@ export default function ListarJugadores() {
              403
 
              Sesión válida, acceso denegado.
-
              NO logout.
-          ============================================= */
+        ============================================= */
 
         if (status === 403) {
           setError(
@@ -691,7 +686,7 @@ export default function ListarJugadores() {
 
         /* =============================================
              OTRO ERROR
-          ============================================= */
+        ============================================= */
 
         setError("❌ No se pudo cargar la lista de jugadores");
       } finally {
@@ -705,15 +700,124 @@ export default function ListarJugadores() {
   }, [rolActual, navigate]);
 
   /* =======================================================
+     TOKENS DE APARIENCIA
+
+     ThemeContext es la fuente visual principal.
+
+     El fallback es exclusivamente defensivo.
+  ======================================================= */
+
+  const tokens = useMemo(() => {
+    if (themeTokens) {
+      return themeTokens;
+    }
+
+    if (darkMode) {
+      return {
+        surface: "#1F2937",
+
+        surfaceSoft: "#172033",
+
+        surface2: "#263244",
+
+        surfaceHover: "#374151",
+
+        primary: "#FFDDA1",
+
+        primaryHover: "#FFE5B8",
+
+        primaryContrast: "#3F2D18",
+
+        secondary: "#B79F69",
+
+        secondaryHover: "#C8B27F",
+
+        secondaryContrast: "#111827",
+
+        text: "#F9FAFB",
+
+        textMuted: "#D1D5DB",
+
+        icon: "#FFDDA1",
+
+        border: "#374151",
+
+        borderStrong: "#4B5563",
+
+        inputBg: "#111827",
+
+        inputText: "#F9FAFB",
+
+        inputBorder: "#4B5563",
+
+        tableHead: "#172033",
+
+        focus: "#FFDDA1",
+
+        overlay: "rgba(0,0,0,.65)",
+      };
+    }
+
+    return {
+      surface: "#FFFFFF",
+
+      surfaceSoft: "#FAF6EE",
+
+      surface2: "#F7EAD4",
+
+      surfaceHover: "#FFF9F2",
+
+      primary: "#AA5013",
+
+      primaryHover: "#994812",
+
+      primaryContrast: "#FFFFFF",
+
+      secondary: "#6D5829",
+
+      secondaryHover: "#5E4B23",
+
+      secondaryContrast: "#FFFFFF",
+
+      text: "#3B2A1E",
+
+      textMuted: "#766657",
+
+      icon: "#AA5013",
+
+      border: "#D8C7AE",
+
+      borderStrong: "#BFA684",
+
+      inputBg: "#FFFFFF",
+
+      inputText: "#3B2A1E",
+
+      inputBorder: "#9B7B50",
+
+      tableHead: "#F7EAD4",
+
+      focus: "#AA5013",
+
+      overlay: "rgba(0,0,0,.55)",
+    };
+  }, [themeTokens, darkMode]);
+
+  /* =======================================================
      UI
+
+     MISMA BASE VISUAL DE listarPagos.jsx
+
+     - Dashboard controla el fondo global.
+     - Este componente permanece transparente.
+     - Sólo las tarjetas reales tienen superficie.
+     - Toda la apariencia consume themeTokens.
   ======================================================= */
 
   const ui = useMemo(() => {
-    const page = "min-h-screen font-sans bg-transparent px-6 pt-6 pb-20";
+    const page = "min-h-[calc(100vh-100px)] w-full bg-transparent px-3 sm:px-5 lg:px-7 2xl:px-10 pt-4 pb-16";
 
-    const title = darkMode ? "text-white" : "text-ra-marron";
-
-    const subtitle = darkMode ? "text-white/70" : "text-ra-marron/70";
+    const content = "w-full max-w-[1700px] mx-auto";
 
     const msgBox =
       "rounded-2xl border px-5 py-4 font-semibold " +
@@ -724,21 +828,23 @@ export default function ListarJugadores() {
       (darkMode ? "border-amber-200/20 bg-amber-500/10 text-amber-100" : "border-amber-200 bg-amber-50 text-amber-800");
 
     const card =
-      "max-w-6xl mx-auto rounded-2xl shadow-2xl border p-6 " +
-      (darkMode ? "bg-white/10 border-white/15" : "bg-white/60 border-ra-marron/15");
-
-    const line = darkMode ? "rgba(255,255,255,0.18)" : "rgba(109,88,41,0.22)";
-
-    const border = `1px solid ${line}`;
+      "max-w-6xl mx-auto rounded-2xl border p-4 sm:p-5 lg:p-6 shadow-[0_14px_42px_rgba(0,0,0,0.12)] transition-colors duration-200";
 
     const tableWrap = "w-full overflow-x-auto";
 
     const table = "w-full text-xs sm:text-sm min-w-[900px] border-separate border-spacing-0";
 
-    const thead = "text-[10px] sm:text-xs " + (darkMode ? "bg-black/20" : "bg-ra-cream/90");
+    const thead = "text-[10px] sm:text-xs";
 
-    const thBase =
-      "p-2 text-center whitespace-nowrap font-extrabold " + (darkMode ? "text-[#ffdda1]" : "text-[#6d5829]");
+    const thBase = "p-2 text-center whitespace-nowrap font-extrabold";
+
+    const tr = "weli-jugadores-row cursor-pointer transition-colors duration-200";
+
+    const tdBase = "p-2 text-center";
+
+    const badge = "text-xs inline-flex items-center gap-2 rounded-full px-3 py-1 border";
+
+    const border = `1px solid ${tokens.border}`;
 
     const cellBorderStyle = {
       borderRight: border,
@@ -754,18 +860,9 @@ export default function ListarJugadores() {
       borderTop: border,
     };
 
-    const tr = "cursor-pointer transition " + (darkMode ? "hover:bg-white/10" : "hover:bg-white/70");
-
-    const tdBase = "p-2 text-center " + (darkMode ? "text-white/90" : "text-ra-marron");
-
-    const badge =
-      "text-xs inline-flex items-center gap-2 rounded-full px-3 py-1 border " +
-      (darkMode ? "bg-white/10 border-white/10 text-white/80" : "bg-white/60 border-ra-marron/10 text-ra-marron/80");
-
     return {
       page,
-      title,
-      subtitle,
+      content,
       msgBox,
       warnBox,
       card,
@@ -779,9 +876,54 @@ export default function ListarJugadores() {
       cellBorderStyle,
       headBorderStyle,
       border,
-      line,
+
+      pageStyle: {
+        color: tokens.text,
+      },
+
+      titleStyle: {
+        color: tokens.text,
+      },
+
+      subtitleStyle: {
+        color: tokens.textMuted,
+      },
+
+      cardStyle: {
+        backgroundColor: tokens.surface,
+
+        borderColor: tokens.border,
+
+        color: tokens.text,
+      },
+
+      theadStyle: {
+        backgroundColor: tokens.tableHead,
+
+        color: tokens.text,
+      },
+
+      thStyle: {
+        color: tokens.text,
+      },
+
+      tdStyle: {
+        color: tokens.text,
+      },
+
+      badgeStyle: {
+        backgroundColor: tokens.surfaceSoft,
+
+        borderColor: tokens.border,
+
+        color: tokens.textMuted,
+      },
+
+      dividerStyle: {
+        backgroundColor: tokens.border,
+      },
     };
-  }, [darkMode]);
+  }, [darkMode, tokens]);
 
   /* =======================================================
      IR AL DETALLE
@@ -857,8 +999,10 @@ export default function ListarJugadores() {
 
   if (error && !jugadores.length) {
     return (
-      <div className={`${ui.page} flex justify-center items-center`}>
-        <div className={ui.msgBox}>{error}</div>
+      <div className={ui.page} style={ui.pageStyle}>
+        <div className={`${ui.content} min-h-[70vh] flex justify-center items-center`}>
+          <div className={ui.msgBox}>{error}</div>
+        </div>
       </div>
     );
   }
@@ -868,171 +1012,271 @@ export default function ListarJugadores() {
   ======================================================= */
 
   return (
-    <div className={ui.page}>
-      {/* =================================================
-          HEADER
-      ================================================= */}
+    <div className={ui.page} style={ui.pageStyle}>
+      <style>
+        {`
+          .weli-jugadores-row:hover {
+            background-color: ${tokens.surfaceHover} !important;
+          }
 
-      <header className="max-w-6xl mx-auto">
-        <div className="text-center">
-          <h1 className={`text-4xl font-extrabold tracking-tightish ${ui.title}`}>Lista de Jugadores</h1>
+          .weli-jugadores-row:focus-visible {
+            outline: 2px solid ${tokens.focus};
+            outline-offset: -2px;
+          }
+        `}
+      </style>
 
-          <p className={`text-sm mt-2 ${ui.subtitle}`}>Selecciona un jugador para ver su detalle.</p>
-        </div>
-      </header>
+      <div className={ui.content}>
+        {/* =================================================
+            HEADER
+        ================================================= */}
 
-      {/* =================================================
-          MAIN
-      ================================================= */}
+        <header className="max-w-6xl mx-auto">
+          <div className="text-center">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight" style={ui.titleStyle}>
+              Lista de Jugadores
+            </h1>
 
-      <main className="mt-8">
-        {!!error && (
-          <div className="max-w-6xl mx-auto mb-6">
-            <div className={ui.warnBox}>{error}</div>
+            <p className="mx-auto mt-2 max-w-3xl text-[14px] sm:text-[15px] lg:text-base" style={ui.subtitleStyle}>
+              Selecciona un jugador para ver su detalle.
+            </p>
           </div>
-        )}
+        </header>
 
-        {grupos.length === 0 ? (
-          <div className={ui.card}>
-            <p className={`text-center py-6 ${ui.subtitle}`}>No hay jugadores registrados.</p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {grupos.map(([categoriaNombre, lista]) => (
-              <div key={categoriaNombre} className={ui.card}>
-                {/* =====================================
-                      CABECERA CATEGORÍA
-                  ===================================== */}
+        {/* =================================================
+            MAIN
+        ================================================= */}
 
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className={`text-xl font-extrabold ${darkMode ? "text-white" : "text-ra-marron"}`}>
-                    Categoría {categoriaNombre}
-                  </h3>
+        <main className="mt-5 sm:mt-6">
+          {!!error && (
+            <div className="max-w-6xl mx-auto mb-6">
+              <div className={ui.warnBox}>{error}</div>
+            </div>
+          )}
 
-                  <span className={ui.badge}>Jugadores: {lista.length}</span>
-                </div>
+          {grupos.length === 0 ? (
+            <div className={ui.card} style={ui.cardStyle}>
+              <p className="text-center py-6" style={ui.subtitleStyle}>
+                No hay jugadores registrados.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4 sm:space-y-5">
+              {grupos.map(([categoriaNombre, lista]) => (
+                <section key={categoriaNombre} className={ui.card} style={ui.cardStyle}>
+                  {/* =====================================
+                        CABECERA CATEGORÍA
+                    ===================================== */}
 
-                <div
-                  className="mt-4"
-                  style={{
-                    height: 1,
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-lg sm:text-xl font-extrabold" style={ui.titleStyle}>
+                      Categoría {categoriaNombre}
+                    </h3>
 
-                    background: ui.line,
-                  }}
-                />
+                    <span className={ui.badge} style={ui.badgeStyle}>
+                      Jugadores: {lista.length}
+                    </span>
+                  </div>
 
-                {/* =====================================
-                      TABLA
-                  ===================================== */}
+                  <div
+                    className="mt-4"
+                    style={{
+                      height: 1,
 
-                <div className={`mt-4 ${ui.tableWrap}`}>
-                  <table className={ui.table}>
-                    <thead className={ui.thead}>
-                      <tr>
-                        <th
-                          className={`${ui.thBase} w-44`}
-                          style={{
-                            ...ui.headBorderStyle,
+                      backgroundColor: tokens.border,
+                    }}
+                  />
 
-                            borderLeft: ui.border,
-                          }}
-                        >
-                          Nombre
-                        </th>
+                  {/* =====================================
+                        TABLA
+                    ===================================== */}
 
-                        <th className={`${ui.thBase} w-28`} style={ui.headBorderStyle}>
-                          RUT
-                        </th>
+                  <div className={`mt-4 ${ui.tableWrap}`}>
+                    <table className={ui.table}>
+                      <thead className={ui.thead} style={ui.theadStyle}>
+                        <tr>
+                          <th
+                            className={`${ui.thBase} w-44`}
+                            style={{
+                              ...ui.headBorderStyle,
+                              ...ui.thStyle,
 
-                        <th className={`${ui.thBase} w-16`} style={ui.headBorderStyle}>
-                          Edad
-                        </th>
-
-                        <th className={`${ui.thBase} w-28`} style={ui.headBorderStyle}>
-                          Teléfono
-                        </th>
-
-                        <th className={`${ui.thBase} w-44`} style={ui.headBorderStyle}>
-                          Email
-                        </th>
-
-                        <th className={`${ui.thBase} w-28`} style={ui.headBorderStyle}>
-                          Posición
-                        </th>
-
-                        <th className={`${ui.thBase} w-24`} style={ui.headBorderStyle}>
-                          Estado
-                        </th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {lista.map((jugador) => {
-                        const rutCrudo = jugador?.rut_jugador ?? jugador?.rut ?? jugador?.id ?? null;
-
-                        const rutFmt = rutCrudo ? formatRutWithDV(rutCrudo) : "-";
-
-                        const rutKey = String(jugador?.rut_jugador ?? jugador?.rut ?? jugador?.id ?? "");
-
-                        return (
-                          <tr
-                            key={`${categoriaNombre}-${rutKey || "no-rut"}`}
-                            className={ui.tr}
-                            onClick={() => handleClick(jugador?.rut_jugador ?? jugador?.rut ?? rutCrudo)}
-                            title="Ver detalle del jugador"
+                              borderLeft: ui.border,
+                            }}
                           >
-                            <td
-                              className={ui.tdBase}
-                              style={{
-                                ...ui.cellBorderStyle,
+                            Nombre
+                          </th>
 
-                                borderLeft: ui.border,
+                          <th
+                            className={`${ui.thBase} w-28`}
+                            style={{
+                              ...ui.headBorderStyle,
+                              ...ui.thStyle,
+                            }}
+                          >
+                            RUT
+                          </th>
+
+                          <th
+                            className={`${ui.thBase} w-16`}
+                            style={{
+                              ...ui.headBorderStyle,
+                              ...ui.thStyle,
+                            }}
+                          >
+                            Edad
+                          </th>
+
+                          <th
+                            className={`${ui.thBase} w-28`}
+                            style={{
+                              ...ui.headBorderStyle,
+                              ...ui.thStyle,
+                            }}
+                          >
+                            Teléfono
+                          </th>
+
+                          <th
+                            className={`${ui.thBase} w-44`}
+                            style={{
+                              ...ui.headBorderStyle,
+                              ...ui.thStyle,
+                            }}
+                          >
+                            Email
+                          </th>
+
+                          <th
+                            className={`${ui.thBase} w-28`}
+                            style={{
+                              ...ui.headBorderStyle,
+                              ...ui.thStyle,
+                            }}
+                          >
+                            Posición
+                          </th>
+
+                          <th
+                            className={`${ui.thBase} w-24`}
+                            style={{
+                              ...ui.headBorderStyle,
+                              ...ui.thStyle,
+                            }}
+                          >
+                            Estado
+                          </th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {lista.map((jugador) => {
+                          const rutCrudo = jugador?.rut_jugador ?? jugador?.rut ?? jugador?.id ?? null;
+
+                          const rutFmt = rutCrudo ? formatRutWithDV(rutCrudo) : "-";
+
+                          const rutKey = String(jugador?.rut_jugador ?? jugador?.rut ?? jugador?.id ?? "");
+
+                          return (
+                            <tr
+                              key={`${categoriaNombre}-${rutKey || "no-rut"}`}
+                              className={ui.tr}
+                              onClick={() => handleClick(jugador?.rut_jugador ?? jugador?.rut ?? rutCrudo)}
+                              title="Ver detalle del jugador"
+                              tabIndex={0}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+
+                                  handleClick(jugador?.rut_jugador ?? jugador?.rut ?? rutCrudo);
+                                }
                               }}
                             >
-                              {jugador?.nombre_jugador ?? "—"}
-                            </td>
+                              <td
+                                className={ui.tdBase}
+                                style={{
+                                  ...ui.cellBorderStyle,
+                                  ...ui.tdStyle,
 
-                            <td className={ui.tdBase} style={ui.cellBorderStyle}>
-                              {rutFmt || rutCrudo || "-"}
-                            </td>
+                                  borderLeft: ui.border,
+                                }}
+                              >
+                                {jugador?.nombre_jugador ?? "—"}
+                              </td>
 
-                            <td className={ui.tdBase} style={ui.cellBorderStyle}>
-                              {jugador?.edad ?? "-"}
-                            </td>
+                              <td
+                                className={ui.tdBase}
+                                style={{
+                                  ...ui.cellBorderStyle,
+                                  ...ui.tdStyle,
+                                }}
+                              >
+                                {rutFmt || rutCrudo || "-"}
+                              </td>
 
-                            <td className={ui.tdBase} style={ui.cellBorderStyle}>
-                              {jugador?.telefono ?? "-"}
-                            </td>
+                              <td
+                                className={ui.tdBase}
+                                style={{
+                                  ...ui.cellBorderStyle,
+                                  ...ui.tdStyle,
+                                }}
+                              >
+                                {jugador?.edad ?? "-"}
+                              </td>
 
-                            <td className={`${ui.tdBase} break-all`} style={ui.cellBorderStyle}>
-                              {jugador?.email ?? "-"}
-                            </td>
+                              <td
+                                className={ui.tdBase}
+                                style={{
+                                  ...ui.cellBorderStyle,
+                                  ...ui.tdStyle,
+                                }}
+                              >
+                                {jugador?.telefono ?? "-"}
+                              </td>
 
-                            <td className={ui.tdBase} style={ui.cellBorderStyle}>
-                              {jugador?.posicion?.nombre ?? jugador?.posicion_id ?? "-"}
-                            </td>
+                              <td
+                                className={`${ui.tdBase} break-all`}
+                                style={{
+                                  ...ui.cellBorderStyle,
+                                  ...ui.tdStyle,
+                                }}
+                              >
+                                {jugador?.email ?? "-"}
+                              </td>
 
-                            <td
-                              className={ui.tdBase}
-                              style={{
-                                ...ui.cellBorderStyle,
+                              <td
+                                className={ui.tdBase}
+                                style={{
+                                  ...ui.cellBorderStyle,
+                                  ...ui.tdStyle,
+                                }}
+                              >
+                                {jugador?.posicion?.nombre ?? jugador?.posicion_id ?? "-"}
+                              </td>
 
-                                borderRight: ui.border,
-                              }}
-                            >
-                              {jugador?.estado?.nombre ?? jugador?.estado_id ?? "-"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </main>
+                              <td
+                                className={ui.tdBase}
+                                style={{
+                                  ...ui.cellBorderStyle,
+                                  ...ui.tdStyle,
+
+                                  borderRight: ui.border,
+                                }}
+                              >
+                                {jugador?.estado?.nombre ?? jugador?.estado_id ?? "-"}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }

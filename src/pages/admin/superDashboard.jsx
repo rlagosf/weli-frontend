@@ -39,6 +39,8 @@ const MAX_TIPOS_PAGO = 50;
 const MAX_NOMBRE_ACADEMIA = 120;
 const MAX_NOMBRE_SUCURSAL = 100;
 const MAX_NOMBRE_CATEGORIA = 50;
+const MAX_LOGO_FILE_BYTES = 2 * 1024 * 1024;
+const LOGO_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
 const FORM_STEPS = [
   {
@@ -218,6 +220,12 @@ function normalizeComparable(value) {
   return normalizeText(value).toLocaleLowerCase("es");
 }
 
+function buildLogoSrc(base64, mime) {
+  const cleanBase64 = String(base64 ?? "").trim();
+  const cleanMime = String(mime ?? "").trim();
+  return cleanBase64 && cleanMime ? `data:${cleanMime};base64,${cleanBase64}` : null;
+}
+
 function normalizeRutAcademia(value) {
   return String(value ?? "")
     .replace(/\D/g, "")
@@ -296,6 +304,8 @@ function createEmptyForm() {
     comuna_id: "",
     ciudad_comuna_id: "",
     email: "",
+    logo_base64: null,
+    logo_mime: null,
 
     estado_id: "1",
 
@@ -373,6 +383,8 @@ function normalizeAcademiaForEdit(item, catalogoTiposPago = []) {
     ciudad_comuna_id: String(item?.ciudad_comuna_id ?? ""),
 
     email: String(item?.email ?? ""),
+    logo_base64: item?.logo_base64 ?? null,
+    logo_mime: item?.logo_mime ?? null,
 
     estado_id: String(item?.estado_id ?? 1),
 
@@ -456,6 +468,7 @@ export default function SuperDashboard() {
   const { darkMode, toggleTheme } = useTheme();
 
   const [academias, setAcademias] = useState([]);
+  const [logosAcademias, setLogosAcademias] = useState({});
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
@@ -553,6 +566,58 @@ export default function SuperDashboard() {
     },
     [navigate]
   );
+
+  useEffect(() => {
+    if (!academias.length) {
+      setLogosAcademias({});
+      return;
+    }
+
+    let alive = true;
+    const ctrl = new AbortController();
+
+    (async () => {
+      const conLogo = academias.filter((academia) => Number(academia?.tiene_logo ?? 0) === 1);
+
+      if (!conLogo.length) {
+        if (alive) setLogosAcademias({});
+        return;
+      }
+
+      const resultados = await Promise.allSettled(
+        conLogo.map(async (academia) => {
+          const id = Number(academia?.id ?? 0);
+          if (!Number.isInteger(id) || id <= 0) return null;
+
+          const res = await api.get(`${academiasPath}/${id}/logo`, {
+            signal: ctrl.signal,
+            headers: { "Cache-Control": "no-cache" },
+          });
+
+          const item = res?.data?.item ?? res?.data?.data?.item ?? null;
+          return {
+            id,
+            src: buildLogoSrc(item?.logo_base64, item?.logo_mime),
+          };
+        })
+      );
+
+      if (!alive || ctrl.signal.aborted) return;
+
+      const next = {};
+      resultados.forEach((resultado) => {
+        if (resultado.status !== "fulfilled" || !resultado.value?.id || !resultado.value?.src) return;
+        next[resultado.value.id] = resultado.value.src;
+      });
+
+      setLogosAcademias(next);
+    })().catch(() => {});
+
+    return () => {
+      alive = false;
+      ctrl.abort();
+    };
+  }, [academias]);
 
   const loadTiposPago = useCallback(
     async (signal) => {
@@ -892,6 +957,55 @@ export default function SuperDashboard() {
     setForm(createEmptyForm());
     resetFormUI();
     setMsg("");
+  };
+
+  const handleLogoChange = (event) => {
+    const file = event.target.files?.[0] ?? null;
+    event.target.value = "";
+    if (!file) return;
+
+    setMsg("");
+    setMsgType("error");
+
+    if (!LOGO_MIME_TYPES.has(file.type)) {
+      setMsg("El logo debe ser PNG, JPG/JPEG o WebP.");
+      return;
+    }
+
+    if (file.size > MAX_LOGO_FILE_BYTES) {
+      setMsg("El logo no puede superar los 2 MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? "");
+      const separator = dataUrl.indexOf(",");
+      const base64 = separator >= 0 ? dataUrl.slice(separator + 1).trim() : "";
+
+      if (!base64) {
+        setMsg("No fue posible procesar el logo seleccionado.");
+        return;
+      }
+
+      setForm((current) => ({
+        ...current,
+        logo_base64: base64,
+        logo_mime: file.type,
+      }));
+    };
+
+    reader.onerror = () => setMsg("No fue posible leer el archivo seleccionado.");
+    reader.readAsDataURL(file);
+  };
+
+  const removeLogo = () => {
+    setForm((current) => ({
+      ...current,
+      logo_base64: null,
+      logo_mime: null,
+    }));
   };
 
   /* =========================================================
@@ -1428,6 +1542,8 @@ export default function SuperDashboard() {
     const ciudad_comuna_id = Number(form.ciudad_comuna_id);
 
     const email = normalizeText(form.email).toLowerCase();
+    const logo_base64 = form.logo_base64 || null;
+    const logo_mime = form.logo_mime || null;
 
     const estado_id = Number(form.estado_id);
 
@@ -1447,6 +1563,8 @@ export default function SuperDashboard() {
         direccion,
         ciudad_comuna_id,
         email,
+        logo_base64,
+        logo_mime,
         estado_id,
 
         sucursales: form.sucursales.map((sucursal) => normalizeText(sucursal.nombre)),
@@ -1464,6 +1582,8 @@ export default function SuperDashboard() {
       direccion,
       ciudad_comuna_id,
       email,
+      logo_base64,
+      logo_mime,
       estado_id,
 
       sucursales: form.sucursales.map((sucursal) => ({
@@ -1847,16 +1967,24 @@ export default function SuperDashboard() {
                 const busy = actionBusyId === id || (loadingEdit && editingAcademiaId === id);
 
                 const rut = academia?.rut_academia ? formatRutCompleto(academia.rut_academia) : null;
+                const logoSrc = logosAcademias[id] ?? null;
 
                 return (
-                  <article key={String(id)} className={`${card} rounded-2xl p-5 shadow-lg border transition min-w-0`}>
+                  <article
+                    key={String(id)}
+                    className={`${card} rounded-2xl p-5 shadow-lg border transition min-w-0 h-full flex flex-col`}
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div
-                        className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
-                          activa ? "bg-ra-terracotta/90" : "bg-slate-500/70"
+                        className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 overflow-hidden border ${
+                          darkMode ? "bg-white/10 border-white/10" : "bg-white/80 border-ra-marron/10"
                         }`}
                       >
-                        <Building2 className="w-7 h-7 text-white" />
+                        {logoSrc ? (
+                          <img src={logoSrc} alt={`Logo ${nombre}`} className="w-full h-full object-contain p-1" />
+                        ) : (
+                          <Building2 className={`w-7 h-7 ${activa ? "text-ra-terracotta" : "text-slate-500"}`} />
+                        )}
                       </div>
 
                       <span
@@ -1895,11 +2023,11 @@ export default function SuperDashboard() {
                         <span>{estado}</span>
                       </div>
 
-                      {(academia?.direccion || academia?.comuna_nombre || academia?.ciudad_nombre) && (
+                      {(academia?.direccion || academia?.region_nombre || academia?.comuna_nombre) && (
                         <div className={`mt-3 flex items-start gap-2 text-xs ${headerSub}`}>
                           <MapPinned size={14} className="mt-0.5 shrink-0" />
                           <span className="leading-relaxed">
-                            {[academia?.direccion, academia?.comuna_nombre, academia?.ciudad_nombre]
+                            {[academia?.direccion, academia?.region_nombre, academia?.comuna_nombre]
                               .filter(Boolean)
                               .join(", ")}
                           </span>
@@ -1914,7 +2042,7 @@ export default function SuperDashboard() {
                       )}
                     </div>
 
-                    <div className="mt-5 grid grid-cols-2 gap-2">
+                    <div className="mt-auto pt-5 grid grid-cols-2 gap-2">
                       <button
                         type="button"
                         onClick={() => enterAcademia(academia)}
@@ -2070,15 +2198,65 @@ export default function SuperDashboard() {
           {formStep === 1 && (
             <section className={`mt-5 rounded-2xl border p-4 sm:p-5 ${sectionCard}`}>
               <div className="flex items-start gap-3 mb-5">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-ra-terracotta text-white shrink-0">
-                  <Building2 size={20} />
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-ra-terracotta text-white shrink-0 overflow-hidden">
+                  {buildLogoSrc(form.logo_base64, form.logo_mime) ? (
+                    <img
+                      src={buildLogoSrc(form.logo_base64, form.logo_mime)}
+                      alt="Vista previa del logo"
+                      className="w-full h-full object-contain p-1 bg-white"
+                    />
+                  ) : (
+                    <Building2 size={20} />
+                  )}
                 </div>
 
-                <div>
-                  <h3 className="font-extrabold text-lg">Antecedentes de la academia</h3>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-4">
+                    <h3 className="font-extrabold text-lg">Antecedentes de la academia</h3>
+
+                    <div className="flex items-center gap-3 ml-auto">
+                      <label
+                        htmlFor="academia-logo-input"
+                        className={[
+                          "w-11 h-11 rounded-xl border inline-flex items-center justify-center cursor-pointer transition shrink-0 shadow-sm",
+                          darkMode
+                            ? "bg-white/10 border-white/20 hover:bg-white/15 text-white"
+                            : "bg-white border-ra-marron/20 hover:bg-ra-cream text-ra-marron",
+                          saving ? "opacity-50 pointer-events-none" : "",
+                        ].join(" ")}
+                        title={form.logo_base64 ? "Cambiar logo" : "Agregar logo"}
+                        aria-label={form.logo_base64 ? "Cambiar logo" : "Agregar logo"}
+                      >
+                        <Plus size={24} strokeWidth={2.5} />
+                      </label>
+
+                      <input
+                        id="academia-logo-input"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={handleLogoChange}
+                        className="hidden"
+                        disabled={saving}
+                      />
+
+                      {form.logo_base64 && (
+                        <button
+                          type="button"
+                          onClick={removeLogo}
+                          disabled={saving}
+                          className={`text-[11px] font-bold underline underline-offset-2 transition ${
+                            darkMode ? "text-red-200 hover:text-red-100" : "text-red-700 hover:text-red-800"
+                          }`}
+                        >
+                          Quitar logo
+                        </button>
+                      )}
+                    </div>
+                  </div>
 
                   <p className={`text-xs mt-1 ${helperText}`}>
-                    Información institucional, territorial y de contacto que identificará a la academia.
+                    Información institucional, territorial y de contacto que identificará a la academia. El logo es
+                    opcional y admite PNG, JPG/JPEG o WebP de hasta 2 MB.
                   </p>
                 </div>
               </div>

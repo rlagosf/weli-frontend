@@ -1,36 +1,32 @@
 // src/pages/admin/verConvocacionHistorica.jsx
+
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { useTheme } from "../../context/ThemeContext";
+
 import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
+
 import IsLoading from "../../components/isLoading";
 import { FileText, X } from "lucide-react";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
+
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { formatRutWithDV } from "../../services/rut";
 
-/* ================= Conjunto X (UI) ================= */
-const PALETTE = {
-  copper: "#aa5013",
-  brown: "#6d5829",
-  gold: "#b79f69",
-  cream: "#e8dac4",
-  sand: "#ffdda1",
-  caramel: "#dda272",
-  terracotta: "#e2773b",
-};
+import { formatRutWithDV } from "../../services/rut";
 
 /* ================= Helpers ================= */
 
 const toArray = (resp) => {
   const d = resp?.data ?? resp ?? [];
+
   if (Array.isArray(d)) return d;
   if (Array.isArray(d?.items)) return d.items;
   if (Array.isArray(d?.results)) return d.results;
   if (d?.ok && Array.isArray(d.items)) return d.items;
   if (d?.ok && Array.isArray(d.data)) return d.data;
+
   return [];
 };
 
@@ -42,25 +38,40 @@ const isCanceled = (e) =>
     .includes("canceled");
 
 const getStatus = (e) => e?.status ?? e?.response?.status;
+
 const getMessage = (e, fallback = "Error") => e?.message || e?.data?.message || e?.response?.data?.message || fallback;
 
-const FUCHSIA = [232, 45, 137]; // PDF
+/*
+ * Se mantiene exactamente porque pertenece
+ * al diseño del PDF, no al fondo de la página.
+ */
+const FUCHSIA = [232, 45, 137];
 
 const isNonEmptyStr = (s) => typeof s === "string" && s.trim().length > 0;
+
 const coalesceStr = (...vals) => vals.find(isNonEmptyStr) || "";
 
 const calcEdad = (fnac) => {
   if (!fnac) return "";
+
   const f = new Date(fnac);
-  if (Number.isNaN(f.getTime())) return "";
+
+  if (Number.isNaN(f.getTime())) {
+    return "";
+  }
+
   const diff = Date.now() - f.getTime();
+
   return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
 };
 
 const normalizeRutKey = (val) => {
   if (val == null) return "";
+
   const s = String(val).trim();
+
   if (!s) return "";
+
   return s.replace(/\D/g, "");
 };
 
@@ -78,25 +89,36 @@ const nombreDesdeConvocado = (c) => coalesceStr(c?.nombre_jugador, c?.jugador_no
 
 const isExpired = (decoded) => {
   const now = Math.floor(Date.now() / 1000);
+
   return !decoded?.exp || decoded.exp <= now;
 };
 
 const extractRol = (decoded) => {
   const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
+
   const parsed = Number(rawRol);
+
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
 const getAcademiaIdFromStorage = () => {
   try {
     const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
-    if (!raw) return null;
+
+    if (!raw) {
+      return null;
+    }
 
     const direct = Number(raw);
-    if (Number.isFinite(direct) && direct > 0) return direct;
+
+    if (Number.isFinite(direct) && direct > 0) {
+      return direct;
+    }
 
     const parsed = JSON.parse(raw);
+
     const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
+
     return Number.isFinite(id) && id > 0 ? id : null;
   } catch {
     return null;
@@ -105,8 +127,17 @@ const getAcademiaIdFromStorage = () => {
 
 const buildHeaders = (rol, academiaId) => {
   const token = getToken();
-  const h = token ? { Authorization: `Bearer ${token}` } : {};
-  if (rol === 3 && academiaId) h["x-academia-id"] = String(academiaId);
+
+  const h = token
+    ? {
+        Authorization: `Bearer ${token}`,
+      }
+    : {};
+
+  if (rol === 3 && academiaId) {
+    h["x-academia-id"] = String(academiaId);
+  }
+
   return h;
 };
 
@@ -114,34 +145,54 @@ const getWithFallback = async (path, { signal, headers } = {}) => {
   const urls = path.endsWith("/") ? [path, path.slice(0, -1)] : [path, `${path}/`];
 
   let lastErr = null;
+
   for (const url of urls) {
     try {
-      return await api.get(url, { signal, headers });
+      return await api.get(url, {
+        signal,
+        headers,
+      });
     } catch (e) {
       lastErr = e;
+
       const st = getStatus(e);
-      if (st === 401 || st === 403) throw e;
+
+      if (st === 401 || st === 403) {
+        throw e;
+      }
     }
   }
+
   throw lastErr ?? new Error("GET failed");
 };
 
 /* ================= Componente ================= */
 
 export default function VerConvocacionHistorica() {
-  const { darkMode } = useTheme();
+  const { darkMode, themeTokens } = useTheme();
+
   const navigate = useNavigate();
+
   const location = useLocation();
 
   const [rolActual, setRolActual] = useState(0);
+
   const [academiaId, setAcademiaId] = useState(() => getAcademiaIdFromStorage());
 
   const [historicos, setHistoricos] = useState([]);
+
   const [eventos, setEventos] = useState([]);
+
   const [isLoading, setIsLoading] = useState(true);
+
   const [error, setError] = useState("");
 
-  const [modal, setModal] = useState({ open: false, evento: null, jugadores: [] });
+  const [modal, setModal] = useState({
+    open: false,
+    evento: null,
+    jugadores: [],
+  });
+
   const generatingRef = useRef(false);
 
   const jugadoresMapRef = useRef(new Map());
@@ -149,50 +200,79 @@ export default function VerConvocacionHistorica() {
   useMobileAutoScrollTop();
 
   /* ========= Breadcrumb (ANTI-LOOP) ========= */
+
   const breadcrumbBootRef = useRef(false);
 
   useEffect(() => {
-    if (breadcrumbBootRef.current) return;
+    if (breadcrumbBootRef.current) {
+      return;
+    }
 
     const currentPath = location.pathname + location.search;
+
     const bc = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : [];
+
     const last = bc[bc.length - 1];
+
     const label = "Histórico de Convocatorias";
 
     if (!last || last.label !== label) {
       breadcrumbBootRef.current = true;
+
       navigate(currentPath, {
         replace: true,
-        state: { ...(location.state || {}), breadcrumb: [{ to: currentPath, label }] },
+
+        state: {
+          ...(location.state || {}),
+
+          breadcrumb: [
+            {
+              to: currentPath,
+
+              label,
+            },
+          ],
+        },
       });
     } else {
       breadcrumbBootRef.current = true;
     }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.search]);
 
   /* ========= Sync academiaId (superdashboard) ========= */
+
   useEffect(() => {
     let alive = true;
 
     const tick = () => {
-      if (!alive) return;
+      if (!alive) {
+        return;
+      }
+
       const a = getAcademiaIdFromStorage();
+
       setAcademiaId((prev) => (prev !== a ? a : prev));
     };
 
     const onChanged = () => tick();
 
     tick();
+
     const iv = setInterval(tick, 1200);
 
     window.addEventListener("storage", onChanged);
+
     window.addEventListener("weli:selectedAcademiaChanged", onChanged);
 
     return () => {
       alive = false;
+
       clearInterval(iv);
+
       window.removeEventListener("storage", onChanged);
+
       window.removeEventListener("weli:selectedAcademiaChanged", onChanged);
     };
   }, []);
@@ -201,92 +281,149 @@ export default function VerConvocacionHistorica() {
     if (rolActual === 3) {
       setHistoricos([]);
       setEventos([]);
-      setModal({ open: false, evento: null, jugadores: [] });
+
+      setModal({
+        open: false,
+        evento: null,
+        jugadores: [],
+      });
     }
   }, [academiaId, rolActual]);
 
   /* ========= Auth ========= */
+
   useEffect(() => {
     try {
       const token = getToken();
-      if (!token) throw new Error("no-token");
+
+      if (!token) {
+        throw new Error("no-token");
+      }
 
       const decoded = jwtDecode(token);
-      if (isExpired(decoded)) throw new Error("expired");
+
+      if (isExpired(decoded)) {
+        throw new Error("expired");
+      }
 
       const rol = extractRol(decoded);
+
       if (![1, 2, 3].includes(rol)) {
-        navigate("/admin", { replace: true });
+        navigate("/admin", {
+          replace: true,
+        });
+
         return;
       }
 
       if (rol === 3) {
         const a = getAcademiaIdFromStorage();
-        if (!a) throw new Error("missing-academia-target");
+
+        if (!a) {
+          throw new Error("missing-academia-target");
+        }
       }
 
       setRolActual(rol);
     } catch {
       clearToken();
-      navigate("/login", { replace: true });
+
+      navigate("/login", {
+        replace: true,
+      });
     }
   }, [navigate]);
 
   const canLoad = useMemo(() => {
-    if (!rolActual) return false;
-    if (rolActual === 3) return !!academiaId;
+    if (!rolActual) {
+      return false;
+    }
+
+    if (rolActual === 3) {
+      return !!academiaId;
+    }
+
     return true;
   }, [rolActual, academiaId]);
 
   /* ========= Carga eventos + históricos ========= */
+
   useEffect(() => {
-    if (!canLoad) return;
+    if (!canLoad) {
+      return;
+    }
 
     const abort = new AbortController();
+
     const headers = buildHeaders(rolActual, academiaId);
 
     (async () => {
       setIsLoading(true);
+
       setError("");
 
       try {
         const [evRes, hRes] = await Promise.all([
-          getWithFallback("/eventos", { signal: abort.signal, headers }),
-          getWithFallback("/convocatorias-historico", { signal: abort.signal, headers }),
+          getWithFallback("/eventos", {
+            signal: abort.signal,
+
+            headers,
+          }),
+
+          getWithFallback("/convocatorias-historico", {
+            signal: abort.signal,
+
+            headers,
+          }),
         ]);
 
-        if (abort.signal.aborted) return;
+        if (abort.signal.aborted) {
+          return;
+        }
 
         const ev = toArray(evRes);
+
         let hist = toArray(hRes);
 
         if (rolActual === 3 && academiaId != null) {
           const hasAcademiaKey = hist.some(
             (x) => x?.academia_id != null || x?.academiaId != null || x?.academia != null
           );
+
           if (hasAcademiaKey) {
             hist = hist.filter((x) => {
               const a = Number(x?.academia_id ?? x?.academiaId ?? x?.academia ?? 0) || 0;
+
               return a === Number(academiaId);
             });
           }
         }
 
         setEventos(ev);
+
         setHistoricos(hist);
       } catch (err) {
-        if (abort.signal.aborted || isCanceled(err)) return;
+        if (abort.signal.aborted || isCanceled(err)) {
+          return;
+        }
 
         const st = getStatus(err);
+
         if (st === 401 || st === 403) {
           clearToken();
-          navigate("/login", { replace: true });
+
+          navigate("/login", {
+            replace: true,
+          });
+
           return;
         }
 
         setError(getMessage(err, "No se pudo cargar la información"));
       } finally {
-        if (!abort.signal.aborted) setIsLoading(false);
+        if (!abort.signal.aborted) {
+          setIsLoading(false);
+        }
       }
     })();
 
@@ -294,31 +431,51 @@ export default function VerConvocacionHistorica() {
   }, [navigate, rolActual, academiaId, canLoad]);
 
   /* ========= Carga jugadores (para nombre + fnac + edad) ========= */
+
   useEffect(() => {
-    if (!canLoad) return;
+    if (!canLoad) {
+      return;
+    }
 
     const abort = new AbortController();
+
     const headers = buildHeaders(rolActual, academiaId);
 
     (async () => {
       try {
-        const resp = await getWithFallback("/jugadores", { signal: abort.signal, headers });
-        if (abort.signal.aborted) return;
+        const resp = await getWithFallback("/jugadores", {
+          signal: abort.signal,
+
+          headers,
+        });
+
+        if (abort.signal.aborted) {
+          return;
+        }
 
         const js = toArray(resp);
+
         const map = new Map();
 
         for (const j of js) {
           const rutRaw = j?.rut_jugador ?? j?.rut ?? j?.id;
+
           const rutKey = normalizeRutKey(rutRaw);
-          if (!rutKey) continue;
+
+          if (!rutKey) {
+            continue;
+          }
 
           const nombre = nombreDesdeJugador(j);
-          if (!isNonEmptyStr(nombre)) continue;
+
+          if (!isNonEmptyStr(nombre)) {
+            continue;
+          }
 
           const fnac = j?.fecha_nacimiento ?? j?.fechaNacimiento ?? j?.fnac ?? j?.fecha_nac ?? null;
 
           const edadRaw = j?.edad ?? j?.edad_actual ?? null;
+
           const edad =
             typeof edadRaw === "number"
               ? edadRaw
@@ -329,20 +486,35 @@ export default function VerConvocacionHistorica() {
                   : "";
 
           const estadoIdRaw = j?.estado_id ?? j?.estadoId ?? j?.estado ?? null;
-          const estadoId = estadoIdRaw == null ? null : Number(estadoIdRaw);
-          if (Number.isFinite(estadoId) && estadoId > 0 && estadoId !== 1) continue;
 
-          map.set(rutKey, { nombre, fnac, edad });
+          const estadoId = estadoIdRaw == null ? null : Number(estadoIdRaw);
+
+          if (Number.isFinite(estadoId) && estadoId > 0 && estadoId !== 1) {
+            continue;
+          }
+
+          map.set(rutKey, {
+            nombre,
+            fnac,
+            edad,
+          });
         }
 
         jugadoresMapRef.current = map;
       } catch (err) {
-        if (abort.signal.aborted || isCanceled(err)) return;
+        if (abort.signal.aborted || isCanceled(err)) {
+          return;
+        }
 
         const st = getStatus(err);
+
         if (st === 401 || st === 403) {
           clearToken();
-          navigate("/login", { replace: true });
+
+          navigate("/login", {
+            replace: true,
+          });
+
           return;
         }
       }
@@ -351,62 +523,273 @@ export default function VerConvocacionHistorica() {
     return () => abort.abort();
   }, [navigate, rolActual, academiaId, canLoad]);
 
+  /* =======================================================
+     TOKENS DE APARIENCIA
+
+     ThemeContext es la fuente visual principal.
+     Dashboard continúa controlando el fondo global.
+  ======================================================= */
+
+  const tokens = useMemo(() => {
+    if (themeTokens) {
+      return themeTokens;
+    }
+
+    if (darkMode) {
+      return {
+        surface: "#1F2937",
+
+        surfaceSoft: "#172033",
+
+        surface2: "#263244",
+
+        surfaceHover: "#374151",
+
+        primary: "#FFDDA1",
+
+        primaryHover: "#FFE5B8",
+
+        primaryContrast: "#3F2D18",
+
+        secondary: "#B79F69",
+
+        secondaryHover: "#C8B27F",
+
+        secondaryContrast: "#111827",
+
+        text: "#F9FAFB",
+
+        textMuted: "#D1D5DB",
+
+        icon: "#FFDDA1",
+
+        border: "#374151",
+
+        borderStrong: "#4B5563",
+
+        inputBg: "#111827",
+
+        inputText: "#F9FAFB",
+
+        inputBorder: "#4B5563",
+
+        tableHead: "#172033",
+
+        focus: "#FFDDA1",
+
+        overlay: "rgba(0,0,0,.65)",
+      };
+    }
+
+    return {
+      surface: "#FFFFFF",
+
+      surfaceSoft: "#FAF6EE",
+
+      surface2: "#F7EAD4",
+
+      surfaceHover: "#FFF9F2",
+
+      primary: "#AA5013",
+
+      primaryHover: "#994812",
+
+      primaryContrast: "#FFFFFF",
+
+      secondary: "#6D5829",
+
+      secondaryHover: "#5E4B23",
+
+      secondaryContrast: "#FFFFFF",
+
+      text: "#3B2A1E",
+
+      textMuted: "#766657",
+
+      icon: "#AA5013",
+
+      border: "#D8C7AE",
+
+      borderStrong: "#BFA684",
+
+      inputBg: "#FFFFFF",
+
+      inputText: "#3B2A1E",
+
+      inputBorder: "#9B7B50",
+
+      tableHead: "#F7EAD4",
+
+      focus: "#AA5013",
+
+      overlay: "rgba(0,0,0,.55)",
+    };
+  }, [themeTokens, darkMode]);
+
+  /* =======================================================
+     UI
+
+     - Dashboard controla el background global.
+     - Esta página permanece transparente.
+     - Tarjetas, tablas y modal consumen themeTokens.
+     - Los colores del PDF se mantienen independientes.
+  ======================================================= */
+
+  const ui = useMemo(() => {
+    const page = "min-h-[calc(100vh-100px)] w-full bg-transparent px-3 sm:px-5 lg:px-7 2xl:px-10 pt-4 pb-16";
+
+    const content = "w-full max-w-[1700px] mx-auto";
+
+    const card = "rounded-2xl border p-4 sm:p-5 shadow-[0_14px_42px_rgba(0,0,0,0.12)] transition-colors duration-200";
+
+    const tableHeader = "text-[10px] sm:text-xs";
+
+    const tableBorder = "border";
+
+    const row = "weli-historico-row transition-colors duration-200";
+
+    const btnView =
+      "weli-historico-primary inline-flex min-h-9 items-center justify-center rounded-lg border px-3 py-1.5 text-[13px] font-extrabold transition hover:opacity-90 active:scale-[0.98]";
+
+    const danger =
+      "rounded-xl border px-4 py-3 text-[14px] sm:text-[15px] font-semibold text-center " +
+      (darkMode ? "border-red-300/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700");
+
+    const modalCard = "w-[95%] max-w-3xl rounded-2xl border p-5 sm:p-6 shadow-2xl";
+
+    return {
+      page,
+      content,
+      card,
+      tableHeader,
+      tableBorder,
+      row,
+      btnView,
+      danger,
+      modalCard,
+
+      rootStyle: {
+        color: tokens.text,
+      },
+
+      titleStyle: {
+        color: tokens.text,
+      },
+
+      subtitleStyle: {
+        color: tokens.textMuted,
+      },
+
+      cardStyle: {
+        backgroundColor: tokens.surface,
+
+        borderColor: tokens.border,
+
+        color: tokens.text,
+      },
+
+      tableHeaderStyle: {
+        backgroundColor: tokens.tableHead,
+
+        color: tokens.text,
+      },
+
+      cellStyle: {
+        borderColor: tokens.border,
+
+        color: tokens.text,
+      },
+
+      buttonStyle: {
+        backgroundColor: tokens.primary,
+
+        borderColor: tokens.primary,
+
+        color: tokens.primaryContrast,
+
+        "--weli-historico-focus": tokens.focus,
+      },
+
+      modalOverlayStyle: {
+        backgroundColor: tokens.overlay,
+      },
+
+      modalCardStyle: {
+        backgroundColor: tokens.surface,
+
+        borderColor: tokens.borderStrong,
+
+        color: tokens.text,
+      },
+
+      modalDividerStyle: {
+        borderColor: tokens.border,
+      },
+
+      closeButtonStyle: {
+        color: tokens.textMuted,
+
+        "--weli-historico-close-hover": tokens.surfaceHover,
+
+        "--weli-historico-focus": tokens.focus,
+      },
+
+      cssVars: {
+        "--weli-historico-row-hover": tokens.surfaceHover,
+
+        "--weli-historico-focus": tokens.focus,
+      },
+    };
+  }, [darkMode, tokens]);
+
   /* ========= Helpers UI ========= */
-  const shell = darkMode
-    ? "bg-[#111827] text-white"
-    : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
-
-  const tablaCabecera = darkMode ? "bg-[#1f2937] text-white" : "bg-white/60 text-ra-marron";
-  const filaHover = darkMode ? "hover:bg-white/5" : "hover:bg-white/40";
-
-  const tarjetaClase = darkMode
-    ? "bg-white/10 shadow-lg rounded-2xl p-4 border border-white/15"
-    : "bg-white/60 shadow-lg rounded-2xl p-4 border border-ra-marron/15";
-
-  // ✅ Botón estilo SuperDashboard / Conjunto X
-  const btnVerClass =
-    "inline-flex items-center justify-center px-3 py-1.5 rounded-lg font-extrabold transition " +
-    "border disabled:opacity-60 disabled:cursor-not-allowed " +
-    (darkMode ? "border-white/15 hover:bg-white/10" : "border-ra-marron/15 hover:bg-white/70");
-
-  const btnVerStyle = {
-    backgroundColor: PALETTE.sand,
-    color: PALETTE.brown,
-    boxShadow: darkMode ? "0 10px 25px rgba(0,0,0,0.25)" : "0 10px 25px rgba(109,88,41,0.12)",
-  };
 
   const getEventoById = (id) => eventos.find((e) => Number(e.id) === Number(id)) || null;
 
   const nombreEvento = (e) => e?.titulo ?? e?.nombre ?? `Evento #${e?.id ?? "—"}`;
+
   const fechaEvento = (e) => String(e?.fecha_inicio ?? e?.fecha ?? "").slice(0, 10) || "—";
 
   const ordenarConvocados = (lista) => {
     const arr = Array.isArray(lista) ? [...lista] : [];
+
     arr.sort((a, b) => {
       const ra = normalizeRutKey(a?.jugador_rut ?? a?.rut ?? a?.rut_jugador);
+
       const rb = normalizeRutKey(b?.jugador_rut ?? b?.rut ?? b?.rut_jugador);
+
       return ra.localeCompare(rb);
     });
+
     return arr;
   };
 
   const filtrarSoloActivos = (lista) => {
     const map = jugadoresMapRef.current;
-    if (!map || map.size === 0) return Array.isArray(lista) ? lista : [];
+
+    if (!map || map.size === 0) {
+      return Array.isArray(lista) ? lista : [];
+    }
+
     return (Array.isArray(lista) ? lista : []).filter((c) => {
       const rutKey = normalizeRutKey(c?.jugador_rut ?? c?.rut ?? c?.rut_jugador ?? "");
+
       return rutKey && map.has(rutKey);
     });
   };
 
   const resolverDatosJugador = (c) => {
     const rutRaw = c?.jugador_rut ?? c?.rut ?? c?.rut_jugador ?? "";
+
     const rutKey = normalizeRutKey(rutRaw);
 
     const fromMap = rutKey ? jugadoresMapRef.current.get(rutKey) : null;
 
     let nombre = nombreDesdeConvocado(c);
-    if (!isNonEmptyStr(nombre) && fromMap?.nombre) nombre = fromMap.nombre;
+
+    if (!isNonEmptyStr(nombre) && fromMap?.nombre) {
+      nombre = fromMap.nombre;
+    }
 
     const fnac = fromMap?.fnac ?? c?.fecha_nacimiento ?? c?.fechaNacimiento ?? c?.fnac ?? c?.fecha_nac ?? null;
 
@@ -414,26 +797,42 @@ export default function VerConvocacionHistorica() {
 
     return {
       rut: rutKey,
+
       nombre: nombre || "",
+
       fnac: fnac || "",
+
       edad: edad || "",
     };
   };
 
   /* ========= PDF ========= */
+
   const exportarPDFDesdeDatos = async (evento, jugadores) => {
-    const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
+    const doc = new jsPDF({
+      orientation: "portrait",
+
+      unit: "pt",
+
+      format: "letter",
+    });
 
     const pageW = doc.internal.pageSize.getWidth();
+
     const pageH = doc.internal.pageSize.getHeight();
 
     let logo = null;
+
     try {
       logo = await new Promise((resolve) => {
         const img = new Image();
+
         img.crossOrigin = "anonymous";
+
         img.src = "/logo-en-negativo.png";
+
         img.onload = () => resolve(img);
+
         img.onerror = () => resolve(null);
       });
     } catch {
@@ -441,15 +840,29 @@ export default function VerConvocacionHistorica() {
     }
 
     const drawWatermark = (opacity = 0.1) => {
-      if (!logo) return;
+      if (!logo) {
+        return;
+      }
+
       const logoW = 350;
+
       const logoH = 350;
 
       if (typeof doc.GState === "function" && typeof doc.setGState === "function") {
-        const gState = doc.GState({ opacity });
+        const gState = doc.GState({
+          opacity,
+        });
+
         doc.setGState(gState);
+
         doc.addImage(logo, "PNG", (pageW - logoW) / 2, (pageH - logoH) / 2, logoW, logoH);
-        doc.setGState(doc.GState({ opacity: 1 }));
+
+        doc.setGState(
+          doc.GState({
+            opacity: 1,
+          })
+        );
+
         return;
       }
 
@@ -459,38 +872,91 @@ export default function VerConvocacionHistorica() {
     drawWatermark(0.12);
 
     const titulo = "Listado de Convocados";
+
     const subtitulo = `${nombreEvento(evento)} — ${fechaEvento(evento)}`;
 
     doc.setFont("helvetica", "bold");
+
     doc.setFontSize(22);
+
     doc.setTextColor(40, 40, 40);
-    doc.text(titulo, pageW / 2, 60, { align: "center" });
+
+    doc.text(titulo, pageW / 2, 60, {
+      align: "center",
+    });
 
     doc.setFont("helvetica", "normal");
+
     doc.setFontSize(13);
+
     doc.setTextColor(80, 80, 80);
-    doc.text(subtitulo, pageW / 2, 82, { align: "center" });
+
+    doc.text(subtitulo, pageW / 2, 82, {
+      align: "center",
+    });
 
     autoTable(doc, {
       head: [["RUT", "Nombre", "Fecha nacimiento", "Edad"]],
+
       body: ordenarConvocados(jugadores).map((c) => {
         const info = resolverDatosJugador(c);
+
         return [
           info.rut ? formatRutWithDV(info.rut) : "",
+
           info.nombre,
+
           info.fnac ? String(info.fnac).slice(0, 10) : "",
+
           info.edad || "",
         ];
       }),
+
       startY: 105,
-      styles: { fontSize: 9, cellPadding: 4, lineColor: [200, 200, 200], lineWidth: 0.3 },
-      headStyles: { halign: "center", fillColor: FUCHSIA, textColor: [255, 255, 255], fontSize: 10 },
-      columnStyles: { 0: { halign: "center" }, 2: { halign: "center" }, 3: { halign: "center" } },
+
+      styles: {
+        fontSize: 9,
+
+        cellPadding: 4,
+
+        lineColor: [200, 200, 200],
+
+        lineWidth: 0.3,
+      },
+
+      headStyles: {
+        halign: "center",
+
+        fillColor: FUCHSIA,
+
+        textColor: [255, 255, 255],
+
+        fontSize: 10,
+      },
+
+      columnStyles: {
+        0: {
+          halign: "center",
+        },
+
+        2: {
+          halign: "center",
+        },
+
+        3: {
+          halign: "center",
+        },
+      },
+
       didDrawPage: (data) => {
         drawWatermark(0.08);
+
         const y = pageH - 24;
+
         doc.setFontSize(9);
+
         doc.setTextColor(90, 90, 90);
+
         doc.text(`Creado por WELI • APP Oficial • Página ${data.pageNumber}`, pageW / 2, y, {
           align: "center",
         });
@@ -498,15 +964,22 @@ export default function VerConvocacionHistorica() {
     });
 
     const blob = doc.output("blob");
+
     const url = URL.createObjectURL(blob);
 
     const win = window.open(url, "_blank");
+
     if (!win) {
       const a = document.createElement("a");
+
       a.href = url;
+
       a.target = "_blank";
+
       a.rel = "noopener";
+
       document.body.appendChild(a);
+
       a.click();
       a.remove();
     }
@@ -515,13 +988,16 @@ export default function VerConvocacionHistorica() {
   };
 
   /* ========= Acciones ========= */
+
   const fetchConvocadosHistorico = useCallback(
     async ({ evento_id, convocatoria_id }) => {
       const headers = buildHeaders(rolActual, academiaId);
 
       const res = await getWithFallback(
         `/convocatorias/evento/${Number(evento_id)}/convocatoria/${Number(convocatoria_id)}`,
-        { headers }
+        {
+          headers,
+        }
       );
 
       return toArray(res);
@@ -530,36 +1006,54 @@ export default function VerConvocacionHistorica() {
   );
 
   const verPDFDeHistorico = async (h) => {
-    if (generatingRef.current) return;
+    if (generatingRef.current) {
+      return;
+    }
+
     generatingRef.current = true;
 
     try {
       const evento_id = Number(h.evento_id);
+
       const convocatoria_id = Number(h.convocatoria_id);
 
       if (!evento_id || !convocatoria_id) {
         alert("Histórico sin evento_id o convocatoria_id válido.");
+
         return;
       }
 
-      const evento = getEventoById(evento_id) || { id: evento_id };
+      const evento = getEventoById(evento_id) || {
+        id: evento_id,
+      };
 
-      const lista = await fetchConvocadosHistorico({ evento_id, convocatoria_id });
+      const lista = await fetchConvocadosHistorico({
+        evento_id,
+        convocatoria_id,
+      });
 
       const listaActivos = filtrarSoloActivos(lista);
+
       if (!Array.isArray(listaActivos) || listaActivos.length === 0) {
         alert("No hay jugadores activos en esta convocatoria histórica.");
+
         return;
       }
 
       await exportarPDFDesdeDatos(evento, listaActivos);
     } catch (err) {
       const st = getStatus(err);
+
       if (st === 401 || st === 403) {
         clearToken();
-        navigate("/login", { replace: true });
+
+        navigate("/login", {
+          replace: true,
+        });
+
         return;
       }
+
       alert("No se pudo obtener el listado para exportar.");
     } finally {
       generatingRef.current = false;
@@ -569,154 +1063,289 @@ export default function VerConvocacionHistorica() {
   const verConvocadosDeHistorico = async (h) => {
     try {
       const evento_id = Number(h.evento_id);
+
       const convocatoria_id = Number(h.convocatoria_id);
 
       if (!evento_id || !convocatoria_id) {
         alert("Histórico sin evento_id o convocatoria_id válido.");
+
         return;
       }
 
-      const evento = getEventoById(evento_id) || { id: evento_id };
+      const evento = getEventoById(evento_id) || {
+        id: evento_id,
+      };
 
-      const lista = await fetchConvocadosHistorico({ evento_id, convocatoria_id });
+      const lista = await fetchConvocadosHistorico({
+        evento_id,
+        convocatoria_id,
+      });
+
       const listaActivos = filtrarSoloActivos(lista);
 
-      setModal({ open: true, evento, jugadores: listaActivos });
+      setModal({
+        open: true,
+
+        evento,
+
+        jugadores: listaActivos,
+      });
     } catch (e) {
       const st = getStatus(e);
+
       if (st === 401 || st === 403) {
         clearToken();
-        navigate("/login", { replace: true });
+
+        navigate("/login", {
+          replace: true,
+        });
+
         return;
       }
+
       alert("No fue posible cargar los convocados.");
     }
   };
 
   /* ========= Render ========= */
-  if (!canLoad) return <IsLoading />;
-  if (isLoading) return <IsLoading />;
+
+  if (!canLoad) {
+    return <IsLoading />;
+  }
+
+  if (isLoading) {
+    return <IsLoading />;
+  }
 
   return (
-    <div className={`${shell} min-h-[calc(100vh-100px)] px-2 sm:px-4 pt-4 pb-16 font-weli`}>
-      {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
+    <div className={`${ui.page} font-sans`} style={ui.rootStyle}>
+      <style>
+        {`
+          .weli-historico-row:hover {
+            background-color: var(--weli-historico-row-hover);
+          }
 
-      <h2 className="text-2xl font-bold mb-6 text-center">Histórico de Convocatorias</h2>
+          .weli-historico-primary:focus-visible,
+          .weli-historico-close:focus-visible {
+            outline: 2px solid var(--weli-historico-focus);
+            outline-offset: 3px;
+          }
 
-      <div className={tarjetaClase}>
-        <div className="w-full overflow-x-auto">
-          {historicos.length === 0 ? (
-            <p className="text-center opacity-70 py-4">No hay convocatorias históricas registradas.</p>
-          ) : (
-            <table className="w-full text-xs sm:text-sm table-fixed sm:table-auto">
-              <thead className={`${tablaCabecera} text-[10px] sm:text-xs`}>
-                <tr>
-                  {/* ✅ ELIMINADA: Columna ID */}
-                  <th className="p-2 border text-center w-56">Nombre evento</th>
-                  <th className="p-2 border text-center w-20">Convocatoria</th>
-                  <th className="p-2 border text-center w-44">Fecha generación</th>
-                  <th className="p-2 border text-center w-20">Listado</th>
-                  <th className="p-2 border text-center w-28">Convocados</th>
-                </tr>
-              </thead>
+          .weli-historico-close:hover {
+            background-color: var(--weli-historico-close-hover);
+          }
+        `}
+      </style>
 
-              <tbody>
-                {historicos.map((h) => {
-                  const evento = getEventoById(h.evento_id);
-                  return (
-                    <tr key={h.id} className={filaHover}>
-                      {/* ✅ ELIMINADA: Celda ID */}
-                      <td className="p-2 border text-center break-words">{evento ? nombreEvento(evento) : "—"}</td>
-                      <td className="p-2 border text-center">#{h.convocatoria_id}</td>
-                      <td className="p-2 border text-center">
-                        {String(h.fecha_generacion ?? "")
-                          .replace("T", " ")
-                          .slice(0, 19)}
-                      </td>
-                      <td className="p-2 border text-center">
-                        <button
-                          onClick={() => verPDFDeHistorico(h)}
-                          className={`hover:opacity-80 ${generatingRef.current ? "opacity-60 cursor-not-allowed" : ""}`}
-                          title="Exportar listado (PDF)"
-                          aria-label={`Exportar listado histórico ${h.id}`}
-                          disabled={generatingRef.current}
-                        >
-                          <FileText size={20} color="#D32F2F" />
-                        </button>
-                      </td>
-                      <td className="p-2 border text-center">
-                        <button onClick={() => verConvocadosDeHistorico(h)} className={btnVerClass} style={btnVerStyle}>
-                          Ver
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
+      <div className={ui.content}>
+        {/* ===============================================
+            HEADER
+        =============================================== */}
 
-      {/* Modal convocados */}
-      {modal.open && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 px-3">
-          <div
-            className={`${
-              darkMode ? "bg-[#111827] text-white border-white/15" : "bg-white/90 text-ra-marron border-ra-marron/15"
-            } w-[95%] max-w-3xl rounded-2xl p-6 shadow-2xl border backdrop-blur`}
-          >
-            <div className="flex justify-between items-center mb-4 gap-3">
-              <h3 className="text-lg font-bold">
-                Convocados (solo activos) — {modal.evento ? nombreEvento(modal.evento) : "Evento"}
-                {modal.evento && ` (${fechaEvento(modal.evento)})`}
-              </h3>
+        <header className="text-center">
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight" style={ui.titleStyle}>
+            Histórico de Convocatorias
+          </h2>
 
-              <button
-                onClick={() => setModal({ open: false, evento: null, jugadores: [] })}
-                className="p-2 rounded-xl hover:bg-black/10 dark:hover:bg-white/10"
-                title="Cerrar"
-                aria-label="Cerrar modal"
-              >
-                <X size={18} />
-              </button>
-            </div>
+          <p className="mx-auto mt-2 max-w-3xl text-[14px] sm:text-[15px]" style={ui.subtitleStyle}>
+            Consulta las convocatorias almacenadas y revisa o exporta sus jugadores activos.
+          </p>
+        </header>
 
-            {modal.jugadores.length === 0 ? (
-              <p className="text-center opacity-70">No hay jugadores activos en esta convocatoria.</p>
-            ) : (
-              <div className="w-full overflow-x-auto">
-                <table className="w-full text-[11px] sm:text-[12px]">
-                  <thead className={tablaCabecera}>
-                    <tr>
-                      <th className="px-2 py-1 border text-center">RUT</th>
-                      <th className="px-2 py-1 border text-center">Nombre</th>
-                      <th className="px-2 py-1 border text-center">Fecha nacimiento</th>
-                      <th className="px-2 py-1 border text-center">Edad</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ordenarConvocados(modal.jugadores).map((c) => {
-                      const info = resolverDatosJugador(c);
-                      const keyBase = normalizeRutKey(c?.jugador_rut ?? c?.rut ?? c?.rut_jugador);
-                      return (
-                        <tr key={c.id ?? `${keyBase}-${info.fnac || ""}`} className={filaHover}>
-                          <td className="px-2 py-1 border text-center">{info.rut ? formatRutWithDV(info.rut) : ""}</td>
-                          <td className="px-2 py-1 border text-center">{info.nombre}</td>
-                          <td className="px-2 py-1 border text-center">
-                            {info.fnac ? String(info.fnac).slice(0, 10) : ""}
-                          </td>
-                          <td className="px-2 py-1 border text-center">{info.edad !== "" ? info.edad : ""}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+        {/* ===============================================
+            ERROR
+        =============================================== */}
+
+        {error && (
+          <div className="mt-5">
+            <div className={ui.danger}>{error}</div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* ===============================================
+            HISTÓRICOS
+        =============================================== */}
+
+        <section className={`${ui.card} mt-5`} style={ui.cardStyle}>
+          {historicos.length === 0 ? (
+            <p className="text-center py-5" style={ui.subtitleStyle}>
+              No hay convocatorias históricas registradas.
+            </p>
+          ) : (
+            <div className="w-full overflow-x-auto">
+              <table className="w-full text-xs sm:text-sm table-fixed sm:table-auto min-w-[760px]">
+                <thead className={ui.tableHeader} style={ui.tableHeaderStyle}>
+                  <tr>
+                    <th className={`p-2.5 ${ui.tableBorder} text-center w-56 font-extrabold`} style={ui.cellStyle}>
+                      Nombre evento
+                    </th>
+
+                    <th className={`p-2.5 ${ui.tableBorder} text-center w-24 font-extrabold`} style={ui.cellStyle}>
+                      Convocatoria
+                    </th>
+
+                    <th className={`p-2.5 ${ui.tableBorder} text-center w-44 font-extrabold`} style={ui.cellStyle}>
+                      Fecha generación
+                    </th>
+
+                    <th className={`p-2.5 ${ui.tableBorder} text-center w-20 font-extrabold`} style={ui.cellStyle}>
+                      Listado
+                    </th>
+
+                    <th className={`p-2.5 ${ui.tableBorder} text-center w-28 font-extrabold`} style={ui.cellStyle}>
+                      Convocados
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {historicos.map((h) => {
+                    const evento = getEventoById(h.evento_id);
+
+                    return (
+                      <tr key={h.id} className={ui.row} style={ui.cssVars}>
+                        <td className={`p-2.5 ${ui.tableBorder} text-center break-words`} style={ui.cellStyle}>
+                          {evento ? nombreEvento(evento) : "—"}
+                        </td>
+
+                        <td className={`p-2.5 ${ui.tableBorder} text-center font-semibold`} style={ui.cellStyle}>
+                          #{h.convocatoria_id}
+                        </td>
+
+                        <td className={`p-2.5 ${ui.tableBorder} text-center`} style={ui.cellStyle}>
+                          {String(h.fecha_generacion ?? "")
+                            .replace("T", " ")
+                            .slice(0, 19)}
+                        </td>
+
+                        <td className={`p-2.5 ${ui.tableBorder} text-center`} style={ui.cellStyle}>
+                          <button
+                            type="button"
+                            onClick={() => verPDFDeHistorico(h)}
+                            className={`inline-flex items-center justify-center rounded-lg p-2 transition hover:opacity-80 ${
+                              generatingRef.current ? "opacity-60 cursor-not-allowed" : ""
+                            }`}
+                            title="Exportar listado (PDF)"
+                            aria-label={`Exportar listado histórico ${h.id}`}
+                            disabled={generatingRef.current}
+                          >
+                            <FileText size={20} color="#D32F2F" />
+                          </button>
+                        </td>
+
+                        <td className={`p-2.5 ${ui.tableBorder} text-center`} style={ui.cellStyle}>
+                          <button
+                            type="button"
+                            onClick={() => verConvocadosDeHistorico(h)}
+                            className={ui.btnView}
+                            style={ui.buttonStyle}
+                          >
+                            Ver
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {/* ===============================================
+            MODAL CONVOCADOS
+        =============================================== */}
+
+        {modal.open && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-3 py-4" style={ui.modalOverlayStyle}>
+            <div className={ui.modalCard} style={ui.modalCardStyle}>
+              <div className="flex justify-between items-center gap-3 mb-4 pb-3 border-b" style={ui.modalDividerStyle}>
+                <h3 className="text-lg font-extrabold" style={ui.titleStyle}>
+                  Convocados (solo activos) — {modal.evento ? nombreEvento(modal.evento) : "Evento"}
+                  {modal.evento && ` (${fechaEvento(modal.evento)})`}
+                </h3>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setModal({
+                      open: false,
+
+                      evento: null,
+
+                      jugadores: [],
+                    })
+                  }
+                  className="weli-historico-close shrink-0 p-2 rounded-xl transition"
+                  style={ui.closeButtonStyle}
+                  title="Cerrar"
+                  aria-label="Cerrar modal"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {modal.jugadores.length === 0 ? (
+                <p className="text-center py-4" style={ui.subtitleStyle}>
+                  No hay jugadores activos en esta convocatoria.
+                </p>
+              ) : (
+                <div className="w-full overflow-x-auto">
+                  <table className="w-full min-w-[620px] text-[11px] sm:text-[12px]">
+                    <thead className={ui.tableHeader} style={ui.tableHeaderStyle}>
+                      <tr>
+                        <th className={`px-2.5 py-2 ${ui.tableBorder} text-center font-extrabold`} style={ui.cellStyle}>
+                          RUT
+                        </th>
+
+                        <th className={`px-2.5 py-2 ${ui.tableBorder} text-center font-extrabold`} style={ui.cellStyle}>
+                          Nombre
+                        </th>
+
+                        <th className={`px-2.5 py-2 ${ui.tableBorder} text-center font-extrabold`} style={ui.cellStyle}>
+                          Fecha nacimiento
+                        </th>
+
+                        <th className={`px-2.5 py-2 ${ui.tableBorder} text-center font-extrabold`} style={ui.cellStyle}>
+                          Edad
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {ordenarConvocados(modal.jugadores).map((c) => {
+                        const info = resolverDatosJugador(c);
+
+                        const keyBase = normalizeRutKey(c?.jugador_rut ?? c?.rut ?? c?.rut_jugador);
+
+                        return (
+                          <tr key={c.id ?? `${keyBase}-${info.fnac || ""}`} className={ui.row} style={ui.cssVars}>
+                            <td className={`px-2.5 py-2 ${ui.tableBorder} text-center`} style={ui.cellStyle}>
+                              {info.rut ? formatRutWithDV(info.rut) : ""}
+                            </td>
+
+                            <td className={`px-2.5 py-2 ${ui.tableBorder} text-center`} style={ui.cellStyle}>
+                              {info.nombre}
+                            </td>
+
+                            <td className={`px-2.5 py-2 ${ui.tableBorder} text-center`} style={ui.cellStyle}>
+                              {info.fnac ? String(info.fnac).slice(0, 10) : ""}
+                            </td>
+
+                            <td className={`px-2.5 py-2 ${ui.tableBorder} text-center`} style={ui.cellStyle}>
+                              {info.edad !== "" ? info.edad : ""}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

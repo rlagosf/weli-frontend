@@ -1,21 +1,14 @@
 // src/pages/admin/estadisticasGlobales.jsx
 
 import { useEffect, useMemo, useRef, useState } from "react";
-
 import { useNavigate, useLocation } from "react-router-dom";
-
 import { Pie, Bar } from "react-chartjs-2";
-
 import { Chart, ArcElement, Tooltip, Legend, BarElement, CategoryScale, LinearScale } from "chart.js";
 
 import api, { getToken, clearToken } from "../../services/api";
-
 import { useTheme } from "../../context/ThemeContext";
-
 import IsLoading from "../../components/isLoading";
-
 import { jwtDecode } from "jwt-decode";
-
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
 Chart.register(ArcElement, Tooltip, Legend, BarElement, CategoryScale, LinearScale);
@@ -61,9 +54,7 @@ const hexToRgba = (hex, a = 0.75) => {
   const n = parseInt(full, 16);
 
   const r = (n >> 16) & 255;
-
   const g = (n >> 8) & 255;
-
   const b = n & 255;
 
   return `rgba(${r},${g},${b},${a})`;
@@ -319,6 +310,7 @@ const readSelectedAcademia = () => {
      * Compatibilidad:
      * "2"
      */
+
     const direct = Number(raw);
 
     if (Number.isInteger(direct) && direct > 0) {
@@ -787,6 +779,80 @@ const SPORT_META = {
       sanciones_federativas: "Sanciones Federativas",
     },
   },
+
+  7: {
+    nombre: "Fútbol Americano",
+
+    grupos: {
+      pases: ["pases_completos", "pases_intentados", "pases_yardas", "pases_touchdowns", "pases_intercepciones"],
+
+      acarreos: ["acarreos_intentos", "acarreos_yardas", "acarreos_touchdowns"],
+
+      recepciones: ["recepciones_total", "recepciones_yardas", "recepciones_touchdowns"],
+
+      defensa: ["tackles_totales", "sacks", "intercepciones_defensivas", "fumbles_recuperados"],
+
+      generales: ["yardas_totales", "perdidas_balon", "tiempo_posesion_segundos"],
+
+      tercer_down: ["tercer_down_intentos", "tercer_down_conversiones", "tercer_down_efectividad_pct"],
+
+      base: ["minutos_jugados", "partidos_jugados", "lesiones", "dias_baja", "sanciones_federativas"],
+    },
+
+    traducciones: {
+      pases_completos: "Pases Completos",
+
+      pases_intentados: "Pases Intentados",
+
+      pases_yardas: "Yardas por Pase",
+
+      pases_touchdowns: "Touchdowns por Pase",
+
+      pases_intercepciones: "Intercepciones Sufridas",
+
+      acarreos_intentos: "Intentos de Acarreo",
+
+      acarreos_yardas: "Yardas por Acarreo",
+
+      acarreos_touchdowns: "Touchdowns por Acarreo",
+
+      recepciones_total: "Recepciones",
+
+      recepciones_yardas: "Yardas por Recepción",
+
+      recepciones_touchdowns: "Touchdowns por Recepción",
+
+      tackles_totales: "Tackles Totales",
+
+      sacks: "Sacks",
+
+      intercepciones_defensivas: "Intercepciones Defensivas",
+
+      fumbles_recuperados: "Fumbles Recuperados",
+
+      yardas_totales: "Yardas Totales",
+
+      perdidas_balon: "Pérdidas de Balón",
+
+      tiempo_posesion_segundos: "Tiempo de Posesión (seg)",
+
+      tercer_down_intentos: "3rd Down - Intentos",
+
+      tercer_down_conversiones: "3rd Down - Conversiones",
+
+      tercer_down_efectividad_pct: "3rd Down - Efectividad (%)",
+
+      minutos_jugados: "Minutos Jugados",
+
+      partidos_jugados: "Partidos Jugados",
+
+      lesiones: "Lesiones",
+
+      dias_baja: "Días de Baja",
+
+      sanciones_federativas: "Sanciones Federativas",
+    },
+  },
 };
 
 /* =========================================================
@@ -946,6 +1012,7 @@ const tryGetList = async (paths, { signal } = {}) => {
        * Auth / AuthZ:
        * nunca probar otra ruta.
        */
+
       if (status === 401 || status === 403) {
         throw error;
       }
@@ -954,6 +1021,7 @@ const tryGetList = async (paths, { signal } = {}) => {
        * Solo 404/405 justifican
        * probar una variante.
        */
+
       if (status === 404 || status === 405) {
         continue;
       }
@@ -962,6 +1030,7 @@ const tryGetList = async (paths, { signal } = {}) => {
        * 400, 409, 422, 500...
        * son errores reales.
        */
+
       throw error;
     }
   }
@@ -1057,7 +1126,7 @@ const deriveDeporteFromPlayers = (arr) => {
 ========================================================= */
 
 export default function EstadisticasGlobales() {
-  const { darkMode } = useTheme();
+  const { darkMode, themeTokens } = useTheme();
 
   const navigate = useNavigate();
 
@@ -1109,15 +1178,122 @@ export default function EstadisticasGlobales() {
     deporteId && SPORT_META[deporteId] ? SPORT_META[deporteId] : SPORT_META_FALLBACK_BASE("Deporte no configurado");
 
   /* =======================================================
+     TOKENS DE APARIENCIA
+
+     ThemeContext es la fuente visual principal.
+     Dashboard conserva el fondo global de la aplicación.
+  ======================================================= */
+
+  const tokens = useMemo(() => {
+    if (themeTokens) {
+      return themeTokens;
+    }
+
+    if (darkMode) {
+      return {
+        surface: "#1F2937",
+
+        surfaceSoft: "#172033",
+
+        surface2: "#263244",
+
+        surfaceHover: "#374151",
+
+        primary: "#FFDDA1",
+
+        primaryHover: "#FFE5B8",
+
+        primaryContrast: "#3F2D18",
+
+        secondary: "#B79F69",
+
+        secondaryHover: "#C8B27F",
+
+        secondaryContrast: "#111827",
+
+        text: "#F9FAFB",
+
+        textMuted: "#D1D5DB",
+
+        icon: "#FFDDA1",
+
+        border: "#374151",
+
+        borderStrong: "#4B5563",
+
+        inputBg: "#111827",
+
+        inputText: "#F9FAFB",
+
+        inputBorder: "#4B5563",
+
+        tableHead: "#172033",
+
+        focus: "#FFDDA1",
+
+        overlay: "rgba(0,0,0,.65)",
+      };
+    }
+
+    return {
+      surface: "#FFFFFF",
+
+      surfaceSoft: "#FAF6EE",
+
+      surface2: "#F7EAD4",
+
+      surfaceHover: "#FFF9F2",
+
+      primary: "#AA5013",
+
+      primaryHover: "#994812",
+
+      primaryContrast: "#FFFFFF",
+
+      secondary: "#6D5829",
+
+      secondaryHover: "#5E4B23",
+
+      secondaryContrast: "#FFFFFF",
+
+      text: "#3B2A1E",
+
+      textMuted: "#766657",
+
+      icon: "#AA5013",
+
+      border: "#D8C7AE",
+
+      borderStrong: "#BFA684",
+
+      inputBg: "#FFFFFF",
+
+      inputText: "#3B2A1E",
+
+      inputBorder: "#9B7B50",
+
+      tableHead: "#F7EAD4",
+
+      focus: "#AA5013",
+
+      overlay: "rgba(0,0,0,.55)",
+    };
+  }, [themeTokens, darkMode]);
+
+  /* =======================================================
      UI
+
+     - El fondo de página permanece transparente.
+     - Las superficies reales consumen themeTokens.
+     - Errores y advertencias conservan colores semánticos.
   ======================================================= */
 
   const ui = useMemo(() => {
-    const shell = darkMode
-      ? "bg-[#111827] text-white"
-      : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
+    const page = "min-h-[calc(100vh-100px)] w-full bg-transparent px-3 sm:px-5 lg:px-7 2xl:px-10 pt-4 pb-16";
 
-    const headerSub = darkMode ? "text-white/70" : "text-ra-marron/70";
+    const content = "w-full max-w-[1700px] mx-auto";
+
+    const headerSub = "text-sm";
 
     const msgBox =
       "mt-6 rounded-2xl border px-5 py-4 font-semibold " +
@@ -1127,44 +1303,64 @@ export default function EstadisticasGlobales() {
       "rounded-2xl border px-5 py-4 font-semibold " +
       (darkMode ? "border-amber-200/20 bg-amber-500/10 text-amber-100" : "border-amber-200 bg-amber-50 text-amber-800");
 
-    const card =
-      "rounded-2xl shadow-2xl border p-6 " +
-      (darkMode ? "bg-white/10 border-white/15" : "bg-white/60 border-ra-marron/15");
+    const card = "rounded-2xl shadow-[0_14px_42px_rgba(0,0,0,0.12)] border p-6 transition-colors duration-200";
 
-    const divider = darkMode ? "border-white/10" : "border-ra-marron/10";
+    const axisText = tokens.textMuted;
 
-    const axisText = darkMode ? "rgba(255,255,255,0.82)" : "rgba(109,88,41,0.92)";
+    const grid = hexToRgba(tokens.borderStrong, 0.35);
 
-    const grid = darkMode ? "rgba(255,255,255,0.10)" : "rgba(109,88,41,0.10)";
+    const legendText = tokens.textMuted;
 
-    const legendText = darkMode ? "rgba(255,255,255,0.85)" : "rgba(109,88,41,0.85)";
-
-    const pieLabel = darkMode ? "rgba(255,255,255,0.88)" : "rgba(109,88,41,0.92)";
+    const pieLabel = tokens.text;
 
     const legendTheme = {
-      textColor: darkMode ? "rgba(255,255,255,0.86)" : "rgba(109,88,41,0.90)",
+      textColor: tokens.textMuted,
 
-      borderColor: darkMode ? "rgba(255,255,255,0.12)" : "rgba(109,88,41,0.15)",
+      borderColor: tokens.border,
 
-      itemBg: darkMode ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.65)",
+      itemBg: tokens.surfaceSoft,
 
-      itemBgHover: darkMode ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.90)",
+      itemBgHover: tokens.surfaceHover,
     };
 
     return {
-      shell,
+      page,
+      content,
       headerSub,
       msgBox,
       warnBox,
       card,
-      divider,
       axisText,
       grid,
       legendText,
       pieLabel,
       legendTheme,
+
+      pageStyle: {
+        color: tokens.text,
+      },
+
+      titleStyle: {
+        color: tokens.text,
+      },
+
+      headerSubStyle: {
+        color: tokens.textMuted,
+      },
+
+      cardStyle: {
+        backgroundColor: tokens.surface,
+
+        borderColor: tokens.border,
+
+        color: tokens.text,
+      },
+
+      dividerStyle: {
+        borderColor: tokens.border,
+      },
     };
-  }, [darkMode]);
+  }, [darkMode, tokens]);
 
   /* =======================================================
      TITLE / BREADCRUMB
@@ -1246,6 +1442,7 @@ export default function EstadisticasGlobales() {
          *
          * NO logout.
          */
+
         if (!isSuperTree) {
           navigate("/super-dashboard", {
             replace: true,
@@ -1261,6 +1458,7 @@ export default function EstadisticasGlobales() {
          *
          * NO logout.
          */
+
         if (!snap?.id) {
           navigate("/super-dashboard", {
             replace: true,
@@ -1285,6 +1483,7 @@ export default function EstadisticasGlobales() {
            * Academia EXCLUSIVAMENTE
            * desde selector.
            */
+
           academia_id: Number(snap.id),
 
           deporte_id: deporteIdResolved,
@@ -1305,6 +1504,7 @@ export default function EstadisticasGlobales() {
        *
        * NO logout.
        */
+
       if (isSuperTree) {
         navigate("/admin", {
           replace: true,
@@ -1319,6 +1519,7 @@ export default function EstadisticasGlobales() {
        * Token de Admin/Staff sin academia_id
        * no cumple el contrato vigente.
        */
+
       if (!academiaId) {
         clearToken();
 
@@ -1346,6 +1547,7 @@ export default function EstadisticasGlobales() {
          * Academia EXCLUSIVAMENTE
          * desde JWT firmado.
          */
+
         academia_id: academiaId,
 
         deporte_id: deporteIdResolved,
@@ -1392,7 +1594,7 @@ export default function EstadisticasGlobales() {
 
         /* =============================================
              JUGADORES TODOS
-          ============================================= */
+        ============================================= */
 
         const jugadoresTodosPaths =
           rol === 2
@@ -1410,7 +1612,7 @@ export default function EstadisticasGlobales() {
 
         /* =============================================
              JUGADORES ACTIVOS
-          ============================================= */
+        ============================================= */
 
         const jugadoresActivosPaths =
           rol === 2
@@ -1426,7 +1628,7 @@ export default function EstadisticasGlobales() {
 
         /* =============================================
              JUGADORES
-          ============================================= */
+        ============================================= */
 
         const [rawTodos, rawActivos] = await Promise.all([
           tryGetList(jugadoresTodosPaths, {
@@ -1444,7 +1646,7 @@ export default function EstadisticasGlobales() {
 
         /* =============================================
              DERIVAR DEPORTE
-          ============================================= */
+        ============================================= */
 
         if (!depId) {
           const d1 = deriveDeporteFromPlayers(rawActivos);
@@ -1466,7 +1668,7 @@ export default function EstadisticasGlobales() {
 
         /* =============================================
              CATÁLOGOS
-          ============================================= */
+        ============================================= */
 
         const [cats, poss, ests, sucs, prevs] = await Promise.all([
           tryGetList(["/categorias"], {
@@ -1526,7 +1728,7 @@ export default function EstadisticasGlobales() {
 
         /* =============================================
              NORMALIZAR JUGADORES
-          ============================================= */
+        ============================================= */
 
         const normalizeJugadores = (arr) => {
           const safe = Array.isArray(arr) ? arr : [];
@@ -1580,7 +1782,7 @@ export default function EstadisticasGlobales() {
              FILTRO VISUAL DE SCOPE
 
              Backend sigue siendo autoridad.
-          ============================================= */
+        ============================================= */
 
         const applyScopeFilter = (arr) => {
           const safe = Array.isArray(arr) ? arr : [];
@@ -1616,7 +1818,7 @@ export default function EstadisticasGlobales() {
 
         /* =============================================
              AGGREGATE
-          ============================================= */
+        ============================================= */
 
         if (!depId) {
           setTotals(null);
@@ -1659,6 +1861,7 @@ export default function EstadisticasGlobales() {
            * Auth/AuthZ se propagan
            * al catch principal.
            */
+
           if (status === 401 || status === 403) {
             throw errorAggregate;
           }
@@ -1684,8 +1887,9 @@ export default function EstadisticasGlobales() {
 
         /* =============================================
              401
+
              SESIÓN INVÁLIDA
-          ============================================= */
+        ============================================= */
 
         if (status === 401) {
           clearToken();
@@ -1699,10 +1903,11 @@ export default function EstadisticasGlobales() {
 
         /* =============================================
              403
+
              SESIÓN VÁLIDA / SIN PERMISO
 
              NO logout.
-          ============================================= */
+        ============================================= */
 
         if (status === 403) {
           setError("No tienes permisos para ver las estadísticas globales de esta academia.");
@@ -1860,11 +2065,7 @@ export default function EstadisticasGlobales() {
 
           backgroundColor: colors,
 
-          borderColor: ui?.divider
-            ? ui.divider.includes("white")
-              ? "rgba(255,255,255,0.12)"
-              : "rgba(109,88,41,0.14)"
-            : "rgba(255,255,255,0.12)",
+          borderColor: tokens.border,
 
           borderWidth: 1,
         },
@@ -1914,7 +2115,7 @@ export default function EstadisticasGlobales() {
 
   if (error && !jugadoresActivos.length && !jugadoresTodos.length) {
     return (
-      <div className={`${ui.shell} min-h-screen font-sans flex items-center justify-center px-6`}>
+      <div className={`${ui.page} font-sans flex items-center justify-center`} style={ui.pageStyle}>
         <div className={ui.msgBox}>{error}</div>
       </div>
     );
@@ -2001,16 +2202,18 @@ export default function EstadisticasGlobales() {
   ======================================================= */
 
   return (
-    <div className={`${ui.shell} min-h-screen font-sans`}>
+    <div className={`${ui.page} font-sans`} style={ui.pageStyle}>
       {/* =================================================
           HEADER
       ================================================= */}
 
-      <header className="px-6 pt-6">
+      <header>
         <div className="text-center">
-          <h1 className="text-4xl font-extrabold tracking-tightish">{`Estadísticas Globales — ${sportMeta.nombre}`}</h1>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight" style={ui.titleStyle}>
+            {`Estadísticas Globales — ${sportMeta.nombre}`}
+          </h1>
 
-          <p className={`text-sm mt-2 ${ui.headerSub}`}>
+          <p className={`${ui.headerSub} mt-2`} style={ui.headerSubStyle}>
             {scopeLabel || "Visualización filtrada por tu contexto (academia y deporte)."}
           </p>
         </div>
@@ -2020,7 +2223,7 @@ export default function EstadisticasGlobales() {
           MAIN
       ================================================= */}
 
-      <main className="px-6 pb-20">
+      <main className={ui.content}>
         {/* ===============================================
             ERROR / WARNING
         =============================================== */}
@@ -2057,14 +2260,16 @@ export default function EstadisticasGlobales() {
             const legendId = `legend-${key}`;
 
             return (
-              <div key={key} className={ui.card}>
+              <div key={key} className={ui.card} style={ui.cardStyle}>
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="font-extrabold text-base sm:text-lg">{label}</h2>
 
-                  <span className={ui.headerSub}>Total: {total}</span>
+                  <span className={ui.headerSub} style={ui.headerSubStyle}>
+                    Total: {total}
+                  </span>
                 </div>
 
-                <div className={`border-t ${ui.divider} pt-4`} />
+                <div className="border-t pt-4" style={ui.dividerStyle} />
 
                 <div className="flex flex-col sm:flex-row gap-3 items-stretch">
                   <div
@@ -2103,6 +2308,16 @@ export default function EstadisticasGlobales() {
 
                           tooltip: {
                             enabled: true,
+
+                            backgroundColor: tokens.surface,
+
+                            titleColor: tokens.text,
+
+                            bodyColor: tokens.text,
+
+                            borderColor: tokens.borderStrong,
+
+                            borderWidth: 1,
                           },
                         },
                       }}
@@ -2121,8 +2336,10 @@ export default function EstadisticasGlobales() {
         {hasAgg ? (
           <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
             {Object.entries(sumasPorGrupo).map(([grupoNombre, datos]) => (
-              <div key={grupoNombre} className={ui.card}>
-                <h2 className="font-extrabold mb-4 text-lg text-center">{String(grupoNombre).toUpperCase()}</h2>
+              <div key={grupoNombre} className={ui.card} style={ui.cardStyle}>
+                <h2 className="font-extrabold mb-4 text-lg text-center" style={ui.titleStyle}>
+                  {String(grupoNombre).toUpperCase()}
+                </h2>
 
                 <div className="relative h-[360px] sm:h-[400px]">
                   <Bar
@@ -2141,6 +2358,16 @@ export default function EstadisticasGlobales() {
 
                         tooltip: {
                           enabled: true,
+
+                          backgroundColor: tokens.surface,
+
+                          titleColor: tokens.text,
+
+                          bodyColor: tokens.text,
+
+                          borderColor: tokens.borderStrong,
+
+                          borderWidth: 1,
                         },
                       },
 
@@ -2175,8 +2402,8 @@ export default function EstadisticasGlobales() {
           </div>
         ) : (
           <div className="mt-8 max-w-6xl mx-auto">
-            <div className={ui.card}>
-              <p className={`text-center ${ui.headerSub}`}>
+            <div className={ui.card} style={ui.cardStyle}>
+              <p className={`text-center ${ui.headerSub}`} style={ui.headerSubStyle}>
                 Aún no hay métricas agregadas para <b>{sportMeta.nombre}</b>
                 .
                 <br />

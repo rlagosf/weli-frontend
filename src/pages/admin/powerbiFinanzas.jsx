@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
+
 import {
   BarElement,
   CategoryScale,
@@ -14,31 +15,27 @@ import {
   PointElement,
   Tooltip,
 } from "chart.js";
+
 import { Bar, Doughnut, Line } from "react-chartjs-2";
 
 import { useTheme } from "../../context/ThemeContext";
+
 import api, { ACADEMIA_STORAGE_KEY, clearToken, getToken } from "../../services/api";
+
 import IsLoading from "../../components/isLoading";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
 Chart.register(BarElement, CategoryScale, LinearScale, ArcElement, LineElement, PointElement, Tooltip, Legend);
 
 /* =========================================================
-   PALETA WELI
-   - Se conserva la paleta de tarjetas existente.
-   - Los gráficos usan una composición más corporativa
-     basada en los mismos tonos institucionales.
-========================================================= */
+   PALETA FUNCIONAL PARA GRÁFICOS
 
-const PALETTE_X = {
-  copper: "#aa5013",
-  brown: "#6d5829",
-  gold: "#b79f69",
-  cream: "#e8dac4",
-  sand: "#ffdda1",
-  caramel: "#dda272",
-  terracotta: "#e2773b",
-};
+   Estos colores se mantienen porque sirven para diferenciar
+   series/categorías visualmente.
+
+   La apariencia general de la interfaz se controla mediante
+   themeTokens.
+========================================================= */
 
 const CORPORATE_CHART_COLORS = [
   "#6d5829",
@@ -124,13 +121,33 @@ const normalizeListResponse = (res) => {
 
   const data = res?.data ?? res;
 
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.items)) return data.items;
-  if (Array.isArray(data?.results)) return data.results;
-  if (Array.isArray(data?.rows)) return data.rows;
-  if (Array.isArray(data?.data)) return data.data;
-  if (Array.isArray(data?.pagos)) return data.pagos;
-  if (data?.ok && Array.isArray(data?.data?.pagos)) return data.data.pagos;
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (Array.isArray(data?.items)) {
+    return data.items;
+  }
+
+  if (Array.isArray(data?.results)) {
+    return data.results;
+  }
+
+  if (Array.isArray(data?.rows)) {
+    return data.rows;
+  }
+
+  if (Array.isArray(data?.data)) {
+    return data.data;
+  }
+
+  if (Array.isArray(data?.pagos)) {
+    return data.pagos;
+  }
+
+  if (data?.ok && Array.isArray(data?.data?.pagos)) {
+    return data.data.pagos;
+  }
 
   return [];
 };
@@ -157,6 +174,7 @@ const monthKey = (value) => {
   }
 
   const text = String(value);
+
   const match = text.match(/^(\d{4})-(\d{2})/);
 
   if (match) {
@@ -192,6 +210,7 @@ const aggregateSum = (rows, keyFn, valueFn) => {
 
   for (const row of Array.isArray(rows) ? rows : []) {
     const key = String(keyFn(row) ?? "Sin información").trim() || "Sin información";
+
     const value = safeNumber(valueFn(row), 0);
 
     map.set(key, safeNumber(map.get(key), 0) + value);
@@ -205,19 +224,27 @@ const aggregateSum = (rows, keyFn, valueFn) => {
 ========================================================= */
 
 export default function PowerbiFinanzas() {
-  const { darkMode } = useTheme();
+  const { darkMode, themeTokens } = useTheme();
+
   const navigate = useNavigate();
+
   const location = useLocation();
 
   useMobileAutoScrollTop();
 
   const [rol, setRol] = useState(null);
+
   const [academiaId, setAcademiaId] = useState(() => getAcademiaIdFromStorage());
 
   const [isLoading, setIsLoading] = useState(true);
+
   const [error, setError] = useState("");
 
   const [pagos, setPagos] = useState([]);
+
+  /* =======================================================
+     BASE DASHBOARD
+  ======================================================= */
 
   const dashboardBase = useMemo(() => {
     const path = location.pathname || "";
@@ -237,9 +264,11 @@ export default function PowerbiFinanzas() {
     }
 
     const currentPath = location.pathname + location.search;
+
     const breadcrumb = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : [];
 
     const last = breadcrumb[breadcrumb.length - 1];
+
     const label = "Power BI financiero";
 
     if (!last || last.label !== label) {
@@ -247,11 +276,14 @@ export default function PowerbiFinanzas() {
 
       navigate(currentPath, {
         replace: true,
+
         state: {
           ...(location.state || {}),
+
           breadcrumb: [
             {
               to: currentPath,
+
               label,
             },
           ],
@@ -286,9 +318,11 @@ export default function PowerbiFinanzas() {
     const interval = setInterval(sync, 1200);
 
     const onStorage = () => sync();
+
     const onAcademiaChanged = () => sync();
 
     window.addEventListener("storage", onStorage);
+
     window.addEventListener("weli:selectedAcademiaChanged", onAcademiaChanged);
 
     return () => {
@@ -297,6 +331,7 @@ export default function PowerbiFinanzas() {
       clearInterval(interval);
 
       window.removeEventListener("storage", onStorage);
+
       window.removeEventListener("weli:selectedAcademiaChanged", onAcademiaChanged);
     };
   }, []);
@@ -320,6 +355,7 @@ export default function PowerbiFinanzas() {
       }
 
       const decoded = jwtDecode(token);
+
       const now = Math.floor(Date.now() / 1000);
 
       if (!decoded?.exp || decoded.exp <= now) {
@@ -349,6 +385,7 @@ export default function PowerbiFinanzas() {
       }
 
       setRol(currentRol);
+
       setIsLoading(false);
     } catch {
       clearToken();
@@ -427,24 +464,32 @@ export default function PowerbiFinanzas() {
     }
 
     const abort = new AbortController();
+
     const headers = buildHeaders(rol, academiaId);
 
     (async () => {
       setIsLoading(true);
+
       setError("");
 
       try {
         const config = {
           signal: abort.signal,
+
           headers,
         };
 
         const [tiposRes, mediosRes, situacionesRes, jugadoresRes, categoriasRes, pagosRes] = await Promise.all([
           apiOps.getVar("/tipo-pago", config).catch(() => null),
+
           apiOps.getVar("/medio-pago", config).catch(() => null),
+
           apiOps.getVar("/situacion-pago", config).catch(() => apiOps.getVar("/estado-pago", config).catch(() => null)),
+
           apiOps.getVar("/jugadores", config).catch(() => null),
+
           apiOps.getVar("/categorias", config).catch(() => null),
+
           apiOps.getVar("/pagos-jugador/estado-cuenta", config),
         ]);
 
@@ -453,15 +498,23 @@ export default function PowerbiFinanzas() {
         }
 
         const tipos = normalizeListResponse(tiposRes);
+
         const medios = normalizeListResponse(mediosRes);
+
         const situaciones = normalizeListResponse(situacionesRes);
+
         const jugadoresList = normalizeListResponse(jugadoresRes);
+
         const categorias = normalizeListResponse(categoriasRes);
+
         const rawPagos = normalizeListResponse(pagosRes);
 
         const tipoPagoMap = buildIdNameMap(tipos, "id", "nombre");
+
         const medioPagoMap = buildIdNameMap(medios, "id", "nombre");
+
         const situacionPagoMap = buildIdNameMap(situaciones, "id", "nombre");
+
         const categoriaMap = buildIdNameMap(categorias, "id", "nombre");
 
         const jugadoresMap = new Map();
@@ -483,9 +536,13 @@ export default function PowerbiFinanzas() {
 
           jugadoresMap.set(id, {
             id,
+
             rut: jugador?.rut_jugador ?? jugador?.rut ?? null,
+
             nombre: jugador?.nombre_jugador ?? jugador?.nombre ?? jugador?.nombre_completo ?? "—",
+
             categoria_id: categoriaId > 0 ? categoriaId : null,
+
             categoria_nombre: categoriaNombre,
           });
         }
@@ -508,6 +565,7 @@ export default function PowerbiFinanzas() {
 
         const normalizedPagos = scopedPagos.map((pago) => {
           const jugadorId = Number(pago?.jugador_id ?? 0);
+
           const jugador = jugadoresMap.get(jugadorId);
 
           const situacionId = Number(pago?.situacion_pago_id ?? pago?.estado_pago_id ?? pago?.estado_id ?? 0);
@@ -563,9 +621,11 @@ export default function PowerbiFinanzas() {
             categoria_nombre: pago?.categoria_nombre ?? jugador?.categoria_nombre ?? "Sin categoría",
 
             situacion_pago_id: situacionId,
+
             situacion_pago_nombre: String(situacionNombre),
 
             medio_pago_id: medioId,
+
             medio_pago_nombre: String(medioNombre),
 
             plan_catalogo_id: pago?.plan_catalogo_id != null ? Number(pago.plan_catalogo_id) : null,
@@ -610,35 +670,169 @@ export default function PowerbiFinanzas() {
   }, [rol, academiaId, canLoad, apiOps, handleAuth]);
 
   /* =======================================================
+     TOKENS DE APARIENCIA
+
+     ThemeContext es la fuente visual principal.
+
+     Dashboard continúa siendo dueño del fondo global.
+  ======================================================= */
+
+  const tokens = useMemo(() => {
+    if (themeTokens) {
+      return themeTokens;
+    }
+
+    if (darkMode) {
+      return {
+        surface: "#1F2937",
+
+        surfaceSoft: "#172033",
+
+        surface2: "#263244",
+
+        surfaceHover: "#374151",
+
+        primary: "#FFDDA1",
+
+        primaryHover: "#FFE5B8",
+
+        primaryContrast: "#3F2D18",
+
+        secondary: "#B79F69",
+
+        secondaryHover: "#C8B27F",
+
+        secondaryContrast: "#111827",
+
+        text: "#F9FAFB",
+
+        textMuted: "#D1D5DB",
+
+        icon: "#FFDDA1",
+
+        border: "#374151",
+
+        borderStrong: "#4B5563",
+
+        inputBg: "#111827",
+
+        inputText: "#F9FAFB",
+
+        inputBorder: "#4B5563",
+
+        tableHead: "#172033",
+
+        focus: "#FFDDA1",
+
+        overlay: "rgba(0,0,0,.65)",
+      };
+    }
+
+    return {
+      surface: "#FFFFFF",
+
+      surfaceSoft: "#FAF6EE",
+
+      surface2: "#F7EAD4",
+
+      surfaceHover: "#FFF9F2",
+
+      primary: "#AA5013",
+
+      primaryHover: "#994812",
+
+      primaryContrast: "#FFFFFF",
+
+      secondary: "#6D5829",
+
+      secondaryHover: "#5E4B23",
+
+      secondaryContrast: "#FFFFFF",
+
+      text: "#3B2A1E",
+
+      textMuted: "#766657",
+
+      icon: "#AA5013",
+
+      border: "#D8C7AE",
+
+      borderStrong: "#BFA684",
+
+      inputBg: "#FFFFFF",
+
+      inputText: "#3B2A1E",
+
+      inputBorder: "#9B7B50",
+
+      tableHead: "#F7EAD4",
+
+      focus: "#AA5013",
+
+      overlay: "rgba(0,0,0,.55)",
+    };
+  }, [themeTokens, darkMode]);
+
+  /* =======================================================
      UI
-     Se mantienen fuente y colores originales de tarjetas.
+
+     - Dashboard controla el fondo global.
+     - Esta vista permanece transparente.
+     - Las tarjetas utilizan surface.
+     - Los bloques interiores utilizan surfaceSoft.
+     - Los textos y gráficos consumen themeTokens.
   ======================================================= */
 
   const ui = useMemo(() => {
-    const shell = darkMode
-      ? "bg-[#111827] text-white"
-      : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
+    const page = "min-h-[calc(100vh-100px)] w-full bg-transparent px-3 sm:px-5 lg:px-7 2xl:px-10 pt-4 pb-16";
 
-    const headerSub = darkMode ? "text-white/70" : "text-ra-marron/70";
+    const content = "w-full max-w-[1700px] mx-auto";
+
+    const headerSub = "weli-powerbi-subtext";
 
     const msgBox = darkMode ? "border-red-200/20 bg-red-500/10 text-red-100" : "border-red-200 bg-red-50 text-red-700";
 
-    const card = darkMode ? "bg-white/10 border-white/15" : "bg-white/60 border-ra-marron/15";
+    const card = "weli-powerbi-card";
 
-    const titleMain = darkMode ? "text-white" : "text-ra-marron";
+    const titleMain = "weli-powerbi-title";
 
-    const sectionTitleStyle = darkMode
-      ? {}
-      : {
-          color: PALETTE_X.brown,
-        };
+    const sectionTitleStyle = {
+      color: tokens.text,
+    };
 
-    const chartText = darkMode ? "rgba(255,255,255,0.88)" : PALETTE_X.brown;
+    const chartText = tokens.textMuted;
 
-    const chartGrid = darkMode ? "rgba(255,255,255,0.08)" : "rgba(109,88,41,0.12)";
+    const chartGrid = tokens.border;
+
+    const rootStyle = {
+      color: tokens.text,
+
+      "--weli-pbi-surface": tokens.surface,
+
+      "--weli-pbi-surface-soft": tokens.surfaceSoft,
+
+      "--weli-pbi-surface-2": tokens.surface2,
+
+      "--weli-pbi-surface-hover": tokens.surfaceHover,
+
+      "--weli-pbi-text": tokens.text,
+
+      "--weli-pbi-muted": tokens.textMuted,
+
+      "--weli-pbi-border": tokens.border,
+
+      "--weli-pbi-border-strong": tokens.borderStrong,
+
+      "--weli-pbi-primary": tokens.primary,
+
+      "--weli-pbi-primary-contrast": tokens.primaryContrast,
+
+      "--weli-pbi-focus": tokens.focus,
+    };
 
     return {
-      shell,
+      page,
+      content,
       headerSub,
       msgBox,
       card,
@@ -646,8 +840,9 @@ export default function PowerbiFinanzas() {
       sectionTitleStyle,
       chartText,
       chartGrid,
+      rootStyle,
     };
-  }, [darkMode]);
+  }, [darkMode, tokens]);
 
   /* =======================================================
      DATOS FINANCIEROS
@@ -678,16 +873,21 @@ export default function PowerbiFinanzas() {
             ...detalle,
 
             pago_id: pago.id,
+
             fecha_pago: pago.fecha_pago,
 
             jugador_id: pago.jugador_id,
+
             jugador_nombre: pago.jugador_nombre,
+
             categoria_nombre: pago.categoria_nombre,
 
             medio_pago_id: pago.medio_pago_id,
+
             medio_pago_nombre: pago.medio_pago_nombre,
 
             plan_catalogo_id: pago.plan_catalogo_id,
+
             plan_nombre: pago.plan_nombre,
           });
         }
@@ -697,28 +897,38 @@ export default function PowerbiFinanzas() {
 
       /*
        * Fallback de compatibilidad.
+       *
        * El modelo nuevo debiera traer detalles,
        * pero evitamos perder una transacción histórica.
        */
+
       rows.push({
         pago_id: pago.id,
+
         fecha_pago: pago.fecha_pago,
 
         jugador_id: pago.jugador_id,
+
         jugador_nombre: pago.jugador_nombre,
+
         categoria_nombre: pago.categoria_nombre,
 
         medio_pago_id: pago.medio_pago_id,
+
         medio_pago_nombre: pago.medio_pago_nombre,
 
         plan_catalogo_id: pago.plan_catalogo_id,
+
         plan_nombre: pago.plan_nombre,
 
         tipo_pago_id: null,
+
         tipo_pago_nombre: "Sin detalle",
 
         monto_base: pago.monto_base,
+
         monto_descuento: pago.monto_descuento,
+
         monto_total: pago.monto_total,
       });
     }
@@ -746,6 +956,7 @@ export default function PowerbiFinanzas() {
      * No se inventan egresos: se mantiene en cero hasta incorporar
      * un módulo o fuente confiable de gastos.
      */
+
     const gastosRegistrados = 0;
 
     return {
@@ -757,6 +968,7 @@ export default function PowerbiFinanzas() {
       pagosConDescuento,
       tasaDescuento,
       gastosRegistrados,
+
       resultadoTemporal: ingresos - gastosRegistrados,
     };
   }, [pagosPagados]);
@@ -768,7 +980,9 @@ export default function PowerbiFinanzas() {
   const ingresosPorConcepto = useMemo(() => {
     const map = aggregateSum(
       detallesPagados,
+
       (item) => item?.tipo_pago_nombre ?? "Sin detalle",
+
       (item) => item?.monto_total
     );
 
@@ -778,7 +992,9 @@ export default function PowerbiFinanzas() {
   const ingresosPorMedio = useMemo(() => {
     const map = aggregateSum(
       pagosPagados,
+
       (item) => item?.medio_pago_nombre ?? "Sin información",
+
       (item) => item?.monto_total
     );
 
@@ -788,7 +1004,9 @@ export default function PowerbiFinanzas() {
   const ingresosPorCategoria = useMemo(() => {
     const map = aggregateSum(
       pagosPagados,
+
       (item) => item?.categoria_nombre ?? "Sin categoría",
+
       (item) => item?.monto_total
     );
 
@@ -798,7 +1016,9 @@ export default function PowerbiFinanzas() {
   const descuentosPorConcepto = useMemo(() => {
     const map = aggregateSum(
       detallesPagados,
+
       (item) => item?.tipo_pago_nombre ?? "Sin detalle",
+
       (item) => item?.monto_descuento
     );
 
@@ -810,6 +1030,7 @@ export default function PowerbiFinanzas() {
 
     for (const item of detallesPagados) {
       const key = String(item?.tipo_pago_nombre ?? "Sin detalle").trim() || "Sin detalle";
+
       map.set(key, safeNumber(map.get(key), 0) + 1);
     }
 
@@ -818,6 +1039,7 @@ export default function PowerbiFinanzas() {
 
   const promedioPorConcepto = useMemo(() => {
     const totalMap = new Map();
+
     const countMap = new Map();
 
     for (const item of detallesPagados) {
@@ -835,6 +1057,7 @@ export default function PowerbiFinanzas() {
         return {
           nombre,
           cantidad,
+
           promedio: cantidad > 0 ? total / cantidad : 0,
         };
       })
@@ -859,6 +1082,7 @@ export default function PowerbiFinanzas() {
       };
 
       current.cantidad += 1;
+
       current.monto += descuento;
 
       map.set(key, current);
@@ -867,7 +1091,9 @@ export default function PowerbiFinanzas() {
     return Array.from(map.entries())
       .map(([nombre, value]) => ({
         nombre,
+
         cantidad: value.cantidad,
+
         monto: value.monto,
       }))
       .sort((a, b) => b.monto - a.monto);
@@ -890,6 +1116,7 @@ export default function PowerbiFinanzas() {
 
     return {
       labels: keys.map(monthLabel),
+
       data: keys.map((key) => safeNumber(map.get(key), 0)),
     };
   }, [pagosPagados]);
@@ -913,6 +1140,7 @@ export default function PowerbiFinanzas() {
           ),
 
           borderRadius: 8,
+
           borderSkipped: false,
         },
       ],
@@ -934,14 +1162,15 @@ export default function PowerbiFinanzas() {
             (_, index) => CORPORATE_CHART_COLORS[index % CORPORATE_CHART_COLORS.length]
           ),
 
-          borderColor: darkMode ? "#111827" : "#f6ead4",
+          borderColor: tokens.surface,
 
           borderWidth: 3,
+
           hoverOffset: 6,
         },
       ],
     }),
-    [ingresosPorMedio, darkMode]
+    [ingresosPorMedio, tokens.surface]
   );
 
   const categoryChart = useMemo(
@@ -959,6 +1188,7 @@ export default function PowerbiFinanzas() {
           ),
 
           borderRadius: 8,
+
           borderSkipped: false,
         },
       ],
@@ -976,24 +1206,27 @@ export default function PowerbiFinanzas() {
 
           data: ingresosPorMes.data,
 
-          borderColor: PALETTE_X.copper,
+          borderColor: tokens.primary,
 
-          backgroundColor: PALETTE_X.copper,
+          backgroundColor: tokens.primary,
 
-          pointBackgroundColor: PALETTE_X.gold,
+          pointBackgroundColor: tokens.secondary,
 
-          pointBorderColor: PALETTE_X.brown,
+          pointBorderColor: tokens.text,
 
           pointBorderWidth: 2,
+
           pointRadius: 4,
+
           pointHoverRadius: 6,
 
           tension: 0.28,
+
           borderWidth: 3,
         },
       ],
     }),
-    [ingresosPorMes]
+    [ingresosPorMes, tokens.primary, tokens.secondary, tokens.text]
   );
 
   const discountByConceptChart = useMemo(
@@ -1011,6 +1244,7 @@ export default function PowerbiFinanzas() {
           ),
 
           borderRadius: 8,
+
           borderSkipped: false,
         },
       ],
@@ -1033,6 +1267,7 @@ export default function PowerbiFinanzas() {
           ),
 
           borderRadius: 8,
+
           borderSkipped: false,
         },
       ],
@@ -1064,19 +1299,20 @@ export default function PowerbiFinanzas() {
 
           font: {
             size: 12,
+
             weight: "600",
           },
         },
       },
 
       tooltip: {
-        backgroundColor: darkMode ? "rgba(17,24,39,0.96)" : "rgba(255,250,242,0.98)",
+        backgroundColor: tokens.surface,
 
         titleColor: ui.chartText,
 
         bodyColor: ui.chartText,
 
-        borderColor: darkMode ? "rgba(255,255,255,0.16)" : "rgba(109,88,41,0.20)",
+        borderColor: tokens.borderStrong,
 
         borderWidth: 1,
 
@@ -1087,12 +1323,13 @@ export default function PowerbiFinanzas() {
         },
       },
     }),
-    [ui.chartText, darkMode]
+    [ui.chartText, tokens.surface, tokens.borderStrong]
   );
 
   const verticalBarOptions = useMemo(
     () => ({
       responsive: true,
+
       maintainAspectRatio: false,
 
       plugins: basePlugins,
@@ -1104,6 +1341,7 @@ export default function PowerbiFinanzas() {
 
             font: {
               size: 11,
+
               weight: "600",
             },
           },
@@ -1146,7 +1384,9 @@ export default function PowerbiFinanzas() {
   const horizontalBarOptions = useMemo(
     () => ({
       indexAxis: "y",
+
       responsive: true,
+
       maintainAspectRatio: false,
 
       plugins: basePlugins,
@@ -1180,6 +1420,7 @@ export default function PowerbiFinanzas() {
 
             font: {
               size: 11,
+
               weight: "600",
             },
           },
@@ -1200,7 +1441,9 @@ export default function PowerbiFinanzas() {
   const countBarOptions = useMemo(
     () => ({
       indexAxis: "y",
+
       responsive: true,
+
       maintainAspectRatio: false,
 
       plugins: {
@@ -1221,6 +1464,7 @@ export default function PowerbiFinanzas() {
 
           ticks: {
             color: ui.chartText,
+
             precision: 0,
 
             font: {
@@ -1243,6 +1487,7 @@ export default function PowerbiFinanzas() {
 
             font: {
               size: 11,
+
               weight: "600",
             },
           },
@@ -1263,6 +1508,7 @@ export default function PowerbiFinanzas() {
   const lineOptions = useMemo(
     () => ({
       responsive: true,
+
       maintainAspectRatio: false,
 
       plugins: basePlugins,
@@ -1274,6 +1520,7 @@ export default function PowerbiFinanzas() {
 
             font: {
               size: 11,
+
               weight: "600",
             },
           },
@@ -1316,6 +1563,7 @@ export default function PowerbiFinanzas() {
   const doughnutOptions = useMemo(
     () => ({
       responsive: true,
+
       maintainAspectRatio: false,
 
       cutout: "66%",
@@ -1353,316 +1601,328 @@ export default function PowerbiFinanzas() {
 
   if (error) {
     return (
-      <div className={`${ui.shell} min-h-screen font-sans`}>
-        <div className="px-6 pt-6">
-          <div className={`mt-8 rounded-2xl border px-5 py-4 font-semibold ${ui.msgBox}`}>{error}</div>
+      <div className={`${ui.page} font-sans`} style={ui.rootStyle}>
+        <div className={ui.content}>
+          <div className={`mt-4 rounded-2xl border px-5 py-4 font-semibold ${ui.msgBox}`}>{error}</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`${ui.shell} min-h-screen font-sans`}>
-      <header className="px-4 sm:px-6 lg:px-8 pt-6">
-        <div className="text-center">
-          <h1 className={`text-3xl sm:text-4xl font-extrabold tracking-tightish ${ui.titleMain}`}>
-            Power BI Financiero — Panel Ejecutivo
-          </h1>
+    <div className={`${ui.page} font-sans`} style={ui.rootStyle}>
+      <style>
+        {`
+          .weli-powerbi-card {
+            background-color: var(--weli-pbi-surface) !important;
+            border-color: var(--weli-pbi-border) !important;
+            color: var(--weli-pbi-text) !important;
+          }
 
-          <p className={`text-sm sm:text-base mt-2 ${ui.headerSub}`}>
-            Análisis consolidado de ingresos, medios de pago, categorías, descuentos y comportamiento transaccional
-          </p>
-        </div>
-      </header>
+          .weli-powerbi-subtext {
+            color: var(--weli-pbi-muted) !important;
+          }
 
-      <main className="px-4 sm:px-6 lg:px-8 pb-20">
-        {/* ===================================================
-            KPIs EJECUTIVOS
-        =================================================== */}
+          .weli-powerbi-title {
+            color: var(--weli-pbi-text) !important;
+          }
 
-        <section className="mt-8 grid grid-cols-2 xl:grid-cols-4 gap-4">
-          <MetricCard
-            ui={ui}
-            darkMode={darkMode}
-            label="Ingresos recibidos"
-            value={toCLP(metricas.ingresos)}
-            helper={`${toNumber(metricas.cantidadPagos)} pagos confirmados`}
-          />
+          .weli-powerbi-inner {
+            background-color: var(--weli-pbi-surface-soft) !important;
+            border-color: var(--weli-pbi-border) !important;
+            color: var(--weli-pbi-text) !important;
+          }
 
-          <MetricCard
-            ui={ui}
-            darkMode={darkMode}
-            label="Monto promedio por pago"
-            value={toCLP(metricas.montoPromedio)}
-            helper="Promedio de las transacciones confirmadas"
-          />
+          .weli-powerbi-muted {
+            color: var(--weli-pbi-muted) !important;
+          }
 
-          <MetricCard
-            ui={ui}
-            darkMode={darkMode}
-            label="Pagos con descuento"
-            value={toNumber(metricas.pagosConDescuento)}
-            helper={`${metricas.tasaDescuento.toFixed(1)}% de descuento efectivo`}
-          />
+          .weli-powerbi-value {
+            color: var(--weli-pbi-text) !important;
+          }
 
-          <MetricCard
-            ui={ui}
-            darkMode={darkMode}
-            label="Descuentos aplicados"
-            value={toCLP(metricas.descuentosExtra)}
-            helper="Reducción monetaria sobre pagos confirmados"
-          />
-        </section>
+          .weli-powerbi-accent {
+            color: var(--weli-pbi-primary) !important;
+          }
 
-        {/* ===================================================
-            RESUMEN FINANCIERO
-        =================================================== */}
+          .weli-powerbi-empty {
+            border-color: var(--weli-pbi-border) !important;
+            color: var(--weli-pbi-muted) !important;
+          }
+        `}
+      </style>
 
-        <section className={`${ui.card} mt-5 rounded-2xl border shadow-lg p-5 sm:p-6`}>
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div>
-              <h2 className="text-lg sm:text-xl font-extrabold" style={ui.sectionTitleStyle}>
-                Resumen financiero consolidado
-              </h2>
+      <div className={ui.content}>
+        {/* =================================================
+            HEADER
+        ================================================= */}
 
-              <p className={`mt-1 text-sm ${ui.headerSub}`}>
-                Vista temporal de ingresos y resultado. WELI aún no registra egresos financieros.
-              </p>
+        <header className="text-center">
+          <div className="text-center">
+            <h1 className={`text-3xl sm:text-4xl font-extrabold tracking-tight ${ui.titleMain}`}>
+              Power BI Financiero — Panel Ejecutivo
+            </h1>
+
+            <p className={`text-sm sm:text-base mt-2 ${ui.headerSub}`}>
+              Análisis consolidado de ingresos, medios de pago, categorías, descuentos y comportamiento transaccional
+            </p>
+          </div>
+        </header>
+
+        <main>
+          {/* =================================================
+              KPIs EJECUTIVOS
+          ================================================= */}
+
+          <section className="mt-8 grid grid-cols-2 xl:grid-cols-4 gap-4">
+            <MetricCard
+              ui={ui}
+              label="Ingresos recibidos"
+              value={toCLP(metricas.ingresos)}
+              helper={`${toNumber(metricas.cantidadPagos)} pagos confirmados`}
+            />
+
+            <MetricCard
+              ui={ui}
+              label="Monto promedio por pago"
+              value={toCLP(metricas.montoPromedio)}
+              helper="Promedio de las transacciones confirmadas"
+            />
+
+            <MetricCard
+              ui={ui}
+              label="Pagos con descuento"
+              value={toNumber(metricas.pagosConDescuento)}
+              helper={`${metricas.tasaDescuento.toFixed(1)}% de descuento efectivo`}
+            />
+
+            <MetricCard
+              ui={ui}
+              label="Descuentos aplicados"
+              value={toCLP(metricas.descuentosExtra)}
+              helper="Reducción monetaria sobre pagos confirmados"
+            />
+          </section>
+
+          {/* =================================================
+              RESUMEN FINANCIERO
+          ================================================= */}
+
+          <section className={`${ui.card} mt-5 rounded-2xl border shadow-[0_14px_42px_rgba(0,0,0,0.12)] p-5 sm:p-6`}>
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div>
+                <h2 className="text-lg sm:text-xl font-extrabold" style={ui.sectionTitleStyle}>
+                  Resumen financiero consolidado
+                </h2>
+
+                <p className={`mt-1 text-sm ${ui.headerSub}`}>
+                  Vista temporal de ingresos y resultado. WELI aún no registra egresos financieros.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 min-w-0 lg:min-w-[620px]">
+                <ExecutiveValue label="Base cobrada" value={toCLP(metricas.baseTransacciones)} />
+
+                <ExecutiveValue label="Descuento extra" value={toCLP(metricas.descuentosExtra)} />
+
+                <ExecutiveValue label="Gastos registrados" value={toCLP(metricas.gastosRegistrados)} />
+
+                <ExecutiveValue label="Resultado temporal" value={toCLP(metricas.resultadoTemporal)} emphasize />
+              </div>
             </div>
+          </section>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 min-w-0 lg:min-w-[620px]">
-              <ExecutiveValue darkMode={darkMode} label="Base cobrada" value={toCLP(metricas.baseTransacciones)} />
+          {pagosPagados.length === 0 && (
+            <div className={`${ui.card} mt-5 rounded-2xl border px-5 py-4 font-semibold`}>
+              No existen pagos confirmados para consolidar ingresos en los gráficos.
+            </div>
+          )}
 
-              <ExecutiveValue darkMode={darkMode} label="Descuento extra" value={toCLP(metricas.descuentosExtra)} />
+          {/* =================================================
+              BLOQUE 1
+          ================================================= */}
 
-              <ExecutiveValue
-                darkMode={darkMode}
-                label="Gastos registrados"
-                value={toCLP(metricas.gastosRegistrados)}
+          <div className="mt-5 grid grid-cols-1 xl:grid-cols-5 gap-5">
+            <section
+              className={`${ui.card} xl:col-span-3 rounded-2xl border p-5 sm:p-6 shadow-[0_14px_42px_rgba(0,0,0,0.12)]`}
+            >
+              <PanelHeader
+                title="Ingresos por concepto"
+                subtitle="Distribución de ingresos recibidos por matrícula, mensualidad, torneo y otros conceptos"
+                style={ui.sectionTitleStyle}
+                subClass={ui.headerSub}
               />
 
-              <ExecutiveValue
-                darkMode={darkMode}
-                label="Resultado temporal"
-                value={toCLP(metricas.resultadoTemporal)}
-                emphasize
+              <div className="mt-5 h-[360px]">
+                <Bar data={conceptChart} options={verticalBarOptions} />
+              </div>
+            </section>
+
+            <section
+              className={`${ui.card} xl:col-span-2 rounded-2xl border p-5 sm:p-6 shadow-[0_14px_42px_rgba(0,0,0,0.12)]`}
+            >
+              <PanelHeader
+                title="Composición por medio de pago"
+                subtitle="Participación monetaria de cada canal de recaudación"
+                style={ui.sectionTitleStyle}
+                subClass={ui.headerSub}
               />
-            </div>
+
+              <div className="mt-5 h-[360px]">
+                <Doughnut data={paymentMethodChart} options={doughnutOptions} />
+              </div>
+            </section>
           </div>
-        </section>
 
-        {pagosPagados.length === 0 && (
-          <div
-            className={`mt-5 rounded-2xl border px-5 py-4 font-semibold ${
-              darkMode ? "border-white/15 bg-white/10 text-white/80" : "border-ra-marron/15 bg-white/60 text-ra-marron"
-            }`}
-          >
-            No existen pagos confirmados para consolidar ingresos en los gráficos.
+          {/* =================================================
+              BLOQUE 2
+          ================================================= */}
+
+          <div className="mt-5 grid grid-cols-1 xl:grid-cols-2 gap-5">
+            <section className={`${ui.card} rounded-2xl border p-5 sm:p-6 shadow-[0_14px_42px_rgba(0,0,0,0.12)]`}>
+              <PanelHeader
+                title="Ingresos por categoría"
+                subtitle="Monto recibido según la categoría deportiva del jugador"
+                style={ui.sectionTitleStyle}
+                subClass={ui.headerSub}
+              />
+
+              <div className="mt-5 h-[350px]">
+                <Bar data={categoryChart} options={horizontalBarOptions} />
+              </div>
+            </section>
+
+            <section className={`${ui.card} rounded-2xl border p-5 sm:p-6 shadow-[0_14px_42px_rgba(0,0,0,0.12)]`}>
+              <PanelHeader
+                title="Tendencia de ingresos"
+                subtitle="Evolución de los últimos seis meses con pagos confirmados"
+                style={ui.sectionTitleStyle}
+                subClass={ui.headerSub}
+              />
+
+              <div className="mt-5 h-[350px]">
+                <Line data={trendChart} options={lineOptions} />
+              </div>
+            </section>
           </div>
-        )}
 
-        {/* ===================================================
-            BLOQUE 1
-        =================================================== */}
+          {/* =================================================
+              DESCUENTOS Y VOLUMEN OPERATIVO
+          ================================================= */}
 
-        <div className="mt-5 grid grid-cols-1 xl:grid-cols-5 gap-5">
-          <section className={`${ui.card} xl:col-span-3 rounded-2xl border p-5 sm:p-6 shadow-lg`}>
-            <PanelHeader
-              title="Ingresos por concepto"
-              subtitle="Distribución de ingresos recibidos por matrícula, mensualidad, torneo y otros conceptos"
-              style={ui.sectionTitleStyle}
-              subClass={ui.headerSub}
-            />
+          <div className="mt-5 grid grid-cols-1 xl:grid-cols-5 gap-5">
+            <section
+              className={`${ui.card} xl:col-span-3 rounded-2xl border p-5 sm:p-6 shadow-[0_14px_42px_rgba(0,0,0,0.12)]`}
+            >
+              <PanelHeader
+                title="Descuentos aplicados por concepto"
+                subtitle="Monto efectivamente descontado en transacciones confirmadas, agrupado por tipo de pago"
+                style={ui.sectionTitleStyle}
+                subClass={ui.headerSub}
+              />
 
-            <div className="mt-5 h-[360px]">
-              <Bar data={conceptChart} options={verticalBarOptions} />
-            </div>
-          </section>
+              <div className="mt-5 h-[360px]">
+                {descuentosPorConcepto.length > 0 ? (
+                  <Bar data={discountByConceptChart} options={horizontalBarOptions} />
+                ) : (
+                  <Bar data={transactionCountChart} options={countBarOptions} />
+                )}
+              </div>
+            </section>
 
-          <section className={`${ui.card} xl:col-span-2 rounded-2xl border p-5 sm:p-6 shadow-lg`}>
-            <PanelHeader
-              title="Composición por medio de pago"
-              subtitle="Participación monetaria de cada canal de recaudación"
-              style={ui.sectionTitleStyle}
-              subClass={ui.headerSub}
-            />
+            <section
+              className={`${ui.card} xl:col-span-2 rounded-2xl border p-5 sm:p-6 shadow-[0_14px_42px_rgba(0,0,0,0.12)]`}
+            >
+              <PanelHeader
+                title="Impacto de descuentos"
+                subtitle="Indicadores calculados exclusivamente sobre pagos efectivamente registrados"
+                style={ui.sectionTitleStyle}
+                subClass={ui.headerSub}
+              />
 
-            <div className="mt-5 h-[360px]">
-              <Doughnut data={paymentMethodChart} options={doughnutOptions} />
-            </div>
-          </section>
-        </div>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <ExecutiveValue label="Base antes de ajuste" value={toCLP(metricas.baseTransacciones)} />
 
-        {/* ===================================================
-            BLOQUE 2
-        =================================================== */}
+                <ExecutiveValue label="Descuento aplicado" value={toCLP(metricas.descuentosExtra)} />
 
-        <div className="mt-5 grid grid-cols-1 xl:grid-cols-2 gap-5">
-          <section className={`${ui.card} rounded-2xl border p-5 sm:p-6 shadow-lg`}>
-            <PanelHeader
-              title="Ingresos por categoría"
-              subtitle="Monto recibido según la categoría deportiva del jugador"
-              style={ui.sectionTitleStyle}
-              subClass={ui.headerSub}
-            />
+                <ExecutiveValue label="Tasa efectiva" value={`${metricas.tasaDescuento.toFixed(1)}%`} />
 
-            <div className="mt-5 h-[350px]">
-              <Bar data={categoryChart} options={horizontalBarOptions} />
-            </div>
-          </section>
+                <ExecutiveValue label="Neto recaudado" value={toCLP(metricas.ingresos)} emphasize />
+              </div>
 
-          <section className={`${ui.card} rounded-2xl border p-5 sm:p-6 shadow-lg`}>
-            <PanelHeader
-              title="Tendencia de ingresos"
-              subtitle="Evolución de los últimos seis meses con pagos confirmados"
-              style={ui.sectionTitleStyle}
-              subClass={ui.headerSub}
-            />
+              <h3 className="mt-5 text-sm font-extrabold uppercase tracking-wide" style={ui.sectionTitleStyle}>
+                Descuentos adicionales por beneficio
+              </h3>
 
-            <div className="mt-5 h-[350px]">
-              <Line data={trendChart} options={lineOptions} />
-            </div>
-          </section>
-        </div>
+              <div className="mt-3 space-y-3">
+                {descuentosExtraPorBeneficio.slice(0, 5).map((item) => (
+                  <RankingRow
+                    key={`extra-${item.nombre}`}
+                    label={item.nombre}
+                    primary={toCLP(item.monto)}
+                    secondary={`${toNumber(item.cantidad)} transacciones`}
+                  />
+                ))}
 
-        {/* ===================================================
-            DESCUENTOS Y VOLUMEN OPERATIVO
-        =================================================== */}
+                {descuentosExtraPorBeneficio.length === 0 && (
+                  <RankingRow
+                    label="Sin descuento adicional"
+                    primary={toCLP(0)}
+                    secondary={`${toNumber(metricas.cantidadPagos)} transacciones registradas`}
+                  />
+                )}
+              </div>
+            </section>
+          </div>
 
-        <div className="mt-5 grid grid-cols-1 xl:grid-cols-5 gap-5">
-          <section className={`${ui.card} xl:col-span-3 rounded-2xl border p-5 sm:p-6 shadow-lg`}>
-            <PanelHeader
-              title="Descuentos aplicados por concepto"
-              subtitle="Monto efectivamente descontado en transacciones confirmadas, agrupado por tipo de pago"
-              style={ui.sectionTitleStyle}
-              subClass={ui.headerSub}
-            />
+          <div className="mt-5 grid grid-cols-1 xl:grid-cols-2 gap-5">
+            <section className={`${ui.card} rounded-2xl border p-5 sm:p-6 shadow-[0_14px_42px_rgba(0,0,0,0.12)]`}>
+              <PanelHeader
+                title="Volumen de transacciones por concepto"
+                subtitle="Cantidad de pagos confirmados asociados a cada concepto de cobro"
+                style={ui.sectionTitleStyle}
+                subClass={ui.headerSub}
+              />
 
-            <div className="mt-5 h-[360px]">
-              {descuentosPorConcepto.length > 0 ? (
-                <Bar data={discountByConceptChart} options={horizontalBarOptions} />
-              ) : (
+              <div className="mt-5 h-[340px]">
                 <Bar data={transactionCountChart} options={countBarOptions} />
-              )}
-            </div>
-          </section>
+              </div>
+            </section>
 
-          <section className={`${ui.card} xl:col-span-2 rounded-2xl border p-5 sm:p-6 shadow-lg`}>
-            <PanelHeader
-              title="Impacto de descuentos"
-              subtitle="Indicadores calculados exclusivamente sobre pagos efectivamente registrados"
-              style={ui.sectionTitleStyle}
-              subClass={ui.headerSub}
-            />
-
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <ExecutiveValue
-                darkMode={darkMode}
-                label="Base antes de ajuste"
-                value={toCLP(metricas.baseTransacciones)}
+            <section className={`${ui.card} rounded-2xl border p-5 sm:p-6 shadow-[0_14px_42px_rgba(0,0,0,0.12)]`}>
+              <PanelHeader
+                title="Monto promedio por concepto"
+                subtitle="Valor medio de las transacciones confirmadas para cada tipo de pago"
+                style={ui.sectionTitleStyle}
+                subClass={ui.headerSub}
               />
 
-              <ExecutiveValue darkMode={darkMode} label="Descuento aplicado" value={toCLP(metricas.descuentosExtra)} />
+              <div className="mt-5 space-y-3">
+                {promedioPorConcepto.slice(0, 7).map((item) => (
+                  <RankingRow
+                    key={`promedio-${item.nombre}`}
+                    label={item.nombre}
+                    primary={toCLP(item.promedio)}
+                    secondary={`${toNumber(item.cantidad)} transacciones`}
+                  />
+                ))}
+              </div>
+            </section>
+          </div>
 
-              <ExecutiveValue
-                darkMode={darkMode}
-                label="Tasa efectiva"
-                value={`${metricas.tasaDescuento.toFixed(1)}%`}
-              />
+          {/* =================================================
+              RANKINGS OPERATIVOS
+          ================================================= */}
 
-              <ExecutiveValue darkMode={darkMode} label="Neto recaudado" value={toCLP(metricas.ingresos)} emphasize />
-            </div>
+          <div className="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <RankingPanel ui={ui} title="Conceptos con mayor recaudación" rows={ingresosPorConcepto.slice(0, 5)} />
 
-            <h3 className="mt-5 text-sm font-extrabold uppercase tracking-wide" style={ui.sectionTitleStyle}>
-              Descuentos adicionales por beneficio
-            </h3>
+            <RankingPanel ui={ui} title="Medios con mayor recaudación" rows={ingresosPorMedio.slice(0, 5)} />
 
-            <div className="mt-3 space-y-3">
-              {descuentosExtraPorBeneficio.slice(0, 5).map((item) => (
-                <RankingRow
-                  key={`extra-${item.nombre}`}
-                  darkMode={darkMode}
-                  label={item.nombre}
-                  primary={toCLP(item.monto)}
-                  secondary={`${toNumber(item.cantidad)} transacciones`}
-                />
-              ))}
-
-              {descuentosExtraPorBeneficio.length === 0 && (
-                <RankingRow
-                  darkMode={darkMode}
-                  label="Sin descuento adicional"
-                  primary={toCLP(0)}
-                  secondary={`${toNumber(metricas.cantidadPagos)} transacciones registradas`}
-                />
-              )}
-            </div>
-          </section>
-        </div>
-
-        <div className="mt-5 grid grid-cols-1 xl:grid-cols-2 gap-5">
-          <section className={`${ui.card} rounded-2xl border p-5 sm:p-6 shadow-lg`}>
-            <PanelHeader
-              title="Volumen de transacciones por concepto"
-              subtitle="Cantidad de pagos confirmados asociados a cada concepto de cobro"
-              style={ui.sectionTitleStyle}
-              subClass={ui.headerSub}
-            />
-
-            <div className="mt-5 h-[340px]">
-              <Bar data={transactionCountChart} options={countBarOptions} />
-            </div>
-          </section>
-
-          <section className={`${ui.card} rounded-2xl border p-5 sm:p-6 shadow-lg`}>
-            <PanelHeader
-              title="Monto promedio por concepto"
-              subtitle="Valor medio de las transacciones confirmadas para cada tipo de pago"
-              style={ui.sectionTitleStyle}
-              subClass={ui.headerSub}
-            />
-
-            <div className="mt-5 space-y-3">
-              {promedioPorConcepto.slice(0, 7).map((item) => (
-                <RankingRow
-                  key={`promedio-${item.nombre}`}
-                  darkMode={darkMode}
-                  label={item.nombre}
-                  primary={toCLP(item.promedio)}
-                  secondary={`${toNumber(item.cantidad)} transacciones`}
-                />
-              ))}
-            </div>
-          </section>
-        </div>
-
-        {/* ===================================================
-            RANKINGS OPERATIVOS
-        =================================================== */}
-
-        <div className="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <RankingPanel
-            ui={ui}
-            darkMode={darkMode}
-            title="Conceptos con mayor recaudación"
-            rows={ingresosPorConcepto.slice(0, 5)}
-          />
-
-          <RankingPanel
-            ui={ui}
-            darkMode={darkMode}
-            title="Medios con mayor recaudación"
-            rows={ingresosPorMedio.slice(0, 5)}
-          />
-
-          <RankingPanel
-            ui={ui}
-            darkMode={darkMode}
-            title="Categorías con mayor recaudación"
-            rows={ingresosPorCategoria.slice(0, 5)}
-          />
-        </div>
-      </main>
+            <RankingPanel ui={ui} title="Categorías con mayor recaudación" rows={ingresosPorCategoria.slice(0, 5)} />
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
@@ -1671,46 +1931,30 @@ export default function PowerbiFinanzas() {
    COMPONENTES AUXILIARES
 ========================================================= */
 
-function MetricCard({ ui, darkMode, label, value, helper }) {
+function MetricCard({ ui, label, value, helper }) {
   return (
-    <div className={`${ui.card} rounded-2xl border p-4 sm:p-5 shadow-lg`}>
-      <div
-        className={`text-[12px] sm:text-[13px] uppercase tracking-[0.08em] font-extrabold ${
-          darkMode ? "text-white/55" : "text-ra-marron/60"
-        }`}
-      >
+    <div className={`${ui.card} rounded-2xl border p-4 sm:p-5 shadow-[0_14px_42px_rgba(0,0,0,0.12)]`}>
+      <div className="weli-powerbi-muted text-[12px] sm:text-[13px] uppercase tracking-[0.08em] font-extrabold">
         {label}
       </div>
 
-      <div
-        className={`mt-2 text-xl sm:text-2xl lg:text-[28px] font-extrabold break-words ${
-          darkMode ? "text-white" : "text-ra-marron"
-        }`}
-      >
+      <div className="weli-powerbi-value mt-2 text-xl sm:text-2xl lg:text-[28px] font-extrabold break-words">
         {value}
       </div>
 
-      <div
-        className={`mt-2 text-[12px] sm:text-[13px] font-semibold ${darkMode ? "text-white/55" : "text-ra-marron/60"}`}
-      >
-        {helper}
-      </div>
+      <div className="weli-powerbi-muted mt-2 text-[12px] sm:text-[13px] font-semibold">{helper}</div>
     </div>
   );
 }
 
-function ExecutiveValue({ darkMode, label, value, emphasize = false }) {
+function ExecutiveValue({ label, value, emphasize = false }) {
   return (
-    <div className={`rounded-xl px-3 py-3 ${darkMode ? "bg-black/15" : "bg-white/45"}`}>
-      <div
-        className={`text-[11px] uppercase tracking-wide font-bold ${darkMode ? "text-white/50" : "text-ra-marron/55"}`}
-      >
-        {label}
-      </div>
+    <div className="weli-powerbi-inner rounded-xl border px-3 py-3">
+      <div className="weli-powerbi-muted text-[11px] uppercase tracking-wide font-bold">{label}</div>
 
       <div
         className={`mt-1 text-sm sm:text-base font-extrabold break-words ${
-          emphasize ? (darkMode ? "text-[#ffdda1]" : "text-[#aa5013]") : darkMode ? "text-white" : "text-ra-marron"
+          emphasize ? "weli-powerbi-accent" : "weli-powerbi-value"
         }`}
       >
         {value}
@@ -1731,63 +1975,40 @@ function PanelHeader({ title, subtitle, style, subClass }) {
   );
 }
 
-function RankingRow({ darkMode, label, primary, secondary }) {
+function RankingRow({ label, primary, secondary }) {
   return (
-    <div
-      className={`rounded-xl border px-3.5 py-3 flex items-center justify-between gap-3 ${
-        darkMode ? "border-white/10 bg-black/10" : "border-ra-marron/10 bg-white/35"
-      }`}
-    >
+    <div className="weli-powerbi-inner rounded-xl border px-3.5 py-3 flex items-center justify-between gap-3">
       <div className="min-w-0">
-        <div
-          className={`font-extrabold text-sm truncate ${darkMode ? "text-white/90" : "text-ra-marron"}`}
-          title={label}
-        >
+        <div className="weli-powerbi-value font-extrabold text-sm truncate" title={label}>
           {label}
         </div>
 
-        <div className={`mt-0.5 text-[12px] ${darkMode ? "text-white/50" : "text-ra-marron/55"}`}>{secondary}</div>
+        <div className="weli-powerbi-muted mt-0.5 text-[12px]">{secondary}</div>
       </div>
 
-      <div className={`shrink-0 font-extrabold text-sm ${darkMode ? "text-[#ffdda1]" : "text-[#aa5013]"}`}>
-        {primary}
-      </div>
+      <div className="weli-powerbi-accent shrink-0 font-extrabold text-sm">{primary}</div>
     </div>
   );
 }
 
-function RankingPanel({ ui, darkMode, title, rows }) {
+function RankingPanel({ ui, title, rows }) {
   return (
-    <section className={`${ui.card} rounded-2xl border p-5 shadow-lg`}>
+    <section className={`${ui.card} rounded-2xl border p-5 shadow-[0_14px_42px_rgba(0,0,0,0.12)]`}>
       <h2 className="text-base sm:text-lg font-extrabold" style={ui.sectionTitleStyle}>
         {title}
       </h2>
 
       <div className="mt-4 space-y-3">
         {rows.map(([label, value]) => (
-          <RankingRow
-            key={label}
-            darkMode={darkMode}
-            label={label}
-            primary={toCLP(value)}
-            secondary="Ingreso recibido"
-          />
+          <RankingRow key={label} label={label} primary={toCLP(value)} secondary="Ingreso recibido" />
         ))}
 
-        {rows.length === 0 && <EmptyList darkMode={darkMode} text="Sin información disponible." />}
+        {rows.length === 0 && <EmptyList text="Sin información disponible." />}
       </div>
     </section>
   );
 }
 
-function EmptyList({ darkMode, text }) {
-  return (
-    <div
-      className={`rounded-xl border px-4 py-5 text-sm text-center ${
-        darkMode ? "border-white/10 text-white/50" : "border-ra-marron/10 text-ra-marron/55"
-      }`}
-    >
-      {text}
-    </div>
-  );
+function EmptyList({ text }) {
+  return <div className="weli-powerbi-empty rounded-xl border px-4 py-5 text-sm text-center">{text}</div>;
 }

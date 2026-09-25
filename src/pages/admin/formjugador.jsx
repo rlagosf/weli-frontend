@@ -24,16 +24,6 @@ import { fillContratoTemplate } from "../../services/contratoFill";
 import { buildContratoPdfBlob } from "../../services/contratoPdf";
 import { formatRutWithDV } from "../../services/rut";
 
-const PALETTE = {
-  copper: "#aa5013",
-  brown: "#6d5829",
-  gold: "#b79f69",
-  cream: "#e8dac4",
-  sand: "#ffdda1",
-  caramel: "#dda272",
-  terracotta: "#e2773b",
-};
-
 const PASO_ANTECEDENTES = 1;
 const PASO_DEPORTIVO = 2;
 const PASO_APODERADO = 3;
@@ -148,6 +138,28 @@ const formatAcademiaRut = (value) => {
   const rut = String(value ?? "").replace(/\D/g, "");
 
   return /^\d{7,8}$/.test(rut) ? formatRutWithDV(rut) : rut;
+};
+
+const toProperCase = (value) => {
+  const text = String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase("es-CL");
+
+  if (!text) return "";
+
+  const keepLower = new Set(["de", "del", "y", "e", "en", "a", "al", "por", "para", "con"]);
+
+  const capitalizeWord = (word) =>
+    word.replace(
+      /(^|[-'’])([a-záéíóúñü])/giu,
+      (_, separator, letter) => `${separator}${letter.toLocaleUpperCase("es-CL")}`
+    );
+
+  return text
+    .split(" ")
+    .map((word, index) => (index > 0 && keepLower.has(word) ? word : capitalizeWord(word)))
+    .join(" ");
 };
 
 const normalizeAcademiaInfo = (row) => ({
@@ -330,30 +342,36 @@ const normalizePlanCatalogo = (row) => ({
   reglas: Array.isArray(row?.reglas) ? row.reglas : [],
 });
 
-function Modal({ open, title, children, onClose, darkMode }) {
+function Modal({ open, title, children, onClose, tokens }) {
   if (!open) return null;
-
-  const card =
-    "relative w-full max-w-md rounded-2xl border backdrop-blur-md shadow-[0_10px_40px_rgba(0,0,0,0.25)] p-5 " +
-    (darkMode ? "bg-white/10 border-white/15 text-white" : "bg-white/60 border-ra-marron/15 text-ra-marron");
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+      <div className="absolute inset-0" style={{ backgroundColor: tokens.overlay }} onClick={onClose} />
 
-      <div className={card}>
+      <div
+        className="relative w-full max-w-md rounded-2xl border shadow-[0_14px_42px_rgba(0,0,0,0.18)] p-5"
+        style={{
+          backgroundColor: tokens.surface,
+          borderColor: tokens.borderStrong,
+          color: tokens.text,
+        }}
+      >
         <h3 className="text-lg font-extrabold mb-2">{title}</h3>
 
-        <div className={darkMode ? "text-sm mb-4 text-white/85" : "text-sm mb-4 text-ra-marron/80"}>{children}</div>
+        <div className="text-sm mb-4" style={{ color: tokens.textMuted }}>
+          {children}
+        </div>
 
         <div className="flex justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="py-2 px-4 rounded-xl font-bold border border-white/15 hover:opacity-90 active:scale-[0.99] transition"
+            className="py-2 px-4 rounded-xl font-bold border hover:opacity-90 active:scale-[0.99] transition"
             style={{
-              background: `linear-gradient(135deg, ${PALETTE.copper}, ${PALETTE.terracotta})`,
-              color: "white",
+              backgroundColor: tokens.primary,
+              borderColor: tokens.primary,
+              color: tokens.primaryContrast,
             }}
           >
             OK
@@ -365,7 +383,7 @@ function Modal({ open, title, children, onClose, darkMode }) {
 }
 
 export default function FormJugador() {
-  const { darkMode } = useTheme();
+  const { darkMode, themeTokens } = useTheme();
   const navigate = useNavigate();
 
   useMobileAutoScrollTop();
@@ -384,13 +402,20 @@ export default function FormJugador() {
     telefono: "",
     email: "",
     direccion: "",
+    region_id: "",
+    ciudad_id: "",
     comuna_id: "",
     posicion_id: "",
     categoria_id: "",
     estado_id: "",
     talla_polera: "",
     talla_short: "",
+
+    // Territorio exclusivo del establecimiento educacional.
+    region_establecimiento_id: "",
+    comuna_establecimiento_id: "",
     establec_educ_id: "",
+
     prevision_medica_id: "",
     nombre_apoderado: "",
     rut_apoderado: "",
@@ -407,7 +432,10 @@ export default function FormJugador() {
   const [establecimientos, setEstablecimientos] = useState([]);
   const [previsiones, setPrevisiones] = useState([]);
   const [sucursales, setSucursales] = useState([]);
+  const [regiones, setRegiones] = useState([]);
+  const [ciudades, setCiudades] = useState([]);
   const [comunas, setComunas] = useState([]);
+  const [ciudadComuna, setCiudadComuna] = useState([]);
 
   const [tiposPago, setTiposPago] = useState([]);
   const [planesCatalogo, setPlanesCatalogo] = useState([]);
@@ -535,37 +563,62 @@ export default function FormJugador() {
           establecimientosRaw,
           previsionesRaw,
           sucursalesRaw,
+          regionesRaw,
+          ciudadesRaw,
           comunasRaw,
+          ciudadComunaRaw,
         ] = await Promise.all([
           api.get(`/academias/${academiaTarget}`, {
             signal: abort.signal,
             headers,
           }),
+
           tryGetList(["/posiciones", "/posicion"], {
             signal: abort.signal,
             headers,
           }),
+
           tryGetList(["/categorias", "/categoria"], {
             signal: abort.signal,
             headers,
           }),
+
           tryGetList(["/estado", "/estados"], {
             signal: abort.signal,
             headers,
           }),
-          tryGetList(["/establecimientos-educ"], {
+
+          tryGetList(["/establecimientos-educ/catalogo"], {
             signal: abort.signal,
             headers,
           }),
+
           tryGetList(["/prevision-medica"], {
             signal: abort.signal,
             headers,
           }),
+
           tryGetList(["/sucursales-real", "/sucursales"], {
             signal: abort.signal,
             headers,
           }),
+
+          tryGetList(["/regiones"], {
+            signal: abort.signal,
+            headers,
+          }),
+
+          tryGetList(["/ciudades"], {
+            signal: abort.signal,
+            headers,
+          }),
+
           tryGetList(["/comunas"], {
+            signal: abort.signal,
+            headers,
+          }),
+
+          tryGetList(["/ciudad-comuna", "/ciudad_comuna"], {
             signal: abort.signal,
             headers,
           }),
@@ -602,10 +655,114 @@ export default function FormJugador() {
         const posN = normalizeCatalog(posicionesRaw, ["id", "posicion_id"]);
         const catN = normalizeCatalog(categoriasRaw, ["id", "categoria_id"]);
         const estadosN = normalizeCatalog(estadosRaw, ["id", "estado_id"]);
-        const eduN = normalizeCatalog(establecimientosRaw, ["id", "establec_educ_id"]);
+
+        const eduN = (Array.isArray(establecimientosRaw) ? establecimientosRaw : [])
+          .map((item) => ({
+            id: Number(item?.id ?? item?.establec_educ_id),
+            nombre: String(item?.nombre ?? "").trim(),
+            comuna_id: item?.comuna_id == null ? null : Number(item.comuna_id),
+            comuna_nombre: String(item?.comuna_nombre ?? "").trim(),
+            region_id: item?.region_id == null ? null : Number(item.region_id),
+            region_nombre: String(item?.region_nombre ?? "").trim(),
+            estado_id: Number(item?.estado_id ?? 1),
+          }))
+          .filter(
+            (item) =>
+              Number.isInteger(item.id) &&
+              item.id > 0 &&
+              Number.isInteger(item.region_id) &&
+              item.region_id > 0 &&
+              Number.isInteger(item.comuna_id) &&
+              item.comuna_id > 0 &&
+              item.estado_id === ESTADO_ACTIVO
+          )
+          .sort((a, b) => {
+            const regionCompare = a.region_nombre.localeCompare(b.region_nombre, "es", {
+              sensitivity: "base",
+            });
+
+            if (regionCompare !== 0) {
+              return regionCompare;
+            }
+
+            const comunaCompare = a.comuna_nombre.localeCompare(b.comuna_nombre, "es", {
+              sensitivity: "base",
+            });
+
+            if (comunaCompare !== 0) {
+              return comunaCompare;
+            }
+
+            return a.nombre.localeCompare(b.nombre, "es", {
+              sensitivity: "base",
+            });
+          });
+
         const prevN = normalizeCatalog(previsionesRaw, ["id", "prevision_medica_id"]);
         const sucN = normalizeCatalog(sucursalesRaw);
-        const comN = normalizeCatalog(comunasRaw);
+
+        const regN = (Array.isArray(regionesRaw) ? regionesRaw : [])
+          .map((item) => ({
+            id: Number(item?.id),
+            nombre: String(item?.nombre ?? "").trim(),
+            estado_id: Number(item?.estado_id ?? 1),
+          }))
+          .filter((item) => Number.isInteger(item.id) && item.id > 0 && item.estado_id === ESTADO_ACTIVO)
+          .sort((a, b) =>
+            a.nombre.localeCompare(b.nombre, "es", {
+              sensitivity: "base",
+            })
+          );
+
+        const ciuN = (Array.isArray(ciudadesRaw) ? ciudadesRaw : [])
+          .map((item) => ({
+            id: Number(item?.id),
+            region_id: Number(item?.region_id),
+            nombre: String(item?.nombre ?? "").trim(),
+            estado_id: Number(item?.estado_id ?? 1),
+          }))
+          .filter(
+            (item) =>
+              Number.isInteger(item.id) &&
+              item.id > 0 &&
+              Number.isInteger(item.region_id) &&
+              item.region_id > 0 &&
+              item.estado_id === ESTADO_ACTIVO
+          )
+          .sort((a, b) =>
+            a.nombre.localeCompare(b.nombre, "es", {
+              sensitivity: "base",
+            })
+          );
+
+        const comN = (Array.isArray(comunasRaw) ? comunasRaw : [])
+          .map((item) => ({
+            id: Number(item?.id),
+            nombre: String(item?.nombre ?? "").trim(),
+            estado_id: Number(item?.estado_id ?? 1),
+          }))
+          .filter((item) => Number.isInteger(item.id) && item.id > 0 && item.estado_id === ESTADO_ACTIVO)
+          .sort((a, b) =>
+            a.nombre.localeCompare(b.nombre, "es", {
+              sensitivity: "base",
+            })
+          );
+
+        const ciudadComunaN = (Array.isArray(ciudadComunaRaw) ? ciudadComunaRaw : [])
+          .map((item) => ({
+            id: Number(item?.id),
+            ciudad_id: Number(item?.ciudad_id),
+            comuna_id: Number(item?.comuna_id),
+            estado_id: Number(item?.estado_id ?? 1),
+          }))
+          .filter(
+            (item) =>
+              Number.isInteger(item.ciudad_id) &&
+              item.ciudad_id > 0 &&
+              Number.isInteger(item.comuna_id) &&
+              item.comuna_id > 0 &&
+              item.estado_id === ESTADO_ACTIVO
+          );
 
         setPosiciones(posN);
         setCategorias(catN);
@@ -613,7 +770,10 @@ export default function FormJugador() {
         setEstablecimientos(eduN);
         setPrevisiones(prevN);
         setSucursales(sucN);
+        setRegiones(regN);
+        setCiudades(ciuN);
         setComunas(comN);
+        setCiudadComuna(ciudadComunaN);
 
         /*
          * Tarifas: todos los roles necesitan leerlas
@@ -672,7 +832,9 @@ export default function FormJugador() {
         setFormData((previous) => {
           const exists = (array, id) => array.some((item) => String(item.id) === String(id));
 
-          const next = { ...previous };
+          const next = {
+            ...previous,
+          };
 
           if (previous.posicion_id && !exists(posN, previous.posicion_id)) {
             next.posicion_id = "";
@@ -686,12 +848,47 @@ export default function FormJugador() {
             next.estado_id = "";
           }
 
+          /*
+           * Los filtros territoriales del establecimiento son exclusivos
+           * de este catálogo. Si cambia la academia o cambia la disponibilidad,
+           * eliminamos cualquier selección que haya quedado fuera del catálogo.
+           */
+          const regionesEdu = new Set(eduN.map((item) => Number(item.region_id)));
+
+          if (previous.region_establecimiento_id && !regionesEdu.has(Number(previous.region_establecimiento_id))) {
+            next.region_establecimiento_id = "";
+            next.comuna_establecimiento_id = "";
+            next.establec_educ_id = "";
+          } else if (previous.region_establecimiento_id) {
+            const comunasEdu = new Set(
+              eduN
+                .filter((item) => Number(item.region_id) === Number(previous.region_establecimiento_id))
+                .map((item) => Number(item.comuna_id))
+            );
+
+            if (previous.comuna_establecimiento_id && !comunasEdu.has(Number(previous.comuna_establecimiento_id))) {
+              next.comuna_establecimiento_id = "";
+              next.establec_educ_id = "";
+            }
+          }
+
           if (previous.establec_educ_id && !exists(eduN, previous.establec_educ_id)) {
             next.establec_educ_id = "";
           }
 
           if (previous.prevision_medica_id && !exists(prevN, previous.prevision_medica_id)) {
             next.prevision_medica_id = "";
+          }
+
+          if (previous.region_id && !exists(regN, previous.region_id)) {
+            next.region_id = "";
+            next.ciudad_id = "";
+            next.comuna_id = "";
+          }
+
+          if (previous.ciudad_id && !exists(ciuN, previous.ciudad_id)) {
+            next.ciudad_id = "";
+            next.comuna_id = "";
           }
 
           if (previous.comuna_id && !exists(comN, previous.comuna_id)) {
@@ -709,7 +906,9 @@ export default function FormJugador() {
 
         if (status === 401) {
           clearToken();
-          navigate("/login", { replace: true });
+          navigate("/login", {
+            replace: true,
+          });
           return;
         }
 
@@ -719,6 +918,7 @@ export default function FormJugador() {
               ? "⚠️ Superadmin: falta x-academia-id o no tienes permisos para esta academia."
               : "No tienes permisos para cargar los datos de selección."
           );
+
           return;
         }
 
@@ -741,25 +941,25 @@ export default function FormJugador() {
   useEffect(() => {
     setFormData((previous) => ({
       ...previous,
+
       posicion_id: !previous.posicion_id && posiciones.length === 1 ? String(posiciones[0].id) : previous.posicion_id,
+
       categoria_id:
         !previous.categoria_id && categorias.length === 1 ? String(categorias[0].id) : previous.categoria_id,
+
       estado_id: !previous.estado_id && estados.length === 1 ? String(estados[0].id) : previous.estado_id,
-      establec_educ_id:
-        !previous.establec_educ_id && establecimientos.length === 1
-          ? String(establecimientos[0].id)
-          : previous.establec_educ_id,
+
       prevision_medica_id:
         !previous.prevision_medica_id && previsiones.length === 1
           ? String(previsiones[0].id)
           : previous.prevision_medica_id,
-      comuna_id: !previous.comuna_id && comunas.length === 1 ? String(comunas[0].id) : previous.comuna_id,
+
       sucursal_ids:
         (!Array.isArray(previous.sucursal_ids) || previous.sucursal_ids.length === 0) && sucursales.length === 1
           ? [String(sucursales[0].id)]
           : previous.sucursal_ids,
     }));
-  }, [posiciones, categorias, estados, establecimientos, previsiones, sucursales, comunas]);
+  }, [posiciones, categorias, estados, previsiones, sucursales]);
 
   const calcEdad = (yyyyMmDd) => {
     if (!yyyyMmDd) return "";
@@ -791,9 +991,7 @@ export default function FormJugador() {
     let value = rawValue;
 
     const onlyInt = (input) => (/^\d*$/.test(input) ? input : formData[name]);
-
     const onlyPhone = (input) => (/^\+?\d*$/.test(input) ? input : formData[name]);
-
     const onlyNum = (input) => (/^\d*([.]\d{0,2})?$/.test(input) ? input : formData[name]);
 
     if (name === "rut_jugador" || name === "rut_apoderado") {
@@ -843,6 +1041,59 @@ export default function FormJugador() {
       ...previous,
       [name]: value,
     }));
+  };
+
+  const handleTerritorioChange = ({ target: { name, value } }) => {
+    setFormData((previous) => {
+      if (name === "region_id") {
+        return {
+          ...previous,
+          region_id: value,
+          ciudad_id: "",
+          comuna_id: "",
+        };
+      }
+
+      if (name === "ciudad_id") {
+        return {
+          ...previous,
+          ciudad_id: value,
+          comuna_id: "",
+        };
+      }
+
+      if (name === "comuna_id") {
+        return {
+          ...previous,
+          comuna_id: value,
+        };
+      }
+
+      return previous;
+    });
+  };
+
+  const handleEstablecimientoTerritorioChange = ({ target: { name, value } }) => {
+    setFormData((previous) => {
+      if (name === "region_establecimiento_id") {
+        return {
+          ...previous,
+          region_establecimiento_id: value,
+          comuna_establecimiento_id: "",
+          establec_educ_id: "",
+        };
+      }
+
+      if (name === "comuna_establecimiento_id") {
+        return {
+          ...previous,
+          comuna_establecimiento_id: value,
+          establec_educ_id: "",
+        };
+      }
+
+      return previous;
+    });
   };
 
   useEffect(() => {
@@ -907,7 +1158,9 @@ export default function FormJugador() {
 
         if (status === 401) {
           clearToken();
-          navigate("/login", { replace: true });
+          navigate("/login", {
+            replace: true,
+          });
           return;
         }
 
@@ -917,6 +1170,7 @@ export default function FormJugador() {
               ? "⚠️ Superadmin: academia no autorizada."
               : "No tienes permisos para consultar este apoderado."
           );
+
           return;
         }
 
@@ -950,13 +1204,134 @@ export default function FormJugador() {
     });
   };
 
+  const ciudadesDisponibles = useMemo(() => {
+    const regionId = Number(formData.region_id);
+
+    if (!Number.isInteger(regionId) || regionId <= 0) {
+      return [];
+    }
+
+    return ciudades
+      .filter((ciudad) => Number(ciudad.region_id) === regionId && Number(ciudad.estado_id ?? 1) === ESTADO_ACTIVO)
+      .slice()
+      .sort((a, b) =>
+        a.nombre.localeCompare(b.nombre, "es", {
+          sensitivity: "base",
+        })
+      );
+  }, [ciudades, formData.region_id]);
+
+  const comunasDisponibles = useMemo(() => {
+    const ciudadId = Number(formData.ciudad_id);
+
+    if (!Number.isInteger(ciudadId) || ciudadId <= 0) {
+      return [];
+    }
+
+    const comunaIds = new Set(
+      ciudadComuna
+        .filter((item) => Number(item.ciudad_id) === ciudadId && Number(item.estado_id ?? 1) === ESTADO_ACTIVO)
+        .map((item) => Number(item.comuna_id))
+        .filter((id) => Number.isInteger(id) && id > 0)
+    );
+
+    return comunas
+      .filter((comuna) => comunaIds.has(Number(comuna.id)))
+      .slice()
+      .sort((a, b) =>
+        a.nombre.localeCompare(b.nombre, "es", {
+          sensitivity: "base",
+        })
+      );
+  }, [ciudadComuna, comunas, formData.ciudad_id]);
+
+  const regionesEstablecimientosDisponibles = useMemo(() => {
+    const unique = new Map();
+
+    for (const establecimiento of establecimientos) {
+      const regionId = Number(establecimiento.region_id);
+
+      if (!Number.isInteger(regionId) || regionId <= 0) {
+        continue;
+      }
+
+      if (!unique.has(regionId)) {
+        unique.set(regionId, {
+          id: regionId,
+          nombre: establecimiento.region_nombre,
+        });
+      }
+    }
+
+    return Array.from(unique.values()).sort((a, b) =>
+      a.nombre.localeCompare(b.nombre, "es", {
+        sensitivity: "base",
+      })
+    );
+  }, [establecimientos]);
+
+  const comunasEstablecimientosDisponibles = useMemo(() => {
+    const regionId = Number(formData.region_establecimiento_id);
+
+    if (!Number.isInteger(regionId) || regionId <= 0) {
+      return [];
+    }
+
+    const unique = new Map();
+
+    for (const establecimiento of establecimientos) {
+      if (Number(establecimiento.region_id) !== regionId) {
+        continue;
+      }
+
+      const comunaId = Number(establecimiento.comuna_id);
+
+      if (!Number.isInteger(comunaId) || comunaId <= 0) {
+        continue;
+      }
+
+      if (!unique.has(comunaId)) {
+        unique.set(comunaId, {
+          id: comunaId,
+          nombre: establecimiento.comuna_nombre,
+        });
+      }
+    }
+
+    return Array.from(unique.values()).sort((a, b) =>
+      a.nombre.localeCompare(b.nombre, "es", {
+        sensitivity: "base",
+      })
+    );
+  }, [establecimientos, formData.region_establecimiento_id]);
+
+  const establecimientosDisponibles = useMemo(() => {
+    const regionId = Number(formData.region_establecimiento_id);
+    const comunaId = Number(formData.comuna_establecimiento_id);
+
+    if (!Number.isInteger(regionId) || regionId <= 0 || !Number.isInteger(comunaId) || comunaId <= 0) {
+      return [];
+    }
+
+    return establecimientos
+      .filter(
+        (establecimiento) =>
+          Number(establecimiento.region_id) === regionId && Number(establecimiento.comuna_id) === comunaId
+      )
+      .slice()
+      .sort((a, b) =>
+        a.nombre.localeCompare(b.nombre, "es", {
+          sensitivity: "base",
+        })
+      );
+  }, [establecimientos, formData.region_establecimiento_id, formData.comuna_establecimiento_id]);
+
   const getPlanesParaTipoPago = useCallback(() => {
     return planesCatalogo
       .filter((plan) => Number(plan.estado_id) === ESTADO_ACTIVO)
       .slice()
       .sort((a, b) => {
         const aSin = String(a.nombre).trim().toUpperCase() === "SIN BENEFICIO";
-
         const bSin = String(b.nombre).trim().toUpperCase() === "SIN BENEFICIO";
 
         if (aSin && !bSin) return -1;
@@ -1057,8 +1432,32 @@ export default function FormJugador() {
       return false;
     }
 
+    if (!formData.region_id) {
+      setError("Debes seleccionar la región de residencia del jugador.");
+      return false;
+    }
+
+    if (!formData.ciudad_id) {
+      setError("Debes seleccionar la ciudad de residencia del jugador.");
+      return false;
+    }
+
     if (!formData.comuna_id) {
-      setError("Debes seleccionar la comuna del jugador para generar el contrato.");
+      setError("Debes seleccionar la comuna de residencia del jugador.");
+      return false;
+    }
+
+    const ciudadValida = ciudadesDisponibles.some((ciudad) => String(ciudad.id) === String(formData.ciudad_id));
+
+    if (!ciudadValida) {
+      setError("La ciudad seleccionada no corresponde a la región indicada.");
+      return false;
+    }
+
+    const comunaValida = comunasDisponibles.some((comuna) => String(comuna.id) === String(formData.comuna_id));
+
+    if (!comunaValida) {
+      setError("La comuna seleccionada no corresponde a la ciudad indicada.");
       return false;
     }
 
@@ -1087,6 +1486,37 @@ export default function FormJugador() {
     if ([formData.posicion_id, formData.categoria_id, formData.estado_id].some((value) => !value)) {
       setError("Debes seleccionar posición, categoría y estado.");
       return false;
+    }
+
+    const seleccionEducacionalIniciada =
+      Boolean(formData.region_establecimiento_id) ||
+      Boolean(formData.comuna_establecimiento_id) ||
+      Boolean(formData.establec_educ_id);
+
+    if (seleccionEducacionalIniciada) {
+      if (!formData.region_establecimiento_id) {
+        setError("Debes seleccionar la región del establecimiento educacional.");
+        return false;
+      }
+
+      if (!formData.comuna_establecimiento_id) {
+        setError("Debes seleccionar la comuna del establecimiento educacional.");
+        return false;
+      }
+
+      if (!formData.establec_educ_id) {
+        setError("Debes seleccionar el establecimiento educacional.");
+        return false;
+      }
+
+      const establecimientoValido = establecimientosDisponibles.some(
+        (item) => String(item.id) === String(formData.establec_educ_id)
+      );
+
+      if (!establecimientoValido) {
+        setError("El establecimiento seleccionado no corresponde a la región y comuna indicadas.");
+        return false;
+      }
     }
 
     if (!Array.isArray(formData.sucursal_ids) || formData.sucursal_ids.length === 0) {
@@ -1160,9 +1590,6 @@ export default function FormJugador() {
       return false;
     }
 
-    /*
-     * Staff trabaja con tarifa base en modo lectura.
-     */
     if (rolActual === 2) {
       return true;
     }
@@ -1221,12 +1648,15 @@ export default function FormJugador() {
     }
 
     const rutApoderado = String(formData.rut_apoderado ?? "").replace(/\D/g, "");
-
     const rutJugador = String(formData.rut_jugador ?? "").replace(/\D/g, "");
 
     if (!/^\d{7,8}$/.test(rutApoderado) || !/^\d{7,8}$/.test(rutJugador)) {
       throw new Error("Los RUT del jugador y apoderado deben contener 7 u 8 dígitos sin DV.");
     }
+
+    const regionJugador = regiones.find((region) => String(region.id) === String(formData.region_id))?.nombre ?? "";
+
+    const ciudadJugador = ciudades.find((ciudad) => String(ciudad.id) === String(formData.ciudad_id))?.nombre ?? "";
 
     const comunaJugador = comunas.find((comuna) => String(comuna.id) === String(formData.comuna_id))?.nombre ?? "";
 
@@ -1241,22 +1671,18 @@ export default function FormJugador() {
 
     const conceptos = tiposPago.map((tipo) => {
       const planId = rolActual === 2 ? null : beneficiosPorTipo[tipo.id]?.plan_id;
-
       const plan = rolActual === 2 ? null : getPlan(planId);
-
       const montoBase = roundMoney(tipo.monto);
-
       const montoFinal = rolActual === 2 ? montoBase : roundMoney(calcularMontoFinal(montoBase, planId));
-
       const descuento = roundMoney(Math.max(0, montoBase - montoFinal));
 
       return {
         tipo_pago_id: Number(tipo.id),
-        tipo_pago_nombre: String(tipo.nombre ?? "").trim() || `Concepto #${tipo.id}`,
+        tipo_pago_nombre: toProperCase(tipo.nombre) || `Concepto #${tipo.id}`,
         tarifa_id: tipo.tarifa_id == null ? null : Number(tipo.tarifa_id),
         monto_base: montoBase,
         plan_id: plan ? Number(plan.id) : null,
-        plan_nombre: plan?.nombre ? String(plan.nombre).trim() : "Sin beneficio",
+        plan_nombre: plan?.nombre ? toProperCase(plan.nombre) : "Sin Beneficio",
         monto_descuento: descuento,
         monto_final: montoFinal,
       };
@@ -1268,121 +1694,188 @@ export default function FormJugador() {
 
     const contratoTotalDescuento = roundMoney(Math.max(0, contratoTotalBase - contratoTotalFinal));
 
-    const detalleTarifas = conceptos
-      .map(
-        (item) =>
-          `• ${item.tipo_pago_nombre}: tarifa base ${formatMoney(
-            item.monto_base
-          )} · beneficio ${item.plan_nombre} · total ${formatMoney(item.monto_final)}`
-      )
-      .join("\n");
-
-    const detalleBeneficios = conceptos.map((item) => `• ${item.tipo_pago_nombre}: ${item.plan_nombre}`).join("\n");
-
     const detallePlan = conceptos
       .map((item) => `• ${item.tipo_pago_nombre}: ${item.plan_nombre} — ${formatMoney(item.monto_final)}`)
       .join("\n");
 
-    const detalleSucursales = sucursalesSeleccionadas.map((sucursal) => `• ${sucursal.nombre}`).join("\n");
+    const detalleSucursales = sucursalesSeleccionadas
+      .map((sucursal) => `• ${toProperCase(sucursal.nombre)}`)
+      .join("\n");
 
     return {
-      ciudad_contrato: academiaInfo.ciudad_nombre,
-      fecha_contrato: fechaEsLarga(new Date()),
-      nombre_academia: academiaInfo.nombre,
-      rut_academia: formatAcademiaRut(academiaInfo.rut_academia),
-      deporte: academiaInfo.deporte_nombre,
-      direccion_academia: academiaInfo.direccion,
-      comuna_academia: academiaInfo.comuna_nombre,
-      ciudad_academia: academiaInfo.ciudad_nombre,
-      region_academia: academiaInfo.region_nombre,
-      email_academia: academiaInfo.email,
+      academia: {
+        id: academiaInfo.id,
+        nombre: toProperCase(academiaInfo.nombre),
+        rut: formatAcademiaRut(academiaInfo.rut_academia),
+        deporte: toProperCase(academiaInfo.deporte_nombre),
+        direccion: toProperCase(academiaInfo.direccion),
+        comuna: toProperCase(academiaInfo.comuna_nombre),
+        ciudad: toProperCase(academiaInfo.ciudad_nombre),
+        region: toProperCase(academiaInfo.region_nombre),
+        email: academiaInfo.email,
+      },
 
-      nombre_apoderado: String(formData.nombre_apoderado).trim(),
-      rut_apoderado: formatRutWithDV(rutApoderado),
+      jugador: {
+        nombre: toProperCase(formData.nombre_jugador),
+        rut: formatRutWithDV(rutJugador),
+        fecha_nacimiento: fechaSQLALarga(formData.fecha_nacimiento),
+        edad: formData.edad,
+        direccion: toProperCase(formData.direccion),
+        comuna: toProperCase(comunaJugador),
+        ciudad: toProperCase(ciudadJugador),
+        region: toProperCase(regionJugador),
+        telefono: formData.telefono,
+        email: formData.email,
+        categoria: toProperCase(categoriaJugador),
+        sucursales: detalleSucursales,
+      },
 
-      nombre_jugador: String(formData.nombre_jugador).trim(),
-      rut_jugador: formatRutWithDV(rutJugador),
-      fecha_nacimiento: fechaSQLALarga(formData.fecha_nacimiento),
-      direccion_jugador: String(formData.direccion).trim(),
-      comuna_jugador: comunaJugador,
-      categoria_jugador: categoriaJugador,
+      apoderado: {
+        nombre: toProperCase(formData.nombre_apoderado),
+        rut: formatRutWithDV(rutApoderado),
+        telefono: formData.telefono_apoderado,
+      },
 
-      detalle_tarifas: detalleTarifas || "Sin conceptos tarifarios configurados.",
-      total_base: formatMoney(contratoTotalBase),
-      total_descuento: formatMoney(contratoTotalDescuento),
-      total_final: formatMoney(contratoTotalFinal),
-      detalle_beneficios: detalleBeneficios || "Sin beneficios aplicados.",
-      detalle_plan: detallePlan || "Sin modalidad económica adicional.",
-      detalle_sucursales: detalleSucursales || "Sin sucursal informada.",
+      financiero: {
+        fecha_contrato: fechaEsLarga(new Date()),
+        fecha_contrato_sql: todaySQL(),
+        detalle_plan: detallePlan,
+        conceptos,
+        total_base: contratoTotalBase,
+        total_descuento: contratoTotalDescuento,
+        total_final: contratoTotalFinal,
+      },
     };
   }, [
     academiaInfo,
     formData,
+    regiones,
+    ciudades,
     comunas,
     categorias,
     sucursales,
     tiposPago,
+    rolActual,
     beneficiosPorTipo,
     planesCatalogo,
-    rolActual,
   ]);
 
-  const generarContratoBase64 = useCallback(async () => {
-    const required = ["nombre_apoderado", "rut_apoderado", "nombre_jugador", "rut_jugador"];
+  const prepararContrato = useCallback(async () => {
+    const context = buildContratoContext();
 
-    for (const key of required) {
-      if (!String(formData[key] ?? "").trim()) {
-        throw new Error("Faltan campos obligatorios para generar el contrato.");
-      }
-    }
+    const contratoHtml = fillContratoTemplate(CONTRATO_TEMPLATE, context);
 
-    const data = buildContratoContext();
-
-    const textoFinal = fillContratoTemplate(CONTRATO_TEMPLATE, data);
-
-    const unresolved = textoFinal.match(/<<\s*[^>]+\s*>>/g);
-
-    if (unresolved?.length) {
-      throw new Error(`El contrato contiene variables sin resolver: ${unresolved.join(", ")}`);
-    }
-
-    const blob = await buildContratoPdfBlob({
-      titulo: "CONTRATO DE PRESTACIÓN DE SERVICIOS DE ENSEÑANZA DEPORTIVA",
-      subtitulo: `${data.nombre_jugador} • ${data.rut_jugador}`,
-      texto: textoFinal,
+    const pdfBlob = await buildContratoPdfBlob({
+      html: contratoHtml,
+      academia: context.academia,
+      jugador: context.jugador,
+      financiero: context.financiero,
     });
 
-    const base64 = await blobToBase64(blob);
+    const contratoBase64 = await blobToBase64(pdfBlob);
 
-    if (!base64 || base64.length < 50) {
-      throw new Error("El contrato se generó vacío o inválido.");
+    return {
+      context,
+      contratoHtml,
+      pdfBlob,
+      contratoBase64,
+    };
+  }, [buildContratoContext]);
+
+  const enviarFinanzas = useCallback(async ({ jugadorId, headers, context }) => {
+    if (!jugadorId) {
+      throw new Error("No fue posible determinar el ID del jugador creado.");
     }
 
-    return base64;
-  }, [formData, buildContratoContext]);
+    const conceptos = Array.isArray(context?.financiero?.conceptos) ? context.financiero.conceptos : [];
 
-  const guardarConfiguracionFinanciera = async (jugadorId, headers) => {
-    if (rolActual === 2) return;
-
-    const items = tiposPago.map((tipo) => ({
-      tipo_pago_id: Number(tipo.id),
-      plan_id: Number(beneficiosPorTipo[tipo.id]?.plan_id),
+    const items = conceptos.map((item) => ({
+      tipo_pago_id: Number(item.tipo_pago_id),
+      tarifa_id: item.tarifa_id == null ? null : Number(item.tarifa_id),
+      plan_catalogo_id: item.plan_id == null ? null : Number(item.plan_id),
+      monto_base: roundMoney(item.monto_base),
+      monto_descuento: roundMoney(item.monto_descuento),
+      monto_total: roundMoney(item.monto_final),
     }));
 
     await postWithFallback(
       FINANZAS_BULK_ENDPOINT,
       {
         jugador_id: Number(jugadorId),
-        fecha_inicio: todaySQL(),
-        fecha_fin: null,
-        estado_id: ESTADO_ACTIVO,
         items,
       },
       headers
     );
-  };
+  }, []);
 
-  const resetForm = () => {
+  const buildJugadorPayload = useCallback(
+    ({ contratoBase64 }) => {
+      const clean = emptyToUndef(trimStrings(formData));
+
+      const rutJugador = String(clean.rut_jugador ?? "").replace(/\D/g, "");
+      const rutApoderado = String(clean.rut_apoderado ?? "").replace(/\D/g, "");
+
+      const payload = {
+        nombre_jugador: clean.nombre_jugador,
+        rut_jugador: Number(rutJugador),
+        fecha_nacimiento: clean.fecha_nacimiento,
+        edad: clean.edad ? Number(clean.edad) : undefined,
+        telefono: clean.telefono,
+        email: clean.email,
+        direccion: clean.direccion,
+
+        /*
+         * region_id y ciudad_id se utilizan en la UI y en el contrato,
+         * pero el CreateSchema de /jugadores no los recibe.
+         * La relación territorial persistente del jugador se guarda por comuna_id.
+         */
+        comuna_id: clean.comuna_id ? Number(clean.comuna_id) : undefined,
+
+        posicion_id: clean.posicion_id ? Number(clean.posicion_id) : undefined,
+        categoria_id: clean.categoria_id ? Number(clean.categoria_id) : undefined,
+        estado_id: clean.estado_id ? Number(clean.estado_id) : undefined,
+        talla_polera: clean.talla_polera,
+        talla_short: clean.talla_short,
+        establec_educ_id: clean.establec_educ_id ? Number(clean.establec_educ_id) : undefined,
+        prevision_medica_id: clean.prevision_medica_id ? Number(clean.prevision_medica_id) : undefined,
+        nombre_apoderado: clean.nombre_apoderado,
+        rut_apoderado: Number(rutApoderado),
+        telefono_apoderado: clean.telefono_apoderado,
+        peso: clean.peso ? Number(clean.peso) : undefined,
+        estatura: clean.estatura ? Number(clean.estatura) : undefined,
+        observaciones: clean.observaciones,
+
+        /*
+         * El backend espera "sucursales", no "sucursal_ids".
+         * Conservamos TODAS las sucursales seleccionadas.
+         * El backend mantiene sucursal_id legacy y crea jugador_sucursal N:M.
+         */
+        sucursales: Array.isArray(clean.sucursal_ids)
+          ? clean.sucursal_ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
+          : [],
+
+        contrato_prestacion: contratoBase64,
+        contrato_prestacion_mime: "application/pdf",
+      };
+
+      if (rolActual === 3) {
+        const academiaId = getAcademiaIdFromStorage();
+
+        if (!academiaId) {
+          throw new Error("⚠️ Superadmin: selecciona una academia antes de crear el jugador.");
+        }
+
+        payload.academia_id = academiaId;
+      }
+
+      return emptyToUndef(payload);
+    },
+    [formData, rolActual]
+  );
+
+  const resetFormulario = useCallback(() => {
+    setPaso(PASO_ANTECEDENTES);
+
     setFormData({
       nombre_jugador: "",
       rut_jugador: "",
@@ -1391,21 +1884,25 @@ export default function FormJugador() {
       telefono: "",
       email: "",
       direccion: "",
+      region_id: "",
+      ciudad_id: "",
       comuna_id: "",
-      posicion_id: "",
-      categoria_id: "",
-      estado_id: "",
+      posicion_id: posiciones.length === 1 ? String(posiciones[0].id) : "",
+      categoria_id: categorias.length === 1 ? String(categorias[0].id) : "",
+      estado_id: estados.length === 1 ? String(estados[0].id) : "",
       talla_polera: "",
       talla_short: "",
+      region_establecimiento_id: "",
+      comuna_establecimiento_id: "",
       establec_educ_id: "",
-      prevision_medica_id: "",
+      prevision_medica_id: previsiones.length === 1 ? String(previsiones[0].id) : "",
       nombre_apoderado: "",
       rut_apoderado: "",
       telefono_apoderado: "",
       peso: "",
       estatura: "",
       observaciones: "",
-      sucursal_ids: [],
+      sucursal_ids: sucursales.length === 1 ? [String(sucursales[0].id)] : [],
     });
 
     const sinBeneficio = planesCatalogo.find((plan) => String(plan.nombre).trim().toUpperCase() === "SIN BENEFICIO");
@@ -1421,151 +1918,114 @@ export default function FormJugador() {
     setBeneficiosPorTipo(defaults);
     setApoderadoEncontrado(false);
     setApoderadoLookupMsg("");
-    setBuscandoApoderado(false);
-    setPaso(PASO_ANTECEDENTES);
-  };
+    setMensaje("");
+    setError("");
+    scrollTop();
+  }, [posiciones, categorias, estados, previsiones, sucursales, planesCatalogo, tiposPago]);
 
   const enviarJugador = async (event) => {
     event.preventDefault();
 
+    if (paso !== PASO_FINANZAS) {
+      return;
+    }
+
+    if (!validarFinanzas()) {
+      scrollTop();
+      return;
+    }
+
+    if (isSubmitting) {
+      return;
+    }
+
+    setIsSubmitting(true);
     setMensaje("");
     setError("");
 
-    if (paso !== PASO_FINANZAS) return;
-
-    if (!validarAntecedentes()) {
-      goTo(PASO_ANTECEDENTES);
-      return;
-    }
-
-    if (!validarDeportivo()) {
-      goTo(PASO_DEPORTIVO);
-      return;
-    }
-
-    if (!validarApoderado()) {
-      goTo(PASO_APODERADO);
-      return;
-    }
-
-    if (!validarFinanzas()) return;
-
-    if (rolActual === 3 && !getAcademiaIdFromStorage()) {
-      setError("⚠️ Superadmin: selecciona una academia antes de guardar.");
-      return;
-    }
-
     try {
-      setIsSubmitting(true);
-
-      const contratoBase64 = await generarContratoBase64();
-
-      const cleaned = trimStrings(formData);
-
-      const comunaId = cleaned.comuna_id ? Number(cleaned.comuna_id) : undefined;
-
-      const sucursalIds = (Array.isArray(formData.sucursal_ids) ? formData.sucursal_ids : [])
-        .map(Number)
-        .filter((id) => Number.isFinite(id) && id > 0);
-
-      const sucursalPrincipal = sucursalIds[0];
-
-      const payload = emptyToUndef({
-        ...cleaned,
-        sucursal_ids: undefined,
-
-        rut_jugador: cleaned.rut_jugador ? Number(cleaned.rut_jugador) : undefined,
-
-        rut_apoderado: cleaned.rut_apoderado ? Number(cleaned.rut_apoderado) : undefined,
-
-        edad: cleaned.edad ? Number(cleaned.edad) : undefined,
-
-        posicion_id: cleaned.posicion_id ? Number(cleaned.posicion_id) : undefined,
-
-        categoria_id: cleaned.categoria_id ? Number(cleaned.categoria_id) : undefined,
-
-        estado_id: cleaned.estado_id ? Number(cleaned.estado_id) : undefined,
-
-        establec_educ_id: cleaned.establec_educ_id ? Number(cleaned.establec_educ_id) : undefined,
-
-        prevision_medica_id: cleaned.prevision_medica_id ? Number(cleaned.prevision_medica_id) : undefined,
-
-        sucursal_id: sucursalPrincipal,
-        sucursales: sucursalIds,
-
-        direccion: cleaned.direccion ? String(cleaned.direccion) : undefined,
-
-        comuna_id: Number.isFinite(comunaId) && comunaId > 0 ? comunaId : undefined,
-
-        contrato_prestacion: contratoBase64,
-
-        contrato_prestacion_mime: "application/pdf",
-      });
-
       const headers = buildHeaders(rolActual);
+
+      if (rolActual === 3 && !getAcademiaIdFromStorage()) {
+        throw new Error("⚠️ Superadmin: selecciona una academia antes de crear el jugador.");
+      }
+
+      const { context, contratoBase64 } = await prepararContrato();
+
+      const payload = buildJugadorPayload({
+        contratoBase64,
+      });
 
       const response = await postWithFallback("/jugadores", payload, headers);
 
-      const responseBody = response?.data ?? {};
+      const responseData = response?.data ?? {};
 
-      const jugadorId = Number(responseBody?.id ?? responseBody?.item?.id ?? 0);
+      const created =
+        responseData?.item ?? responseData?.data?.item ?? responseData?.data ?? responseData?.jugador ?? responseData;
+
+      const jugadorId = Number(created?.id ?? created?.jugador_id ?? responseData?.id ?? responseData?.jugador_id ?? 0);
 
       if (!Number.isInteger(jugadorId) || jugadorId <= 0) {
-        throw new Error("El jugador fue creado, pero el backend no devolvió un ID válido.");
+        throw new Error(
+          "El jugador fue creado, pero no fue posible recuperar su ID para guardar la configuración financiera."
+        );
       }
 
-      await guardarConfiguracionFinanciera(jugadorId, headers);
+      await enviarFinanzas({
+        jugadorId,
+        headers,
+        context,
+      });
 
-      const nombreOk =
-        responseBody?.nombre_jugador ?? responseBody?.item?.nombre_jugador ?? cleaned.nombre_jugador ?? "Jugador";
-
-      const rutApoderado = String(formData.rut_apoderado ?? "").replace(/\D/g, "");
-
-      const apoderadoCredencial = /^\d{7,8}$/.test(rutApoderado);
-
-      setMensaje(`✅ Jugador registrado: ${nombreOk} (ID ${jugadorId})`);
+      setMensaje("✅ Jugador creado correctamente.");
 
       setCreatedInfo({
-        nombre: nombreOk,
+        nombre: context.jugador.nombre,
         id: jugadorId,
-        apoderadoCredencial,
-        total: rolActual === 2 ? totalBase : totalFinal,
+        apoderadoCredencial: Boolean(
+          created?.apoderado_credencial ??
+          created?.apoderadoCredencial ??
+          responseData?.apoderado_credencial ??
+          responseData?.apoderadoCredencial ??
+          false
+        ),
+        total: context.financiero.total_final,
       });
 
       setCreatedOpen(true);
-      resetForm();
+
+      resetFormulario();
     } catch (err) {
       const status = err?.status ?? err?.response?.status ?? 0;
 
-      const data = err?.data ?? err?.response?.data ?? null;
-
-      const text = err?.request?.responseText;
-
-      const msg = data?.message ?? err?.message ?? (text ? String(text).slice(0, 300) : "Error");
-
       if (status === 401) {
         clearToken();
+
         navigate("/login", {
           replace: true,
         });
+
         return;
       }
 
       if (status === 403) {
         setError(
-          rolActual === 3
-            ? "⚠️ Superadmin: falta x-academia-id o academia no autorizada."
-            : "No tienes permisos para registrar este jugador."
+          rolActual === 3 ? "⚠️ Superadmin: academia no autorizada." : "No tienes permisos para crear jugadores."
         );
+
         return;
       }
 
-      setError(String(msg || "❌ No se pudo guardar el jugador"));
+      setError(
+        err?.response?.data?.message ??
+          err?.response?.data?.detail ??
+          err?.message ??
+          "❌ No fue posible crear el jugador."
+      );
 
-      console.warn("❌ guardar jugador error:", {
+      console.error("Error creando jugador:", {
         status,
-        data,
-        text,
+        response: err?.response?.data,
         err,
       });
     } finally {
@@ -1573,49 +2033,93 @@ export default function FormJugador() {
     }
   };
 
+  /* =========================================================
+     THEME TOKENS
+  ========================================================= */
+
+  const tokens = useMemo(() => {
+    if (themeTokens) {
+      return themeTokens;
+    }
+
+    if (darkMode) {
+      return {
+        surface: "#1F2937",
+        surfaceSoft: "#172033",
+        surface2: "#263244",
+        surfaceHover: "#374151",
+        primary: "#FFDDA1",
+        primaryHover: "#FFE5B8",
+        primaryContrast: "#3F2D18",
+        secondary: "#B79F69",
+        secondaryHover: "#C8B27F",
+        secondaryContrast: "#111827",
+        text: "#F9FAFB",
+        textMuted: "#D1D5DB",
+        icon: "#FFDDA1",
+        border: "#374151",
+        borderStrong: "#4B5563",
+        inputBg: "#111827",
+        inputText: "#F9FAFB",
+        inputBorder: "#4B5563",
+        tableHead: "#172033",
+        focus: "#FFDDA1",
+        overlay: "rgba(0,0,0,.65)",
+      };
+    }
+
+    return {
+      surface: "#FFFFFF",
+      surfaceSoft: "#FAF6EE",
+      surface2: "#F7EAD4",
+      surfaceHover: "#FFF9F2",
+      primary: "#AA5013",
+      primaryHover: "#994812",
+      primaryContrast: "#FFFFFF",
+      secondary: "#6D5829",
+      secondaryHover: "#5E4B23",
+      secondaryContrast: "#FFFFFF",
+      text: "#3B2A1E",
+      textMuted: "#766657",
+      icon: "#AA5013",
+      border: "#D8C7AE",
+      borderStrong: "#BFA684",
+      inputBg: "#FFFFFF",
+      inputText: "#3B2A1E",
+      inputBorder: "#9B7B50",
+      tableHead: "#F7EAD4",
+      focus: "#AA5013",
+      overlay: "rgba(0,0,0,.55)",
+    };
+  }, [themeTokens, darkMode]);
+
   const ui = useMemo(() => {
     const page =
-      "min-h-screen px-3 sm:px-4 pt-4 pb-16 font-sans overflow-x-hidden " +
-      (darkMode
-        ? "bg-[#111827] text-white"
-        : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron");
+      "min-h-[calc(100vh-100px)] w-full bg-transparent px-3 sm:px-5 lg:px-7 2xl:px-10 pt-4 pb-16 font-sans overflow-x-hidden";
 
-    const card =
-      "w-full max-w-6xl mx-auto rounded-3xl border shadow-xl backdrop-blur-md " +
-      (darkMode ? "bg-white/[0.07] border-white/15" : "bg-white/70 border-ra-marron/15");
+    const card = "weli-form-card w-full max-w-6xl mx-auto rounded-2xl border shadow-[0_14px_42px_rgba(0,0,0,0.12)]";
 
-    const section =
-      "rounded-2xl border p-4 sm:p-5 " +
-      (darkMode ? "bg-white/[0.05] border-white/10" : "bg-white/55 border-ra-marron/10");
+    const section = "weli-form-section rounded-2xl border p-4 sm:p-5";
 
-    const input =
-      "w-full box-border rounded-xl px-3.5 py-2.5 border outline-none transition " +
-      (darkMode
-        ? "bg-white/10 border-white/15 text-white placeholder-white/40 focus:border-white/30 focus:ring-2 focus:ring-white/10"
-        : "bg-white/80 border-ra-marron/15 text-ra-marron placeholder-ra-marron/40 focus:border-ra-terracotta focus:ring-2 focus:ring-[rgba(170,80,19,0.18)]");
+    const input = "weli-form-control w-full box-border rounded-xl px-3.5 py-2.5 border outline-none transition";
 
-    const label = "block text-xs sm:text-sm font-bold mb-1.5 " + (darkMode ? "text-white/75" : "text-ra-marron/75");
+    const label = "weli-form-label block text-xs sm:text-sm font-bold mb-1.5";
 
-    const helper = "text-xs " + (darkMode ? "text-white/50" : "text-ra-marron/55");
+    const helper = "weli-form-helper text-xs";
 
     const bannerErr =
       "mb-4 p-3 rounded-2xl border " +
-      (darkMode ? "bg-red-500/10 border-red-300/20 text-red-100" : "bg-red-500/10 border-red-600/25 text-red-800");
+      (darkMode ? "bg-red-500/10 border-red-300/20 text-red-100" : "bg-red-50 border-red-200 text-red-700");
 
     const bannerWarn =
       "mb-4 p-3 rounded-2xl border " +
-      (darkMode
-        ? "bg-amber-500/10 border-amber-300/20 text-amber-100"
-        : "bg-amber-500/10 border-amber-600/25 text-amber-900");
+      (darkMode ? "bg-amber-500/10 border-amber-300/20 text-amber-100" : "bg-amber-50 border-amber-200 text-amber-900");
 
     const btn =
-      "inline-flex items-center justify-center gap-2 py-2.5 px-5 rounded-xl font-extrabold border border-white/15 hover:opacity-90 active:scale-[0.99] transition disabled:opacity-60 disabled:cursor-not-allowed";
+      "weli-form-primary inline-flex items-center justify-center gap-2 py-2.5 px-5 rounded-xl font-extrabold border hover:opacity-90 active:scale-[0.99] transition disabled:opacity-60 disabled:cursor-not-allowed";
 
     const btnSecondary =
-      "inline-flex items-center justify-center gap-2 py-2.5 px-5 rounded-xl font-extrabold border transition disabled:opacity-60 disabled:cursor-not-allowed " +
-      (darkMode
-        ? "bg-white/10 border-white/15 text-white hover:bg-white/15"
-        : "bg-white/70 border-ra-marron/15 text-ra-marron hover:bg-white");
+      "weli-form-secondary inline-flex items-center justify-center gap-2 py-2.5 px-5 rounded-xl font-extrabold border transition disabled:opacity-60 disabled:cursor-not-allowed";
 
     return {
       page,
@@ -1630,13 +2134,36 @@ export default function FormJugador() {
       bannerWarn,
       btn,
       btnSecondary,
-      btnBg: {
-        background: `linear-gradient(135deg, ${PALETTE.copper}, ${PALETTE.terracotta})`,
-        color: "white",
+      titleColor: "weli-form-title",
+
+      rootStyle: {
+        color: tokens.text,
+
+        "--weli-form-surface": tokens.surface,
+        "--weli-form-surface-soft": tokens.surfaceSoft,
+        "--weli-form-surface-2": tokens.surface2,
+        "--weli-form-surface-hover": tokens.surfaceHover,
+
+        "--weli-form-text": tokens.text,
+        "--weli-form-muted": tokens.textMuted,
+
+        "--weli-form-border": tokens.border,
+        "--weli-form-border-strong": tokens.borderStrong,
+
+        "--weli-form-primary": tokens.primary,
+        "--weli-form-primary-hover": tokens.primaryHover,
+        "--weli-form-primary-contrast": tokens.primaryContrast,
+
+        "--weli-form-icon": tokens.icon,
+
+        "--weli-form-input-bg": tokens.inputBg,
+        "--weli-form-input-text": tokens.inputText,
+        "--weli-form-input-border": tokens.inputBorder,
+
+        "--weli-form-focus": tokens.focus,
       },
-      titleColor: darkMode ? "text-white" : "text-ra-marron",
     };
-  }, [darkMode]);
+  }, [darkMode, tokens]);
 
   if (isLoading) {
     return <IsLoading />;
@@ -1676,33 +2203,16 @@ export default function FormJugador() {
           <div
             key={step.id}
             className={[
-              "rounded-2xl border p-3 sm:p-4 transition",
-              active
-                ? darkMode
-                  ? "bg-white/15 border-white/25"
-                  : "bg-white border-ra-terracotta/50 shadow-sm"
-                : darkMode
-                  ? "bg-white/[0.04] border-white/10"
-                  : "bg-white/40 border-ra-marron/10",
+              "weli-form-step rounded-2xl border p-3 sm:p-4 transition",
+              active ? "weli-form-step-active" : "",
             ].join(" ")}
           >
             <div className="flex items-center gap-3">
               <div
                 className={[
-                  "w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0",
-                  active || done
-                    ? "text-white"
-                    : darkMode
-                      ? "bg-white/10 text-white/50"
-                      : "bg-ra-marron/10 text-ra-marron/50",
+                  "weli-form-step-icon w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0",
+                  active || done ? "weli-form-step-icon-active" : "",
                 ].join(" ")}
-                style={
-                  active || done
-                    ? {
-                        background: `linear-gradient(135deg, ${PALETTE.copper}, ${PALETTE.terracotta})`,
-                      }
-                    : undefined
-                }
               >
                 {done ? <Check size={19} /> : <Icon size={19} />}
               </div>
@@ -1722,7 +2232,140 @@ export default function FormJugador() {
   );
 
   return (
-    <div className={ui.page}>
+    <div className={ui.page} style={ui.rootStyle}>
+      <style>
+        {`
+          .weli-form-card {
+            background-color: var(--weli-form-surface);
+            border-color: var(--weli-form-border);
+            color: var(--weli-form-text);
+          }
+
+          .weli-form-section,
+          .weli-form-finance-card {
+            background-color: var(--weli-form-surface-soft);
+            border-color: var(--weli-form-border);
+            color: var(--weli-form-text);
+          }
+
+          .weli-form-title,
+          .weli-form-label {
+            color: var(--weli-form-text);
+          }
+
+          .weli-form-helper {
+            color: var(--weli-form-muted);
+          }
+
+          .weli-form-control {
+            background-color: var(--weli-form-input-bg);
+            border-color: var(--weli-form-input-border);
+            color: var(--weli-form-input-text);
+          }
+
+          .weli-form-control::placeholder {
+            color: var(--weli-form-muted);
+            opacity: .72;
+          }
+
+          .weli-form-control:focus {
+            border-color: var(--weli-form-focus);
+            box-shadow: 0 0 0 2px color-mix(in srgb, var(--weli-form-focus) 18%, transparent);
+          }
+
+          .weli-form-control:disabled {
+            background-color: var(--weli-form-surface-soft);
+            color: var(--weli-form-muted);
+            cursor: not-allowed;
+          }
+
+          .weli-form-control option {
+            background-color: var(--weli-form-input-bg);
+            color: var(--weli-form-input-text);
+          }
+
+          .weli-form-primary {
+            background-color: var(--weli-form-primary);
+            border-color: var(--weli-form-primary);
+            color: var(--weli-form-primary-contrast);
+          }
+
+          .weli-form-primary:hover:not(:disabled) {
+            background-color: var(--weli-form-primary-hover);
+          }
+
+          .weli-form-secondary {
+            background-color: var(--weli-form-surface-soft);
+            border-color: var(--weli-form-border-strong);
+            color: var(--weli-form-text);
+          }
+
+          .weli-form-secondary:hover:not(:disabled) {
+            background-color: var(--weli-form-surface-hover);
+          }
+
+          .weli-form-primary:focus-visible,
+          .weli-form-secondary:focus-visible,
+          .weli-form-choice:focus-visible {
+            outline: 2px solid var(--weli-form-focus);
+            outline-offset: 3px;
+          }
+
+          .weli-form-step,
+          .weli-form-choice {
+            background-color: var(--weli-form-surface-soft);
+            border-color: var(--weli-form-border);
+            color: var(--weli-form-text);
+          }
+
+          .weli-form-step-active,
+          .weli-form-choice-selected {
+            background-color: var(--weli-form-surface);
+            border-color: var(--weli-form-primary);
+          }
+
+          .weli-form-step-icon {
+            background-color: var(--weli-form-surface-2);
+            color: var(--weli-form-icon);
+          }
+
+          .weli-form-step-icon-active {
+            background-color: var(--weli-form-primary);
+            color: var(--weli-form-primary-contrast);
+          }
+
+          .weli-form-choice:hover {
+            background-color: var(--weli-form-surface-hover);
+          }
+
+          .weli-form-choice > span:first-child {
+            border-color: var(--weli-form-border-strong);
+          }
+
+          .weli-form-choice-selected > span:first-child {
+            background-color: var(--weli-form-primary);
+            border-color: var(--weli-form-primary);
+            color: var(--weli-form-primary-contrast);
+          }
+
+          .weli-form-readonly,
+          .weli-form-summary {
+            background-color: var(--weli-form-surface-2);
+            border-color: var(--weli-form-border);
+            color: var(--weli-form-text);
+          }
+
+          .weli-form-control:-webkit-autofill,
+          .weli-form-control:-webkit-autofill:hover,
+          .weli-form-control:-webkit-autofill:focus {
+            -webkit-text-fill-color: var(--weli-form-input-text) !important;
+            caret-color: var(--weli-form-input-text) !important;
+            box-shadow: 0 0 0 1000px var(--weli-form-input-bg) inset !important;
+            transition: background-color 9999s ease-out 0s;
+          }
+        `}
+      </style>
+
       <div className="w-full max-w-6xl mx-auto mb-4 sm:mb-6 text-center">
         <h2 className={`text-2xl sm:text-3xl font-extrabold ${ui.titleColor}`}>Registrar jugador</h2>
 
@@ -1731,7 +2374,7 @@ export default function FormJugador() {
         </p>
 
         {academiaInfo?.id && (
-          <p className={`mt-2 text-xs font-bold ${darkMode ? "text-white/70" : "text-ra-marron/70"}`}>
+          <p className={`${ui.helper} mt-2 font-bold`}>
             {academiaInfo.nombre} · {academiaInfo.deporte_nombre}
           </p>
         )}
@@ -1754,22 +2397,25 @@ export default function FormJugador() {
                   <UserRound size={22} />
 
                   <div>
-                    <h3 className="font-extrabold text-lg">Antecedentes del jugador</h3>
+                    <h3 className="font-extrabold text-lg">Antecedentes personales</h3>
 
-                    <p className={ui.helper}>Información personal y de contacto.</p>
+                    <p className={ui.helper}>
+                      Información básica y territorial necesaria para la inscripción y el contrato.
+                    </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="sm:col-span-2 lg:col-span-2">
                     <label className={ui.label}>Nombre completo *</label>
 
                     <input
+                      type="text"
                       name="nombre_jugador"
                       value={formData.nombre_jugador}
                       onChange={handleChange}
                       className={ui.input}
-                      required
+                      placeholder="Nombre completo"
                     />
                   </div>
 
@@ -1777,27 +2423,29 @@ export default function FormJugador() {
                     <label className={ui.label}>RUT *</label>
 
                     <input
+                      type="text"
                       name="rut_jugador"
                       value={formData.rut_jugador}
                       onChange={handleChange}
-                      placeholder="Sin puntos, guion ni DV"
-                      inputMode="numeric"
-                      maxLength={8}
                       className={ui.input}
-                      required
+                      inputMode="numeric"
+                      placeholder="Sin puntos, guion ni DV"
                     />
+
+                    {formData.rut_jugador && (
+                      <p className={`${ui.helper} mt-1`}>Vista: {formatRutWithDV(formData.rut_jugador)}</p>
+                    )}
                   </div>
 
                   <div>
                     <label className={ui.label}>Fecha de nacimiento *</label>
 
                     <input
-                      name="fecha_nacimiento"
                       type="date"
+                      name="fecha_nacimiento"
                       value={formData.fecha_nacimiento}
                       onChange={handleChange}
                       className={ui.input}
-                      required
                     />
                   </div>
 
@@ -1805,11 +2453,13 @@ export default function FormJugador() {
                     <label className={ui.label}>Edad</label>
 
                     <input
+                      type="text"
                       name="edad"
                       value={formData.edad}
                       onChange={handleChange}
-                      inputMode="numeric"
                       className={ui.input}
+                      inputMode="numeric"
+                      placeholder="Edad"
                     />
                   </div>
 
@@ -1817,36 +2467,78 @@ export default function FormJugador() {
                     <label className={ui.label}>Teléfono</label>
 
                     <input
+                      type="text"
                       name="telefono"
                       value={formData.telefono}
                       onChange={handleChange}
-                      placeholder="+569..."
                       className={ui.input}
+                      placeholder="+569..."
                     />
                   </div>
 
-                  <div>
-                    <label className={ui.label}>Correo</label>
+                  <div className="sm:col-span-2 lg:col-span-2">
+                    <label className={ui.label}>Correo electrónico</label>
 
                     <input
-                      name="email"
                       type="email"
+                      name="email"
                       value={formData.email}
                       onChange={handleChange}
                       className={ui.input}
+                      placeholder="correo@ejemplo.cl"
                     />
                   </div>
 
-                  <div>
+                  <div className="sm:col-span-2 lg:col-span-3">
                     <label className={ui.label}>Dirección *</label>
 
                     <input
+                      type="text"
                       name="direccion"
                       value={formData.direccion}
                       onChange={handleChange}
                       className={ui.input}
-                      required
+                      placeholder="Dirección del jugador"
                     />
+                  </div>
+
+                  <div>
+                    <label className={ui.label}>Región *</label>
+
+                    <select
+                      name="region_id"
+                      value={formData.region_id}
+                      onChange={handleTerritorioChange}
+                      className={ui.select}
+                    >
+                      <option value="">Selecciona región</option>
+
+                      {regiones.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className={ui.label}>Ciudad *</label>
+
+                    <select
+                      name="ciudad_id"
+                      value={formData.ciudad_id}
+                      onChange={handleTerritorioChange}
+                      className={ui.select}
+                      disabled={!formData.region_id}
+                    >
+                      <option value="">Selecciona ciudad</option>
+
+                      {ciudadesDisponibles.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.nombre}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
@@ -1855,13 +2547,13 @@ export default function FormJugador() {
                     <select
                       name="comuna_id"
                       value={formData.comuna_id}
-                      onChange={handleChange}
+                      onChange={handleTerritorioChange}
                       className={ui.select}
-                      required
+                      disabled={!formData.ciudad_id}
                     >
                       <option value="">Selecciona comuna</option>
 
-                      {comunas.map((item) => (
+                      {comunasDisponibles.map((item) => (
                         <option key={item.id} value={item.id}>
                           {item.nombre}
                         </option>
@@ -1872,7 +2564,7 @@ export default function FormJugador() {
               </section>
 
               <div className="flex justify-end">
-                <button type="button" onClick={siguienteAntecedentes} className={ui.btn} style={ui.btnBg}>
+                <button type="button" onClick={siguienteAntecedentes} className={ui.btn}>
                   Siguiente
                   <ChevronRight size={18} />
                 </button>
@@ -1889,11 +2581,11 @@ export default function FormJugador() {
                   <div>
                     <h3 className="font-extrabold text-lg">Información deportiva</h3>
 
-                    <p className={ui.helper}>Categoría, posición, estado y sucursales.</p>
+                    <p className={ui.helper}>Categoría, posición, estado y sucursales asociadas al jugador.</p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div>
                     <label className={ui.label}>Posición *</label>
 
@@ -1902,7 +2594,6 @@ export default function FormJugador() {
                       value={formData.posicion_id}
                       onChange={handleChange}
                       className={ui.select}
-                      required
                     >
                       <option value="">Selecciona posición</option>
 
@@ -1922,7 +2613,6 @@ export default function FormJugador() {
                       value={formData.categoria_id}
                       onChange={handleChange}
                       className={ui.select}
-                      required
                     >
                       <option value="">Selecciona categoría</option>
 
@@ -1937,13 +2627,7 @@ export default function FormJugador() {
                   <div>
                     <label className={ui.label}>Estado *</label>
 
-                    <select
-                      name="estado_id"
-                      value={formData.estado_id}
-                      onChange={handleChange}
-                      className={ui.select}
-                      required
-                    >
+                    <select name="estado_id" value={formData.estado_id} onChange={handleChange} className={ui.select}>
                       <option value="">Selecciona estado</option>
 
                       {estados.map((item) => (
@@ -1970,14 +2654,8 @@ export default function FormJugador() {
                           type="button"
                           onClick={() => toggleSucursal(item.id)}
                           className={[
-                            "rounded-xl border p-3 text-left flex items-center gap-3 transition",
-                            selected
-                              ? darkMode
-                                ? "bg-white/15 border-white/30"
-                                : "bg-white border-ra-terracotta/50 shadow-sm"
-                              : darkMode
-                                ? "bg-white/[0.04] border-white/10"
-                                : "bg-white/40 border-ra-marron/10",
+                            "weli-form-choice rounded-xl border p-3 text-left flex items-center gap-3 transition",
+                            selected ? "weli-form-choice-selected" : "",
                           ].join(" ")}
                         >
                           <span className="w-6 h-6 border rounded-md flex items-center justify-center">
@@ -2005,6 +2683,45 @@ export default function FormJugador() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div>
+                    <label className={ui.label}>Región del establecimiento</label>
+
+                    <select
+                      name="region_establecimiento_id"
+                      value={formData.region_establecimiento_id}
+                      onChange={handleEstablecimientoTerritorioChange}
+                      className={ui.select}
+                    >
+                      <option value="">Selecciona región</option>
+
+                      {regionesEstablecimientosDisponibles.map((region) => (
+                        <option key={region.id} value={region.id}>
+                          {region.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className={ui.label}>Comuna del establecimiento</label>
+
+                    <select
+                      name="comuna_establecimiento_id"
+                      value={formData.comuna_establecimiento_id}
+                      onChange={handleEstablecimientoTerritorioChange}
+                      className={ui.select}
+                      disabled={!formData.region_establecimiento_id}
+                    >
+                      <option value="">Selecciona comuna</option>
+
+                      {comunasEstablecimientosDisponibles.map((comuna) => (
+                        <option key={comuna.id} value={comuna.id}>
+                          {comuna.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
                     <label className={ui.label}>Establecimiento educacional</label>
 
                     <select
@@ -2012,10 +2729,11 @@ export default function FormJugador() {
                       value={formData.establec_educ_id}
                       onChange={handleChange}
                       className={ui.select}
+                      disabled={!formData.comuna_establecimiento_id}
                     >
                       <option value="">Selecciona establecimiento</option>
 
-                      {establecimientos.map((item) => (
+                      {establecimientosDisponibles.map((item) => (
                         <option key={item.id} value={item.id}>
                           {item.nombre}
                         </option>
@@ -2045,19 +2763,34 @@ export default function FormJugador() {
                   <div>
                     <label className={ui.label}>Peso (kg)</label>
 
-                    <input name="peso" value={formData.peso} onChange={handleChange} className={ui.input} />
+                    <input
+                      type="text"
+                      name="peso"
+                      value={formData.peso}
+                      onChange={handleChange}
+                      className={ui.input}
+                      inputMode="decimal"
+                    />
                   </div>
 
                   <div>
                     <label className={ui.label}>Estatura (cm)</label>
 
-                    <input name="estatura" value={formData.estatura} onChange={handleChange} className={ui.input} />
+                    <input
+                      type="text"
+                      name="estatura"
+                      value={formData.estatura}
+                      onChange={handleChange}
+                      className={ui.input}
+                      inputMode="numeric"
+                    />
                   </div>
 
                   <div>
                     <label className={ui.label}>Talla polera</label>
 
                     <input
+                      type="text"
                       name="talla_polera"
                       value={formData.talla_polera}
                       onChange={handleChange}
@@ -2069,6 +2802,7 @@ export default function FormJugador() {
                     <label className={ui.label}>Talla short</label>
 
                     <input
+                      type="text"
                       name="talla_short"
                       value={formData.talla_short}
                       onChange={handleChange}
@@ -2089,13 +2823,13 @@ export default function FormJugador() {
                 </div>
               </section>
 
-              <div className="flex justify-between gap-3">
+              <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
                 <button type="button" onClick={() => goTo(PASO_ANTECEDENTES)} className={ui.btnSecondary}>
                   <ChevronLeft size={18} />
                   Volver
                 </button>
 
-                <button type="button" onClick={siguienteDeportivo} className={ui.btn} style={ui.btnBg}>
+                <button type="button" onClick={siguienteDeportivo} className={ui.btn}>
                   Siguiente
                   <ChevronRight size={18} />
                 </button>
@@ -2110,80 +2844,81 @@ export default function FormJugador() {
                   <Users size={22} />
 
                   <div>
-                    <h3 className="font-extrabold text-lg">Datos del apoderado</h3>
+                    <h3 className="font-extrabold text-lg">Información del apoderado</h3>
 
-                    <p className={ui.helper}>WELI reutilizará automáticamente una identidad existente.</p>
+                    <p className={ui.helper}>
+                      Si el RUT ya está registrado, WELI recuperará automáticamente su nombre.
+                    </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className={ui.label}>RUT del apoderado *</label>
 
                     <input
+                      type="text"
                       name="rut_apoderado"
                       value={formData.rut_apoderado}
                       onChange={handleChange}
-                      placeholder="Sin puntos, guion ni DV"
-                      maxLength={8}
-                      inputMode="numeric"
                       className={ui.input}
-                      required
+                      inputMode="numeric"
+                      placeholder="Sin puntos, guion ni DV"
                     />
 
-                    <div className="mt-1.5 min-h-[18px]">
-                      {buscandoApoderado ? (
-                        <p className={ui.helper}>Buscando apoderado…</p>
-                      ) : (
-                        <p
-                          className={
-                            apoderadoEncontrado
-                              ? darkMode
-                                ? "text-xs text-emerald-200"
-                                : "text-xs text-emerald-700"
-                              : ui.helper
-                          }
-                        >
-                          {apoderadoLookupMsg}
-                        </p>
-                      )}
-                    </div>
+                    {formData.rut_apoderado && (
+                      <p className={`${ui.helper} mt-1`}>Vista: {formatRutWithDV(formData.rut_apoderado)}</p>
+                    )}
                   </div>
 
                   <div>
-                    <label className={ui.label}>Nombre completo *</label>
+                    <label className={ui.label}>Nombre del apoderado *</label>
 
                     <input
+                      type="text"
                       name="nombre_apoderado"
                       value={formData.nombre_apoderado}
                       onChange={handleChange}
-                      readOnly={apoderadoEncontrado}
-                      disabled={buscandoApoderado}
                       className={ui.input}
-                      required
+                      disabled={apoderadoEncontrado}
+                      placeholder="Nombre completo"
                     />
+
+                    {buscandoApoderado && <p className={`${ui.helper} mt-1`}>Buscando apoderado…</p>}
+
+                    {!buscandoApoderado && apoderadoLookupMsg && (
+                      <p
+                        className={`mt-1 text-xs ${
+                          apoderadoEncontrado ? (darkMode ? "text-emerald-200" : "text-emerald-700") : ui.helper
+                        }`}
+                      >
+                        {apoderadoLookupMsg}
+                      </p>
+                    )}
                   </div>
 
-                  <div className="md:col-span-2">
+                  <div>
                     <label className={ui.label}>Teléfono del apoderado</label>
 
                     <input
+                      type="text"
                       name="telefono_apoderado"
                       value={formData.telefono_apoderado}
                       onChange={handleChange}
                       className={ui.input}
+                      placeholder="+569..."
                     />
                   </div>
                 </div>
               </section>
 
-              <div className="flex justify-between gap-3">
+              <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
                 <button type="button" onClick={() => goTo(PASO_DEPORTIVO)} className={ui.btnSecondary}>
                   <ChevronLeft size={18} />
                   Volver
                 </button>
 
-                <button type="button" onClick={siguienteApoderado} className={ui.btn} style={ui.btnBg}>
+                <button type="button" onClick={siguienteApoderado} className={ui.btn}>
                   Siguiente
                   <ChevronRight size={18} />
                 </button>
@@ -2194,8 +2929,8 @@ export default function FormJugador() {
           {paso === PASO_FINANZAS && (
             <div className="space-y-5">
               <section className={ui.section}>
-                <div className="flex items-center gap-3 mb-5">
-                  <WalletCards size={24} />
+                <div className="flex items-center gap-3 mb-4">
+                  <WalletCards size={22} />
 
                   <div>
                     <h3 className="font-extrabold text-lg">Tarifas y beneficios</h3>
@@ -2221,13 +2956,7 @@ export default function FormJugador() {
                       const descuento = Math.max(0, Number(tipo.monto ?? 0) - montoFinal);
 
                       return (
-                        <div
-                          key={tipo.id}
-                          className={[
-                            "rounded-2xl border p-4 sm:p-5",
-                            darkMode ? "bg-white/[0.04] border-white/10" : "bg-white/55 border-ra-marron/10",
-                          ].join(" ")}
-                        >
+                        <div key={tipo.id} className="weli-form-finance-card rounded-2xl border p-4 sm:p-5">
                           <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr_1fr] gap-4 items-end">
                             <div>
                               <div className="font-extrabold text-base">{tipo.nombre}</div>
@@ -2245,13 +2974,7 @@ export default function FormJugador() {
                               <label className={ui.label}>Beneficio</label>
 
                               {rolActual === 2 ? (
-                                <div
-                                  className={`rounded-xl px-3.5 py-2.5 border ${
-                                    darkMode
-                                      ? "bg-white/5 border-white/10 text-white/70"
-                                      : "bg-white/60 border-ra-marron/10 text-ra-marron/70"
-                                  }`}
-                                >
+                                <div className="weli-form-readonly rounded-xl px-3.5 py-2.5 border">
                                   Sin beneficio modificable
                                 </div>
                               ) : (
@@ -2271,12 +2994,7 @@ export default function FormJugador() {
                               )}
                             </div>
 
-                            <div
-                              className={[
-                                "rounded-xl border px-4 py-3",
-                                darkMode ? "border-white/10 bg-white/[0.05]" : "border-ra-marron/10 bg-white/70",
-                              ].join(" ")}
-                            >
+                            <div className="weli-form-summary rounded-xl border px-4 py-3">
                               <div className={ui.helper}>Monto contractual</div>
 
                               <div className="font-extrabold text-2xl">{formatMoney(montoFinal)}</div>
@@ -2303,13 +3021,13 @@ export default function FormJugador() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="rounded-xl border p-4">
+                  <div className="weli-form-summary rounded-xl border p-4">
                     <div className={ui.helper}>Total sin beneficios</div>
 
                     <div className="font-extrabold text-xl">{formatMoney(totalBase)}</div>
                   </div>
 
-                  <div className="rounded-xl border p-4">
+                  <div className="weli-form-summary rounded-xl border p-4">
                     <div className={ui.helper}>Beneficios aplicados</div>
 
                     <div className="font-extrabold text-xl">
@@ -2317,7 +3035,7 @@ export default function FormJugador() {
                     </div>
                   </div>
 
-                  <div className="rounded-xl border p-4">
+                  <div className="weli-form-summary rounded-xl border p-4">
                     <div className={ui.helper}>Total contractual</div>
 
                     <div className="font-extrabold text-2xl">
@@ -2346,7 +3064,6 @@ export default function FormJugador() {
                   type="submit"
                   disabled={isSubmitting || !academiaInfo?.id || (rolActual === 3 && !academiaTarget)}
                   className={ui.btn}
-                  style={ui.btnBg}
                 >
                   {isSubmitting ? (
                     "Guardando…"
@@ -2360,7 +3077,7 @@ export default function FormJugador() {
               </div>
 
               {isSubmitting && (
-                <div className={`text-xs text-center ${darkMode ? "text-white/70" : "text-ra-marron/65"}`}>
+                <div className={`${ui.helper} text-center`}>
                   Generando contrato, registrando jugador y guardando su configuración financiera…
                 </div>
               )}
@@ -2379,7 +3096,7 @@ export default function FormJugador() {
         )}
       </div>
 
-      <Modal open={createdOpen} onClose={() => setCreatedOpen(false)} title="✅ Jugador creado" darkMode={darkMode}>
+      <Modal open={createdOpen} onClose={() => setCreatedOpen(false)} title="✅ Jugador creado" tokens={tokens}>
         <div>
           <div>
             <b>Nombre:</b> {createdInfo.nombre}
@@ -2395,14 +3112,10 @@ export default function FormJugador() {
             <b>Valor contractual:</b> {formatMoney(createdInfo.total)}
           </div>
 
-          <div className={darkMode ? "mt-2 text-white/80" : "mt-2 text-ra-marron/75"}>
-            Contrato generado y almacenado correctamente.
-          </div>
+          <div className={`${ui.helper} mt-2`}>Contrato generado y almacenado correctamente.</div>
 
           {createdInfo.apoderadoCredencial && (
-            <div className={darkMode ? "mt-2 text-xs text-white/85" : "mt-2 text-xs text-ra-marron/80"}>
-              ✅ Apoderado habilitado para portal.
-            </div>
+            <div className={`${ui.helper} mt-2`}>✅ Apoderado habilitado para portal.</div>
           )}
         </div>
       </Modal>

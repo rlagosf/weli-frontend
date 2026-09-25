@@ -233,7 +233,7 @@ const deleteApi = async (path, headers) =>
 ========================================================= */
 
 export default function ListarPagos() {
-  const { darkMode } = useTheme();
+  const { darkMode, themeTokens } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -579,37 +579,111 @@ export default function ListarPagos() {
   }, [rolActual, academiaTarget, loadAll, navigate]);
 
   /* =======================================================
+     TOKENS DE APARIENCIA
+  ======================================================= */
+
+  const tokens = useMemo(() => {
+    if (themeTokens) {
+      return themeTokens;
+    }
+
+    if (darkMode) {
+      return {
+        surface: "#1F2937",
+        surfaceSoft: "#172033",
+        surface2: "#263244",
+        surfaceHover: "#374151",
+
+        primary: "#FFDDA1",
+        primaryHover: "#FFE5B8",
+        primaryContrast: "#3F2D18",
+
+        secondary: "#B79F69",
+        secondaryHover: "#C8B27F",
+        secondaryContrast: "#111827",
+
+        text: "#F9FAFB",
+        textMuted: "#D1D5DB",
+
+        icon: "#FFDDA1",
+
+        border: "#374151",
+        borderStrong: "#4B5563",
+
+        inputBg: "#111827",
+        inputText: "#F9FAFB",
+        inputBorder: "#4B5563",
+
+        tableHead: "#172033",
+        focus: "#FFDDA1",
+        overlay: "rgba(0,0,0,.65)",
+      };
+    }
+
+    return {
+      surface: "#FFFFFF",
+      surfaceSoft: "#FAF6EE",
+      surface2: "#F7EAD4",
+      surfaceHover: "#FFF9F2",
+
+      primary: PALETTE.sand,
+      primaryHover: "#FFE5B8",
+      primaryContrast: PALETTE.brown,
+
+      secondary: PALETTE.brown,
+      secondaryHover: "#5E4B23",
+      secondaryContrast: "#FFFFFF",
+
+      text: "#3F2D18",
+      textMuted: "#766657",
+
+      icon: PALETTE.brown,
+
+      border: "#D8C7AE",
+      borderStrong: "#BFA684",
+
+      inputBg: "#FFFFFF",
+      inputText: "#3F2D18",
+      inputBorder: "#9B7B50",
+
+      tableHead: "#F7EAD4",
+      focus: "#AA5013",
+      overlay: "rgba(0,0,0,.55)",
+    };
+  }, [themeTokens, darkMode]);
+
+  /* =======================================================
      UI
+
+     - Dashboard controla el fondo global.
+     - Este componente permanece transparente.
+     - Sólo tarjetas, tabla, modal y controles tienen superficie.
+     - Toda la identidad visual consume themeTokens.
+     - Estados de pago mantienen colores semánticos.
   ======================================================= */
 
   const ui = useMemo(() => {
-    const page = "min-h-[calc(100vh-100px)] w-full bg-transparent px-3 sm:px-5 lg:px-7 2xl:px-10 pt-4 pb-16";
+    const page =
+      "weli-pagos-root min-h-[calc(100vh-100px)] w-full bg-transparent px-3 sm:px-5 lg:px-7 2xl:px-10 pt-4 pb-16";
 
     const content = "w-full max-w-[1700px] mx-auto";
 
     const card =
-      "rounded-2xl border shadow-[0_14px_42px_rgba(0,0,0,0.12)] " +
-      (darkMode ? "bg-white/[0.07] border-white/10" : "bg-white/70 border-[#6d5829]/15");
+      "weli-pagos-card rounded-2xl border shadow-[0_14px_42px_rgba(0,0,0,0.12)] transition-colors duration-200";
 
-    const title = darkMode ? "text-white" : "text-[#6d5829]";
-
-    const subtitle = darkMode ? "text-white/70" : "text-[#6d5829]/75";
+    const title = "weli-pagos-title";
+    const subtitle = "weli-pagos-muted";
 
     const control =
-      "w-full h-11 sm:h-12 px-3.5 rounded-xl text-[14px] sm:text-[15px] font-medium outline-none transition " +
-      (darkMode
-        ? "border border-white/15 bg-[#111827] text-white placeholder:text-white/45 focus:border-[#ffdda1] focus:ring-2 focus:ring-[#ffdda1]/15"
-        : "border border-[#9b7b50]/55 bg-white text-[#3f2d18] placeholder:text-[#7b6750] focus:border-[#aa5013] focus:ring-2 focus:ring-[#aa5013]/10");
+      "weli-pagos-control w-full h-11 sm:h-12 px-3.5 rounded-xl border text-[14px] sm:text-[15px] font-medium outline-none transition focus:ring-2";
 
-    const label =
-      "block mb-1.5 text-[13px] sm:text-[14px] font-extrabold " + (darkMode ? "text-[#f5e7d0]" : "text-[#4a351f]");
+    const label = "weli-pagos-label block mb-1.5 text-[13px] sm:text-[14px] font-extrabold";
 
     const buttonPrimary =
-      "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[14px] sm:text-[15px] font-extrabold transition disabled:opacity-50 disabled:cursor-not-allowed";
+      "weli-pagos-primary inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] sm:text-[15px] font-extrabold transition hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed";
 
     const buttonSecondary =
-      "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] sm:text-[15px] font-bold transition disabled:opacity-50 disabled:cursor-not-allowed " +
-      (darkMode ? "border-white/15 text-white hover:bg-white/10" : "border-[#6d5829]/20 text-[#6d5829] hover:bg-white");
+      "weli-pagos-secondary inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] sm:text-[15px] font-bold transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed";
 
     return {
       page,
@@ -621,8 +695,47 @@ export default function ListarPagos() {
       label,
       buttonPrimary,
       buttonSecondary,
+
+      pageStyle: {
+        color: tokens.text,
+      },
+
+      cardStyle: {
+        backgroundColor: tokens.surface,
+        borderColor: tokens.border,
+        color: tokens.text,
+      },
+
+      controlStyle: {
+        backgroundColor: tokens.inputBg,
+        borderColor: tokens.inputBorder,
+        color: tokens.inputText,
+        "--tw-ring-color": `${tokens.focus}33`,
+      },
+
+      primaryStyle: {
+        backgroundColor: tokens.primary,
+        borderColor: tokens.primary,
+        color: tokens.primaryContrast,
+      },
+
+      secondaryStyle: {
+        backgroundColor: tokens.surfaceSoft,
+        borderColor: tokens.borderStrong,
+        color: tokens.text,
+      },
+
+      modalStyle: {
+        backgroundColor: tokens.surface,
+        borderColor: tokens.borderStrong,
+        color: tokens.text,
+      },
+
+      overlayStyle: {
+        backgroundColor: tokens.overlay,
+      },
     };
-  }, [darkMode]);
+  }, [tokens]);
 
   /* =======================================================
      PAGOS NORMALIZADOS
@@ -1247,7 +1360,76 @@ export default function ListarPagos() {
   ======================================================= */
 
   return (
-    <div className={ui.page}>
+    <div className={ui.page} style={ui.pageStyle}>
+      <style>
+        {`
+          .weli-pagos-title {
+            color: ${tokens.text} !important;
+          }
+
+          .weli-pagos-muted {
+            color: ${tokens.textMuted} !important;
+          }
+
+          .weli-pagos-card {
+            background-color: ${tokens.surface} !important;
+            border-color: ${tokens.border} !important;
+            color: ${tokens.text} !important;
+          }
+
+          .weli-pagos-control {
+            background-color: ${tokens.inputBg} !important;
+            border-color: ${tokens.inputBorder} !important;
+            color: ${tokens.inputText} !important;
+          }
+
+          .weli-pagos-control::placeholder {
+            color: ${tokens.textMuted} !important;
+            opacity: .72;
+          }
+
+          .weli-pagos-control:focus {
+            border-color: ${tokens.focus} !important;
+          }
+
+          .weli-pagos-control option {
+            background-color: ${tokens.inputBg};
+            color: ${tokens.inputText};
+          }
+
+          .weli-pagos-label {
+            color: ${tokens.text} !important;
+          }
+
+          .weli-pagos-primary {
+            background-color: ${tokens.primary} !important;
+            border-color: ${tokens.primary} !important;
+            color: ${tokens.primaryContrast} !important;
+          }
+
+          .weli-pagos-secondary {
+            background-color: ${tokens.surfaceSoft} !important;
+            border-color: ${tokens.borderStrong} !important;
+            color: ${tokens.text} !important;
+          }
+
+          .weli-pagos-secondary:hover:not(:disabled) {
+            background-color: ${tokens.surfaceHover} !important;
+          }
+
+          .weli-pagos-primary:focus-visible,
+          .weli-pagos-secondary:focus-visible,
+          .weli-pagos-control:focus-visible {
+            outline: 2px solid ${tokens.focus};
+            outline-offset: 2px;
+          }
+
+          .weli-pagos-table-row:hover {
+            background-color: ${tokens.surfaceHover} !important;
+          }
+        `}
+      </style>
+
       <div className={ui.content}>
         {/* HEADER */}
 
@@ -1279,6 +1461,7 @@ export default function ListarPagos() {
         <section className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-3">
           <SummaryCard
             darkMode={darkMode}
+            tokens={tokens}
             label="Pagados"
             value={totals.pagados}
             amount={totals.montoPagado}
@@ -1287,6 +1470,7 @@ export default function ListarPagos() {
 
           <SummaryCard
             darkMode={darkMode}
+            tokens={tokens}
             label="Vencidos"
             value={totals.vencidos}
             amount={totals.montoVencido}
@@ -1295,6 +1479,7 @@ export default function ListarPagos() {
 
           <SummaryCard
             darkMode={darkMode}
+            tokens={tokens}
             label="Pendientes"
             value={totals.pendientes}
             amount={totals.montoPendiente}
@@ -1302,11 +1487,11 @@ export default function ListarPagos() {
           />
 
           <div className={`${ui.card} p-4 sm:p-5 flex flex-col justify-center`}>
-            <span className={`text-[13px] sm:text-sm font-bold ${darkMode ? "text-white/65" : "text-[#6d5829]/70"}`}>
+            <span className="text-[13px] sm:text-sm font-bold" style={{ color: tokens.textMuted }}>
               Compromisos del mes
             </span>
 
-            <strong className={`mt-1 text-2xl sm:text-3xl ${darkMode ? "text-white" : "text-[#6d5829]"}`}>
+            <strong className="mt-1 text-2xl sm:text-3xl" style={{ color: tokens.text }}>
               {totals.total}
             </strong>
           </div>
@@ -1321,9 +1506,8 @@ export default function ListarPagos() {
 
               <div className="relative">
                 <Search
-                  className={`absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 ${
-                    darkMode ? "text-white/40" : "text-[#6d5829]/45"
-                  }`}
+                  className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2"
+                  style={{ color: tokens.textMuted }}
                 />
 
                 <input
@@ -1448,11 +1632,11 @@ export default function ListarPagos() {
         <section className={`${ui.card} mt-4 overflow-hidden`}>
           <div className="px-4 sm:px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
-              <h2 className={`text-lg sm:text-xl font-extrabold ${darkMode ? "text-white" : "text-[#6d5829]"}`}>
+              <h2 className="text-lg sm:text-xl font-extrabold" style={{ color: tokens.text }}>
                 Estado de cuenta mensual
               </h2>
 
-              <p className={`mt-1 text-[13px] sm:text-sm ${darkMode ? "text-white/55" : "text-[#6d5829]/65"}`}>
+              <p className="mt-1 text-[13px] sm:text-sm" style={{ color: tokens.textMuted }}>
                 {obligacionesFiltradas.length} registros encontrados.
               </p>
             </div>
@@ -1460,21 +1644,21 @@ export default function ListarPagos() {
 
           <div className="hidden xl:block overflow-x-auto">
             <table className="w-full text-[14px] 2xl:text-[15px]">
-              <thead className={darkMode ? "bg-black/20 text-[#ffdda1]" : "bg-[#f7ead4] text-[#6d5829]"}>
+              <thead style={{ backgroundColor: tokens.tableHead, color: tokens.text }}>
                 <tr>
-                  <th className="px-4 py-3 text-center font-extrabold">Jugador</th>
+                  <th className="px-4 py-2.5 text-center font-extrabold">Jugador</th>
 
-                  <th className="px-4 py-3 text-center font-extrabold">Concepto</th>
+                  <th className="px-4 py-2.5 text-center font-extrabold">Concepto</th>
 
-                  <th className="px-4 py-3 text-center font-extrabold">Tarifa</th>
+                  <th className="px-4 py-2.5 text-center font-extrabold">Tarifa</th>
 
-                  <th className="px-4 py-3 text-center font-extrabold">Beneficio</th>
+                  <th className="px-4 py-2.5 text-center font-extrabold">Beneficio</th>
 
-                  <th className="px-4 py-3 text-center font-extrabold">Monto asignado</th>
+                  <th className="px-4 py-2.5 text-center font-extrabold">Monto asignado</th>
 
-                  <th className="px-4 py-3 text-center font-extrabold">Estado</th>
+                  <th className="px-4 py-2.5 text-center font-extrabold">Estado</th>
 
-                  <th className="px-4 py-3 text-center font-extrabold">Acciones</th>
+                  <th className="px-4 py-2.5 text-center font-extrabold">Acciones</th>
                 </tr>
               </thead>
 
@@ -1482,34 +1666,33 @@ export default function ListarPagos() {
                 {pageRows.map((row) => (
                   <tr
                     key={row.key}
-                    className={`border-t ${
-                      darkMode ? "border-white/10 hover:bg-white/[0.05]" : "border-[#6d5829]/10 hover:bg-white"
-                    }`}
+                    className="weli-pagos-table-row border-t transition-colors"
+                    style={{ borderColor: tokens.border }}
                   >
-                    <td className="px-4 py-3.5 text-center">
-                      <div className={`font-extrabold ${darkMode ? "text-white" : "text-[#3f2d18]"}`}>
+                    <td className="px-4 py-2.5 text-center">
+                      <div className="font-extrabold" style={{ color: tokens.text }}>
                         {row.jugador_nombre}
                       </div>
 
-                      <div className={`mt-0.5 text-[12px] ${darkMode ? "text-white/55" : "text-[#6d5829]/65"}`}>
+                      <div className="mt-0.5 text-[12px]" style={{ color: tokens.textMuted }}>
                         {formatRutWithDV(row.jugador_rut)}
                         {" · "}
                         {row.categoria_nombre}
                       </div>
                     </td>
 
-                    <td className="px-4 py-3.5 text-center">
-                      <div className={`font-bold ${darkMode ? "text-white/90" : "text-[#3f2d18]"}`}>
+                    <td className="px-4 py-2.5 text-center">
+                      <div className="font-bold" style={{ color: tokens.text }}>
                         {row.tipo_pago_nombre}
                       </div>
                     </td>
 
-                    <td className={`px-4 py-3.5 text-center ${darkMode ? "text-white/75" : "text-[#6d5829]"}`}>
+                    <td className="px-4 py-2.5 text-center" style={{ color: tokens.textMuted }}>
                       {toCLP(row.monto_tarifa)}
                     </td>
 
-                    <td className="px-4 py-3.5 text-center">
-                      <div className={darkMode ? "text-white/80" : "text-[#6d5829]"}>{row.plan_nombre}</div>
+                    <td className="px-4 py-2.5 text-center">
+                      <div style={{ color: tokens.textMuted }}>{row.plan_nombre}</div>
 
                       {row.descuento_inicial > 0 && (
                         <div className={`mt-0.5 text-[12px] ${darkMode ? "text-emerald-200" : "text-emerald-700"}`}>
@@ -1519,14 +1702,13 @@ export default function ListarPagos() {
                     </td>
 
                     <td
-                      className={`px-4 py-3.5 text-center text-base font-extrabold ${
-                        darkMode ? "text-[#ffdda1]" : "text-[#aa5013]"
-                      }`}
+                      className="px-4 py-2.5 text-center text-base font-extrabold"
+                      style={{ color: tokens.primary }}
                     >
                       {toCLP(row.monto_asignado)}
                     </td>
 
-                    <td className="px-4 py-3.5 text-center">
+                    <td className="px-4 py-2.5 text-center">
                       <span
                         className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-extrabold ${estadoClass(
                           row.estado
@@ -1545,10 +1727,7 @@ export default function ListarPagos() {
                             type="button"
                             onClick={() => openManualForRow(row)}
                             className={ui.buttonPrimary}
-                            style={{
-                              backgroundColor: PALETTE.sand,
-                              color: PALETTE.brown,
-                            }}
+                            style={ui.primaryStyle}
                           >
                             <CreditCard className="h-4 w-4" />
                             Pagar
@@ -1583,9 +1762,7 @@ export default function ListarPagos() {
                   <tr>
                     <td
                       colSpan={7}
-                      className={`px-6 py-10 text-center text-[14px] ${
-                        darkMode ? "text-white/55" : "text-[#6d5829]/65"
-                      }`}
+                      className="px-6 py-10 text-center text-[14px]" style={{ color: tokens.textMuted }}
                     >
                       No hay registros para los filtros seleccionados.
                     </td>
@@ -1601,21 +1778,22 @@ export default function ListarPagos() {
             {pageRows.map((row) => (
               <article
                 key={row.key}
-                className={`rounded-2xl border p-4 ${
-                  darkMode ? "border-white/10 bg-black/15" : "border-[#6d5829]/15 bg-white/70"
-                }`}
+                className="rounded-2xl border p-4"
+                style={{
+                  backgroundColor: tokens.surfaceSoft,
+                  borderColor: tokens.border,
+                  color: tokens.text,
+                }}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h3
-                      className={`text-base sm:text-lg font-extrabold break-words ${
-                        darkMode ? "text-white" : "text-[#3f2d18]"
-                      }`}
+className="text-base sm:text-lg font-extrabold break-words" style={{ color: tokens.text }}
                     >
                       {row.jugador_nombre}
                     </h3>
 
-                    <p className={`mt-0.5 text-[13px] sm:text-sm ${darkMode ? "text-white/55" : "text-[#6d5829]/65"}`}>
+                    <p className="mt-0.5 text-[13px] sm:text-sm" style={{ color: tokens.textMuted }}>
                       {formatRutWithDV(row.jugador_rut)}
                       {" · "}
                       {row.categoria_nombre}
@@ -1634,13 +1812,13 @@ export default function ListarPagos() {
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-3">
-                  <InfoBox darkMode={darkMode} label="Concepto" value={row.tipo_pago_nombre} />
+                  <InfoBox darkMode={darkMode} tokens={tokens} label="Concepto" value={row.tipo_pago_nombre} />
 
-                  <InfoBox darkMode={darkMode} label="Tarifa" value={toCLP(row.monto_tarifa)} />
+                  <InfoBox darkMode={darkMode} tokens={tokens} label="Tarifa" value={toCLP(row.monto_tarifa)} />
 
-                  <InfoBox darkMode={darkMode} label="Beneficio" value={row.plan_nombre} />
+                  <InfoBox darkMode={darkMode} tokens={tokens} label="Beneficio" value={row.plan_nombre} />
 
-                  <InfoBox darkMode={darkMode} label="Monto asignado" value={toCLP(row.monto_asignado)} emphasize />
+                  <InfoBox darkMode={darkMode} tokens={tokens} label="Monto asignado" value={toCLP(row.monto_asignado)} emphasize />
                 </div>
 
                 {row.descuento_inicial > 0 && (
@@ -1659,10 +1837,7 @@ export default function ListarPagos() {
                       type="button"
                       onClick={() => openManualForRow(row)}
                       className={`${ui.buttonPrimary} w-full`}
-                      style={{
-                        backgroundColor: PALETTE.sand,
-                        color: PALETTE.brown,
-                      }}
+                      style={ui.primaryStyle}
                     >
                       <CreditCard className="h-4 w-4" />
                       Registrar pago
@@ -1692,7 +1867,7 @@ export default function ListarPagos() {
             ))}
 
             {!pageRows.length && (
-              <div className={`py-10 text-center text-[14px] ${darkMode ? "text-white/55" : "text-[#6d5829]/65"}`}>
+              <div className="py-10 text-center text-[14px]" style={{ color: tokens.textMuted }}>
                 No hay registros para los filtros seleccionados.
               </div>
             )}
@@ -1701,11 +1876,10 @@ export default function ListarPagos() {
           {/* PAGINACIÓN */}
 
           <div
-            className={`border-t px-4 sm:px-5 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 ${
-              darkMode ? "border-white/10" : "border-[#6d5829]/10"
-            }`}
+            className="border-t px-4 sm:px-5 py-4 flex flex-col sm:flex-row items-center justify-between gap-3"
+            style={{ borderColor: tokens.border }}
           >
-            <span className={`text-[13px] sm:text-sm ${darkMode ? "text-white/60" : "text-[#6d5829]/70"}`}>
+            <span className="text-[13px] sm:text-sm" style={{ color: tokens.textMuted }}>
               Página {page} de {totalPages}
             </span>
 
@@ -1735,23 +1909,21 @@ export default function ListarPagos() {
       {/* MODAL */}
 
       {modalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 p-2 sm:p-5 flex items-end sm:items-center justify-center">
+        <div className="fixed inset-0 z-50 p-2 sm:p-5 flex items-end sm:items-center justify-center" style={ui.overlayStyle}>
           <div
-            className={`w-full max-w-3xl max-h-[94vh] overflow-hidden rounded-t-3xl sm:rounded-3xl border shadow-2xl flex flex-col ${
-              darkMode ? "bg-[#111827] border-white/15 text-white" : "bg-[#fffaf2] border-[#b99a70] text-[#3f2d18]"
-            }`}
+            className="w-full max-w-3xl max-h-[94vh] overflow-hidden rounded-t-3xl sm:rounded-3xl border shadow-2xl flex flex-col"
+            style={ui.modalStyle}
           >
             <div
-              className={`shrink-0 px-4 sm:px-6 py-4 border-b flex items-start justify-between gap-3 ${
-                darkMode ? "border-white/10" : "border-[#6d5829]/15"
-              }`}
+              className="shrink-0 px-4 sm:px-6 py-4 border-b flex items-start justify-between gap-3"
+              style={{ borderColor: tokens.border }}
             >
               <div>
                 <h3 className="text-xl sm:text-2xl font-extrabold">
                   {editForm.create ? "Registrar pago" : "Editar pago"}
                 </h3>
 
-                <p className={`mt-1 text-[13px] sm:text-sm ${darkMode ? "text-white/55" : "text-[#6d5829]/65"}`}>
+                <p className="mt-1 text-[13px] sm:text-sm" style={{ color: tokens.textMuted }}>
                   {editForm.jugador_rut ? formatRutWithDV(editForm.jugador_rut) : ""}
                 </p>
               </div>
@@ -1804,11 +1976,14 @@ export default function ListarPagos() {
 
                 {selectedConfig && (
                   <div
-                    className={`rounded-2xl border p-4 sm:p-5 ${
-                      darkMode ? "border-white/10 bg-white/[0.04]" : "border-[#6d5829]/15 bg-white/75"
-                    }`}
+                    className="rounded-2xl border p-4 sm:p-5"
+                    style={{
+                      backgroundColor: tokens.surfaceSoft,
+                      borderColor: tokens.border,
+                      color: tokens.text,
+                    }}
                   >
-                    <h4 className={`text-base sm:text-lg font-extrabold ${darkMode ? "text-white" : "text-[#6d5829]"}`}>
+                    <h4 className="text-base sm:text-lg font-extrabold" style={{ color: tokens.text }}>
                       Condición financiera del jugador
                     </h4>
 
@@ -1822,16 +1997,18 @@ export default function ListarPagos() {
                     )}
 
                     <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
-                      <InfoBox darkMode={darkMode} label="Tarifa original" value={toCLP(selectedConfig.monto_tarifa)} />
+                      <InfoBox darkMode={darkMode} tokens={tokens} label="Tarifa original" value={toCLP(selectedConfig.monto_tarifa)} />
 
                       <InfoBox
                         darkMode={darkMode}
+                        tokens={tokens}
                         label="Beneficio inicial"
                         value={selectedConfig.plan_nombre ?? "Sin beneficio"}
                       />
 
                       <InfoBox
                         darkMode={darkMode}
+                        tokens={tokens}
                         label="Descuento inicial"
                         value={toCLP(
                           selectedConfig.descuento_inicial ??
@@ -1844,6 +2021,7 @@ export default function ListarPagos() {
 
                       <InfoBox
                         darkMode={darkMode}
+                        tokens={tokens}
                         label="Monto habitual"
                         value={toCLP(selectedConfig.monto_asignado)}
                         emphasize
@@ -1880,7 +2058,7 @@ export default function ListarPagos() {
                   </select>
 
                   <p
-                    className={`mt-1.5 text-[12px] sm:text-[13px] ${darkMode ? "text-white/50" : "text-[#6d5829]/65"}`}
+                    className="mt-1.5 text-[12px] sm:text-[13px]" style={{ color: tokens.textMuted }}
                   >
                     Este beneficio se aplica sobre el monto habitual del jugador y no modifica su configuración
                     original.
@@ -1890,13 +2068,13 @@ export default function ListarPagos() {
                 {/* PREVIEW */}
 
                 {selectedConfig && (
-                  <div className={`rounded-2xl px-4 sm:px-5 py-4 ${darkMode ? "bg-[#ffdda1]/10" : "bg-[#ffdda1]/45"}`}>
+                  <div className="rounded-2xl border px-4 sm:px-5 py-4" style={{ backgroundColor: tokens.surface2, borderColor: tokens.border }}>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <InfoBox darkMode={darkMode} label="Base del pago" value={toCLP(selectedConfig.monto_asignado)} />
+                      <InfoBox darkMode={darkMode} tokens={tokens} label="Base del pago" value={toCLP(selectedConfig.monto_asignado)} />
 
-                      <InfoBox darkMode={darkMode} label="Descuento extra" value={toCLP(preview.descuento)} />
+                      <InfoBox darkMode={darkMode} tokens={tokens} label="Descuento extra" value={toCLP(preview.descuento)} />
 
-                      <InfoBox darkMode={darkMode} label="Total estimado" value={toCLP(preview.total)} emphasize />
+                      <InfoBox darkMode={darkMode} tokens={tokens} label="Total estimado" value={toCLP(preview.total)} emphasize />
                     </div>
                   </div>
                 )}
@@ -1994,9 +2172,8 @@ export default function ListarPagos() {
             </div>
 
             <div
-              className={`shrink-0 border-t px-4 sm:px-6 py-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 ${
-                darkMode ? "border-white/10" : "border-[#6d5829]/15"
-              }`}
+              className="shrink-0 border-t px-4 sm:px-6 py-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2"
+              style={{ borderColor: tokens.border }}
             >
               <button
                 type="button"
@@ -2012,10 +2189,7 @@ export default function ListarPagos() {
                 form="pago-manual-form"
                 disabled={modalBusy || !editForm.tipo_pago_id || !editForm.medio_pago_id}
                 className={`${ui.buttonPrimary} w-full sm:w-auto`}
-                style={{
-                  backgroundColor: PALETTE.sand,
-                  color: PALETTE.brown,
-                }}
+                style={ui.primaryStyle}
               >
                 <CreditCard className="h-4 w-4" />
 
@@ -2029,11 +2203,10 @@ export default function ListarPagos() {
       {/* ÉXITO */}
 
       {successOpen && (
-        <div className="fixed inset-0 z-[60] bg-black/70 px-4 flex items-center justify-center">
+        <div className="fixed inset-0 z-[60] px-4 flex items-center justify-center" style={ui.overlayStyle}>
           <div
-            className={`w-full max-w-sm rounded-2xl border p-6 text-center shadow-2xl ${
-              darkMode ? "border-white/15 bg-[#111827] text-white" : "border-[#b99a70] bg-[#fffaf2] text-[#3f2d18]"
-            }`}
+            className="w-full max-w-sm rounded-2xl border p-6 text-center shadow-2xl"
+            style={ui.modalStyle}
           >
             <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-500" />
 
@@ -2049,7 +2222,7 @@ export default function ListarPagos() {
    COMPONENTES VISUALES PEQUEÑOS
 ========================================================= */
 
-function SummaryCard({ darkMode, label, value, amount, type }) {
+function SummaryCard({ darkMode, tokens, label, value, amount, type }) {
   const style =
     type === "paid"
       ? darkMode
@@ -2065,17 +2238,18 @@ function SummaryCard({ darkMode, label, value, amount, type }) {
 
   return (
     <div className={`rounded-2xl border p-4 sm:p-5 shadow-sm ${style}`}>
-      <span className={`text-[13px] sm:text-sm font-bold ${darkMode ? "text-white/65" : "text-[#6d5829]/75"}`}>
+      <span className="text-[13px] sm:text-sm font-bold" style={{ color: tokens.textMuted }}>
         {label}
       </span>
 
       <div className="mt-1 flex items-end justify-between gap-2">
-        <strong className={`text-2xl sm:text-3xl ${darkMode ? "text-white" : "text-[#3f2d18]"}`}>{value}</strong>
+        <strong className="text-2xl sm:text-3xl" style={{ color: tokens.text }}>
+          {value}
+        </strong>
 
         <span
-          className={`text-[12px] sm:text-[13px] font-extrabold text-right ${
-            darkMode ? "text-white/75" : "text-[#6d5829]"
-          }`}
+          className="text-[12px] sm:text-[13px] font-extrabold text-right"
+          style={{ color: tokens.textMuted }}
         >
           {toCLP(amount)}
         </span>
@@ -2084,13 +2258,18 @@ function SummaryCard({ darkMode, label, value, amount, type }) {
   );
 }
 
-function InfoBox({ darkMode, label, value, emphasize = false }) {
+function InfoBox({ tokens, label, value, emphasize = false }) {
   return (
-    <div className={`rounded-xl px-3 py-2.5 ${darkMode ? "bg-white/[0.05]" : "bg-[#6d5829]/[0.045]"}`}>
+    <div
+      className="rounded-xl border px-3 py-2.5"
+      style={{
+        backgroundColor: tokens.surfaceSoft,
+        borderColor: tokens.border,
+      }}
+    >
       <div
-        className={`text-[11px] sm:text-[12px] uppercase tracking-wide font-bold ${
-          darkMode ? "text-white/45" : "text-[#6d5829]/55"
-        }`}
+        className="text-[11px] sm:text-[12px] uppercase tracking-wide font-bold"
+        style={{ color: tokens.textMuted }}
       >
         {label}
       </div>
@@ -2098,9 +2277,10 @@ function InfoBox({ darkMode, label, value, emphasize = false }) {
       <div
         className={`mt-1 break-words ${
           emphasize ? "text-base sm:text-lg font-extrabold" : "text-[13px] sm:text-[14px] font-semibold"
-        } ${
-          darkMode ? (emphasize ? "text-[#ffdda1]" : "text-white/90") : emphasize ? "text-[#aa5013]" : "text-[#3f2d18]"
         }`}
+        style={{
+          color: emphasize ? tokens.primary : tokens.text,
+        }}
       >
         {value}
       </div>

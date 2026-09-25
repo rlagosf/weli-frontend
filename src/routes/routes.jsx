@@ -83,6 +83,8 @@ const PrevisionMedica = lazy(() => import("../pages/admin/configuracion/previsio
 
 const Sucursales = lazy(() => import("../pages/admin/configuracion/sucursales"));
 
+const CambiarTema = lazy(() => import("../pages/admin/configuracion/cambiarTema"));
+
 /* =========================================================
    CONVOCATORIAS / JUGADORES / ESTADÍSTICAS
 ========================================================= */
@@ -542,6 +544,14 @@ const adminChildren = [
     element: (
       <WriteGate>
         <Sucursales />
+      </WriteGate>
+    ),
+  },
+  {
+    path: "configuracion/cambiar-tema",
+    element: (
+      <WriteGate>
+        <CambiarTema />
       </WriteGate>
     ),
   },

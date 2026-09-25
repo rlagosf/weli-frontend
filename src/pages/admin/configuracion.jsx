@@ -1,11 +1,8 @@
 // src/pages/admin/configuracion.jsx
 
 import { useEffect, useMemo, useState } from "react";
-
 import { Link, useNavigate, useLocation } from "react-router-dom";
-
 import { useTheme } from "../../context/ThemeContext";
-
 import { jwtDecode } from "jwt-decode";
 
 import {
@@ -19,10 +16,10 @@ import {
   GraduationCap,
   Stethoscope,
   Building2,
+  Palette,
 } from "lucide-react";
 
 import { getToken, clearToken } from "../../services/api";
-
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
 /* =========================================================
@@ -64,10 +61,9 @@ function extractRol(decoded) {
 ========================================================= */
 
 export default function Configuracion() {
-  const { darkMode } = useTheme();
+  const { darkMode, themeTokens } = useTheme();
 
   const navigate = useNavigate();
-
   const location = useLocation();
 
   useMobileAutoScrollTop();
@@ -363,6 +359,16 @@ export default function Configuracion() {
 
         roles: [1, 3],
       },
+
+      {
+        nombre: "Cambiar apariencia",
+
+        ruta: `${base}/configuracion/cambiar-tema`,
+
+        Icon: Palette,
+
+        roles: [1, 3],
+      },
     ];
   }, [dashboardBase]);
 
@@ -385,127 +391,328 @@ export default function Configuracion() {
   }, [entidades, rol]);
 
   /* =======================================================
-     🎨 UI ESTILO SUPERDASHBOARD
+     TOKENS DE APARIENCIA
+
+     ThemeContext es la fuente visual principal.
+
+     Este fallback se mantiene únicamente como protección
+     defensiva mientras el contexto inicializa.
   ======================================================= */
 
-  const PALETTE_X = {
-    copper: "#aa5013",
+  const tokens = useMemo(() => {
+    if (themeTokens) {
+      return themeTokens;
+    }
 
-    brown: "#6d5829",
+    if (darkMode) {
+      return {
+        surface: "#1F2937",
 
-    cream: "#e8dac4",
+        surfaceSoft: "#172033",
 
-    sand: "#ffdda1",
+        surface2: "#263244",
 
-    terracotta: "#e2773b",
-  };
+        surfaceHover: "#374151",
+
+        primary: "#FFDDA1",
+
+        primaryHover: "#FFE5B8",
+
+        primaryContrast: "#3F2D18",
+
+        secondary: "#B79F69",
+
+        secondaryHover: "#C8B27F",
+
+        secondaryContrast: "#111827",
+
+        text: "#F9FAFB",
+
+        textMuted: "#D1D5DB",
+
+        icon: "#FFDDA1",
+
+        border: "#374151",
+
+        borderStrong: "#4B5563",
+
+        inputBg: "#111827",
+
+        inputText: "#F9FAFB",
+
+        inputBorder: "#4B5563",
+
+        tableHead: "#172033",
+
+        focus: "#FFDDA1",
+
+        overlay: "rgba(0,0,0,.65)",
+      };
+    }
+
+    return {
+      surface: "#FFFFFF",
+
+      surfaceSoft: "#FAF6EE",
+
+      surface2: "#F7EAD4",
+
+      surfaceHover: "#FFF9F2",
+
+      primary: "#AA5013",
+
+      primaryHover: "#994812",
+
+      primaryContrast: "#FFFFFF",
+
+      secondary: "#6D5829",
+
+      secondaryHover: "#5E4B23",
+
+      secondaryContrast: "#FFFFFF",
+
+      text: "#3B2A1E",
+
+      textMuted: "#766657",
+
+      icon: "#AA5013",
+
+      border: "#D8C7AE",
+
+      borderStrong: "#BFA684",
+
+      inputBg: "#FFFFFF",
+
+      inputText: "#3B2A1E",
+
+      inputBorder: "#9B7B50",
+
+      tableHead: "#F7EAD4",
+
+      focus: "#AA5013",
+
+      overlay: "rgba(0,0,0,.55)",
+    };
+  }, [themeTokens, darkMode]);
+
+  /* =======================================================
+     UI
+
+     MISMA BASE VISUAL DE listarPagos.jsx
+
+     REGLAS:
+     - Dashboard controla TODO el fondo global.
+     - Configuracion.jsx NO pinta background de página.
+     - El wrapper raíz permanece transparente.
+     - Sólo las tarjetas reales tienen superficie.
+     - Toda la apariencia consume themeTokens.
+  ======================================================= */
 
   const ui = useMemo(() => {
-    const shell = darkMode
-      ? "bg-[#111827] text-white"
-      : "bg-gradient-to-br from-ra-cream via-ra-sand to-ra-caramel text-ra-marron";
+    const page = "min-h-[calc(100vh-100px)] w-full bg-transparent px-3 sm:px-5 lg:px-7 2xl:px-10 pt-4 pb-16";
 
-    const titleMain = darkMode ? "text-white" : "text-ra-marron";
-
-    const subText = darkMode ? "text-white/70" : "text-ra-marron/70";
+    const content = "w-full max-w-[1700px] mx-auto";
 
     const card =
-      "rounded-2xl border shadow-lg transition transform " +
-      (darkMode
-        ? "bg-white/10 border-white/15 hover:bg-white/12 hover:border-white/20"
-        : "bg-white/60 border-ra-marron/15 hover:bg-white/75 hover:border-ra-marron/20") +
-      " hover:-translate-y-1 hover:shadow-xl";
+      "rounded-2xl border shadow-[0_14px_42px_rgba(0,0,0,0.12)] transition-all duration-200 transform hover:-translate-y-1 hover:shadow-xl";
 
-    const iconBadge =
-      "w-14 h-14 rounded-2xl flex items-center justify-center border " +
-      (darkMode ? "bg-white/12 border-white/18" : "bg-[rgba(109,88,41,0.08)] border-[rgba(109,88,41,0.18)]");
-
-    const iconStyle = {
-      color: darkMode ? PALETTE_X.cream : PALETTE_X.brown,
-    };
+    const iconBadge = "w-14 h-14 rounded-2xl flex items-center justify-center border transition-colors duration-200";
 
     const cardInner = "p-6 h-40 flex flex-col items-center justify-center gap-3 text-center";
 
-    const cardTitle = darkMode ? "text-white/90 font-extrabold" : "text-ra-marron font-extrabold";
-
     return {
-      shell,
-      titleMain,
-      subText,
+      page,
+      content,
       card,
       iconBadge,
-      iconStyle,
       cardInner,
-      cardTitle,
+
+      pageStyle: {
+        color: tokens.text,
+      },
+
+      titleStyle: {
+        color: tokens.text,
+      },
+
+      subTextStyle: {
+        color: tokens.textMuted,
+      },
+
+      cardStyle: {
+        backgroundColor: tokens.surface,
+
+        borderColor: tokens.border,
+
+        color: tokens.text,
+
+        "--weli-config-card-bg": tokens.surface,
+
+        "--weli-config-card-hover": tokens.surfaceHover,
+
+        "--weli-config-card-border": tokens.border,
+
+        "--weli-config-card-border-hover": tokens.borderStrong,
+      },
+
+      iconBadgeStyle: {
+        backgroundColor: tokens.surface2,
+
+        borderColor: tokens.border,
+
+        color: tokens.icon,
+      },
+
+      iconStyle: {
+        color: tokens.icon,
+      },
+
+      cardTitleStyle: {
+        color: tokens.text,
+      },
+
+      loadingStyle: {
+        backgroundColor: tokens.surface,
+
+        borderColor: tokens.border,
+
+        color: tokens.textMuted,
+      },
     };
-  }, [darkMode]);
+  }, [tokens]);
 
   /* =======================================================
      RENDER
   ======================================================= */
 
   return (
-    <div className={`${ui.shell} min-h-screen font-sans`}>
-      {/* =================================================
-          HEADER
-      ================================================= */}
+    <div className={`${ui.page} font-sans`} style={ui.pageStyle}>
+      <style>
+        {`
+          .weli-config-card {
+            background-color:
+              var(--weli-config-card-bg) !important;
 
-      <header className="px-6 pt-6 text-center">
-        <h1
-          className={`text-4xl font-extrabold tracking-tightish ${ui.titleMain} flex items-center justify-center gap-3`}
-        >
-          <SettingsIcon className="w-8 h-8" style={ui.iconStyle} />
-          Configuración
-        </h1>
+            border-color:
+              var(--weli-config-card-border) !important;
+          }
 
-        <p className={`text-sm mt-2 ${ui.subText}`}>Administra catálogos y parámetros del sistema.</p>
-      </header>
+          .weli-config-card:hover {
+            background-color:
+              var(--weli-config-card-hover) !important;
 
-      {/* =================================================
-          CONTENIDO
-      ================================================= */}
+            border-color:
+              var(--weli-config-card-border-hover) !important;
+          }
 
-      <main className="px-6 pb-20">
-        {rol === null ? (
-          /* ─────────────────────────────────────────────
-             CARGANDO PERMISOS
-          ───────────────────────────────────────────── */
+          .weli-config-link:focus-visible {
+            outline:
+              2px solid ${tokens.focus};
 
-          <div className="max-w-5xl mx-auto mt-8">
-            <div className={`${ui.card} p-6 text-center`}>
-              <p className={ui.subText}>Cargando permisos…</p>
+            outline-offset:
+              4px;
+
+            border-radius:
+              1rem;
+          }
+        `}
+      </style>
+
+      <div className={ui.content}>
+        {/* =================================================
+            HEADER
+        ================================================= */}
+
+        <header className="text-center">
+          <div className="mx-auto max-w-4xl">
+            <div
+              className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border transition-colors duration-200"
+              style={{
+                backgroundColor: tokens.surface2,
+
+                borderColor: tokens.border,
+
+                color: tokens.icon,
+              }}
+            >
+              <SettingsIcon className="w-6 h-6" style={ui.iconStyle} />
             </div>
-          </div>
-        ) : (
-          /* ─────────────────────────────────────────────
-             CONFIGURACIÓN
-          ───────────────────────────────────────────── */
 
-          <div className="max-w-5xl mx-auto mt-8">
-            {visibles.length === 0 ? (
-              <div className={`${ui.card} p-6 text-center`}>
-                <p className={ui.subText}>No hay módulos disponibles para tu rol.</p>
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight" style={ui.titleStyle}>
+              Configuración
+            </h1>
+
+            <p
+              className="mx-auto mt-2 max-w-3xl text-[14px] sm:text-[15px] lg:text-base leading-relaxed"
+              style={ui.subTextStyle}
+            >
+              Administra catálogos y parámetros del sistema.
+            </p>
+          </div>
+        </header>
+
+        {/* =================================================
+            CONTENIDO
+        ================================================= */}
+
+        <main>
+          {rol === null ? (
+            /* ─────────────────────────────────────────────
+               CARGANDO PERMISOS
+            ───────────────────────────────────────────── */
+
+            <div className="w-full max-w-5xl mx-auto mt-5">
+              <div className={`${ui.card} p-6 text-center`} style={ui.loadingStyle}>
+                <p
+                  className="font-semibold"
+                  style={{
+                    color: tokens.textMuted,
+                  }}
+                >
+                  Cargando permisos…
+                </p>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                {visibles.map(({ nombre, ruta, Icon }) => (
-                  <Link key={ruta} to={ruta} className="block" aria-label={nombre}>
-                    <div className={ui.card}>
-                      <div className={ui.cardInner}>
-                        <div className={ui.iconBadge} aria-hidden="true">
-                          <Icon className="w-8 h-8" style={ui.iconStyle} />
+            </div>
+          ) : (
+            /* ─────────────────────────────────────────────
+               CONFIGURACIÓN
+            ───────────────────────────────────────────── */
+
+            <div className="w-full max-w-5xl mx-auto mt-5">
+              {visibles.length === 0 ? (
+                <div className={`${ui.card} p-6 text-center`} style={ui.loadingStyle}>
+                  <p
+                    className="font-semibold"
+                    style={{
+                      color: tokens.textMuted,
+                    }}
+                  >
+                    No hay módulos disponibles para tu rol.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-5">
+                  {visibles.map(({ nombre, ruta, Icon }) => (
+                    <Link key={ruta} to={ruta} className="weli-config-link block" aria-label={nombre}>
+                      <div className={`${ui.card} weli-config-card`} style={ui.cardStyle}>
+                        <div className={ui.cardInner}>
+                          <div className={ui.iconBadge} style={ui.iconBadgeStyle} aria-hidden="true">
+                            <Icon className="w-8 h-8" style={ui.iconStyle} />
+                          </div>
+
+                          <h3 className="font-extrabold" style={ui.cardTitleStyle}>
+                            {nombre}
+                          </h3>
                         </div>
-
-                        <h3 className={ui.cardTitle}>{nombre}</h3>
                       </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </main>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
