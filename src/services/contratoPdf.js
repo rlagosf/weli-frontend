@@ -1,8 +1,32 @@
 // src/services/contratoPdf.js
+
 import jsPDF from "jspdf";
 
 /**
  * Genera el contrato WELI en PDF.
+ *
+ * Compatible con dos interfaces:
+ *
+ * Flujo actual:
+ * buildContratoPdfBlob({
+ *   html,
+ *   academia,
+ *   jugador,
+ *   apoderado,
+ *   financiero,
+ * });
+ *
+ * Flujo legacy:
+ * buildContratoPdfBlob({
+ *   titulo,
+ *   texto,
+ *   economia,
+ *   totalBase,
+ *   totalDescuento,
+ *   totalFinal,
+ *   academiaNombre,
+ *   apoderadoNombre,
+ * });
  *
  * Criterios:
  * - Papel Letter vertical.
@@ -18,20 +42,179 @@ import jsPDF from "jspdf";
  * - Viñetas con sangría francesa.
  * - Bloque final de firmas.
  */
-export async function buildContratoPdfBlob({
-  titulo = "CONTRATO DE PRESTACIÓN DE SERVICIOS DE ENSEÑANZA DEPORTIVA",
-  texto = "",
-  economia = [],
-  totalBase = null,
-  totalDescuento = null,
-  totalFinal = null,
-  academiaNombre = "",
-  apoderadoNombre = "",
-  watermarkSrc = "/logo-en-negativo.png",
-  bodyFont = "Aptos",
-  bodyFontStyle = "normal",
-  bodyFontBoldStyle = "bold",
-} = {}) {
+export async function buildContratoPdfBlob(options = {}) {
+  const {
+    titulo = "CONTRATO DE PRESTACIÓN DE SERVICIOS DE ENSEÑANZA DEPORTIVA",
+
+    // Flujo actual
+    html = "",
+    academia = null,
+    jugador = null,
+    apoderado = null,
+    financiero = null,
+
+    // Flujo legacy
+    texto: textoLegacy = "",
+    economia: economiaLegacy = [],
+    totalBase: totalBaseLegacy = null,
+    totalDescuento: totalDescuentoLegacy = null,
+    totalFinal: totalFinalLegacy = null,
+    academiaNombre: academiaNombreLegacy = "",
+    apoderadoNombre: apoderadoNombreLegacy = "",
+
+    watermarkSrc = "/logo-en-negativo.png",
+
+    /*
+     * Helvetica es una fuente nativa de jsPDF.
+     *
+     * De esta forma todos los contratos nuevos utilizan
+     * exactamente la misma familia tipográfica aunque Aptos
+     * no haya sido registrada mediante addFont().
+     *
+     * Si en algún momento se registra otra fuente, puede
+     * seguir enviándose bodyFont explícitamente.
+     */
+    bodyFont = "helvetica",
+    bodyFontStyle = "normal",
+    bodyFontBoldStyle = "bold",
+  } = options ?? {};
+
+  /* =========================================================
+     NORMALIZACIÓN DEL FLUJO ACTUAL + COMPATIBILIDAD LEGACY
+  ========================================================= */
+
+  const hasValue = (value) => value !== null && value !== undefined && String(value).trim() !== "";
+
+  /**
+   * contratoFill actualmente genera texto contractual,
+   * aunque la variable en formjugador.jsx se llame contratoHtml.
+   *
+   * Si en algún momento el template pasa a contener HTML real,
+   * esta función lo convierte de forma segura a texto,
+   * conservando saltos de línea.
+   */
+  const htmlToPlainText = (value) => {
+    const raw = String(value ?? "");
+
+    if (!raw.trim()) {
+      return "";
+    }
+
+    /*
+     * Si no parece contener HTML, lo devolvemos tal cual.
+     */
+    if (!/<[a-z][\s\S]*>/i.test(raw)) {
+      return raw;
+    }
+
+    try {
+      if (typeof DOMParser !== "undefined") {
+        const prepared = raw
+          .replace(/<br\s*\/?>/gi, "\n")
+          .replace(/<\/p>/gi, "\n")
+          .replace(/<\/div>/gi, "\n")
+          .replace(/<\/li>/gi, "\n")
+          .replace(/<\/h[1-6]>/gi, "\n");
+
+        const parsed = new DOMParser().parseFromString(prepared, "text/html");
+
+        return parsed?.body?.textContent ?? raw;
+      }
+    } catch {
+      // Sigue al fallback.
+    }
+
+    return raw
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/p>/gi, "\n")
+      .replace(/<\/div>/gi, "\n")
+      .replace(/<\/li>/gi, "\n")
+      .replace(/<\/h[1-6]>/gi, "\n")
+      .replace(/<[^>]+>/g, "");
+  };
+
+  /*
+   * El flujo legacy tiene prioridad si fue enviado
+   * explícitamente.
+   *
+   * Si no, utilizamos html del flujo actual.
+   */
+  const texto = hasValue(textoLegacy) ? String(textoLegacy) : htmlToPlainText(html);
+
+  /*
+   * Tabla económica:
+   *
+   * Legacy:
+   *   economia
+   *
+   * Actual:
+   *   financiero.conceptos
+   */
+  const economia =
+    Array.isArray(economiaLegacy) && economiaLegacy.length > 0
+      ? economiaLegacy
+      : Array.isArray(financiero?.conceptos)
+        ? financiero.conceptos
+        : [];
+
+  const totalBase =
+    totalBaseLegacy !== null && totalBaseLegacy !== undefined ? totalBaseLegacy : (financiero?.total_base ?? null);
+
+  const totalDescuento =
+    totalDescuentoLegacy !== null && totalDescuentoLegacy !== undefined
+      ? totalDescuentoLegacy
+      : (financiero?.total_descuento ?? null);
+
+  const totalFinal =
+    totalFinalLegacy !== null && totalFinalLegacy !== undefined ? totalFinalLegacy : (financiero?.total_final ?? null);
+
+  const academiaNombre = String(academiaNombreLegacy || academia?.nombre || academia?.nombre_academia || "").trim();
+
+  /*
+   * Actualmente formjugador.jsx no envía context.apoderado
+   * directamente a buildContratoPdfBlob().
+   *
+   * Por eso intentamos, en orden:
+   *
+   * 1. parámetro legacy
+   * 2. objeto apoderado, si una llamada futura lo envía
+   * 3. datos compatibles eventualmente presentes en jugador
+   * 4. datos compatibles eventualmente presentes en financiero
+   * 5. extracción desde el propio texto contractual
+   */
+  const extractApoderadoNameFromText = (value) => {
+    const raw = String(value ?? "");
+
+    const patterns = [
+      /por la otra parte,\s*(?:don\/doña|don\/ña|don|doña)\s+([^,\n]+),\s*cédula/i,
+      /apoderado(?:\/a)?\s*[:\-]\s*([^\n,]+)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = raw.match(pattern);
+
+      if (match?.[1]) {
+        return String(match[1]).trim();
+      }
+    }
+
+    return "";
+  };
+
+  const apoderadoNombre = String(
+    apoderadoNombreLegacy ||
+      apoderado?.nombre ||
+      apoderado?.nombre_apoderado ||
+      jugador?.nombre_apoderado ||
+      financiero?.nombre_apoderado ||
+      extractApoderadoNameFromText(texto) ||
+      ""
+  ).trim();
+
+  /* =========================================================
+     PDF
+  ========================================================= */
+
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "pt",
@@ -45,6 +228,7 @@ export async function buildContratoPdfBlob({
   /* =========================================================
      CONFIGURACIÓN GENERAL
   ========================================================= */
+
   const cmToPt = (cm) => (Number(cm) || 0) * 28.3464566929;
 
   const marginX = cmToPt(2);
@@ -64,15 +248,19 @@ export async function buildContratoPdfBlob({
   const FOOTER_CONTENT_GAP = 16;
 
   let contentTop = 105;
+
   const contentBottom = FOOTER_LINE_Y - FOOTER_CONTENT_GAP;
 
   /* =========================================================
      HELPERS GENERALES
   ========================================================= */
+
   const roundMoney = (value) => {
     const number = Number(value);
 
-    if (!Number.isFinite(number)) return 0;
+    if (!Number.isFinite(number)) {
+      return 0;
+    }
 
     return Math.round(number * 100) / 100;
   };
@@ -110,6 +298,7 @@ export async function buildContratoPdfBlob({
   /* =========================================================
      WATERMARK
   ========================================================= */
+
   const tryLoadImage = (src) =>
     new Promise((resolve) => {
       if (!src) {
@@ -118,22 +307,31 @@ export async function buildContratoPdfBlob({
       }
 
       const img = new Image();
+
       img.crossOrigin = "anonymous";
+
       img.src = src;
 
       img.onload = () => resolve(img);
+
       img.onerror = () => resolve(null);
     });
 
   const logo = await tryLoadImage(watermarkSrc);
 
   const drawWatermark = () => {
-    if (!logo) return;
+    if (!logo) {
+      return;
+    }
 
     const size = 320;
 
     try {
-      const gState = doc.GState ? doc.GState({ opacity: 0.08 }) : null;
+      const gState = doc.GState
+        ? doc.GState({
+            opacity: 0.08,
+          })
+        : null;
 
       if (gState) {
         doc.setGState(gState);
@@ -142,28 +340,59 @@ export async function buildContratoPdfBlob({
       doc.addImage(logo, "PNG", (pageW - size) / 2, (pageH - size) / 2, size, size);
 
       if (gState && doc.GState) {
-        doc.setGState(doc.GState({ opacity: 1 }));
+        doc.setGState(
+          doc.GState({
+            opacity: 1,
+          })
+        );
       }
     } catch {
-      // La ausencia de watermark no debe impedir generar el contrato.
+      /*
+       * La ausencia del watermark
+       * no debe impedir generar el contrato.
+       */
     }
   };
 
   /* =========================================================
      FUENTES
   ========================================================= */
-  const safeSetFont = (name, style) => {
-    try {
-      doc.setFont(name, style);
-    } catch {
-      doc.setFont("helvetica", style === "bold" ? "bold" : "normal");
+
+  const safeSetFont = (name, style = "normal") => {
+    const fontList = doc.getFontList?.() ?? {};
+
+    const requestedName = String(name ?? "").trim();
+
+    const requestedStyle = String(style ?? "normal")
+      .trim()
+      .toLowerCase();
+
+    const matchedFontName = Object.keys(fontList).find(
+      (fontName) => fontName.toLowerCase() === requestedName.toLowerCase()
+    );
+
+    const availableStyles = matchedFontName ? (fontList[matchedFontName] ?? []) : [];
+
+    if (matchedFontName && availableStyles.includes(requestedStyle)) {
+      doc.setFont(matchedFontName, requestedStyle);
+
+      return;
     }
+
+    /*
+     * Fuente incorporada por jsPDF.
+     * Siempre disponible.
+     */
+    const fallbackStyle = requestedStyle === "bold" ? "bold" : "normal";
+
+    doc.setFont("helvetica", fallbackStyle);
   };
 
   const setBodyFont = (size = fontSizeBody) => {
     safeSetFont(bodyFont, bodyFontStyle);
 
     doc.setFontSize(size);
+
     doc.setTextColor(0);
   };
 
@@ -171,14 +400,16 @@ export async function buildContratoPdfBlob({
     safeSetFont(bodyFont, bodyFontBoldStyle);
 
     doc.setFontSize(size);
+
     doc.setTextColor(0);
   };
 
-  const measure = (text) => doc.getTextWidth(String(text ?? ""));
+  const measure = (value) => doc.getTextWidth(String(value ?? ""));
 
   /* =========================================================
      HEADER
   ========================================================= */
+
   const drawHeader = () => {
     drawWatermark();
 
@@ -201,6 +432,7 @@ export async function buildContratoPdfBlob({
     const separatorY = titleY + HEADER_SEPARATOR_GAP;
 
     doc.setDrawColor(190);
+
     doc.setLineWidth(0.7);
 
     doc.line(marginX, separatorY, pageW - marginX, separatorY);
@@ -213,8 +445,10 @@ export async function buildContratoPdfBlob({
   /* =========================================================
      FOOTER
   ========================================================= */
+
   const drawFooter = (pageNumber) => {
     doc.setDrawColor(205);
+
     doc.setLineWidth(0.6);
 
     doc.line(marginX, FOOTER_LINE_Y, pageW - marginX, FOOTER_LINE_Y);
@@ -222,6 +456,7 @@ export async function buildContratoPdfBlob({
     safeSetFont(bodyFont, bodyFontStyle);
 
     doc.setFontSize(8.5);
+
     doc.setTextColor(100);
 
     doc.text(`WELI APP • Página ${pageNumber}`, pageW / 2, FOOTER_TEXT_Y, {
@@ -234,12 +469,14 @@ export async function buildContratoPdfBlob({
   /* =========================================================
      PAGINACIÓN
   ========================================================= */
+
   let y = 0;
 
   const newPage = () => {
     drawFooter(doc.internal.getCurrentPageInfo().pageNumber);
 
     doc.addPage();
+
     drawHeader();
 
     y = contentTop;
@@ -254,6 +491,7 @@ export async function buildContratoPdfBlob({
   /* =========================================================
      JUSTIFICADO
   ========================================================= */
+
   const justifyLine = (line, x, currentY, targetWidth) => {
     const words = normalizeSpaces(line).split(" ").filter(Boolean);
 
@@ -299,12 +537,15 @@ export async function buildContratoPdfBlob({
   /* =========================================================
      PÁRRAFOS
   ========================================================= */
-  const renderParagraph = (text) => {
+
+  const renderParagraph = (value) => {
     setBodyFont();
 
-    const normalized = normalizeSpaces(String(text ?? "").replace(/\t/g, " "));
+    const normalized = normalizeSpaces(String(value ?? "").replace(/\t/g, " "));
 
-    if (!normalized) return;
+    if (!normalized) {
+      return;
+    }
 
     const wrapped = doc.splitTextToSize(normalized, maxWidth);
 
@@ -332,23 +573,27 @@ export async function buildContratoPdfBlob({
       y += lineHeight;
     }
 
-    /*
-     * ÚNICA separación entre párrafos.
-     */
     y += paragraphGap;
   };
 
   /* =========================================================
      DETECCIÓN DE ELEMENTOS
   ========================================================= */
+
   const isSubtitleLine = (value) => {
     const text = normalizeSpaces(value);
 
-    if (!text) return false;
+    if (!text) {
+      return false;
+    }
+
     if (text.length > 85) {
       return false;
     }
 
+    /*
+     * Subtítulos breves terminados en ":".
+     */
     if (/^[A-Za-zÁÉÍÓÚÑÜ0-9\s.-]{3,60}:\s*$/.test(text)) {
       return true;
     }
@@ -360,8 +605,16 @@ export async function buildContratoPdfBlob({
     return isCaps && wordCount <= 10;
   };
 
+  /*
+   * Corrección:
+   * acepta las viñetas reales del template.
+   */
   const isBulletLine = (value) => /^\s*[•●▪]\s+/.test(String(value ?? ""));
 
+  /*
+   * Compatibilidad con el antiguo
+   * resumen económico textual.
+   */
   const isFinancialSummaryLine = (value) =>
     /^(Total base|Descuentos y\/o beneficios aplicados|Total aplicable al momento de la inscripción)\s*:/i.test(
       normalizeSpaces(value)
@@ -384,12 +637,13 @@ export async function buildContratoPdfBlob({
   /* =========================================================
      SUBTÍTULOS
   ========================================================= */
-  const renderSubtitle = (text) => {
+
+  const renderSubtitle = (value) => {
     ensureSpace(lineHeight * 3.2);
 
     setBoldFont(11.5);
 
-    const wrapped = doc.splitTextToSize(normalizeSpaces(text), maxWidth);
+    const wrapped = doc.splitTextToSize(normalizeSpaces(value), maxWidth);
 
     for (const line of wrapped) {
       ensureSpace(lineHeight);
@@ -400,6 +654,7 @@ export async function buildContratoPdfBlob({
     }
 
     doc.setDrawColor(215);
+
     doc.setLineWidth(0.45);
 
     doc.line(marginX, y - 7, pageW - marginX, y - 7);
@@ -412,12 +667,13 @@ export async function buildContratoPdfBlob({
   /* =========================================================
      LÍNEAS INTRODUCTORIAS
   ========================================================= */
-  const renderLeadLine = (text) => {
+
+  const renderLeadLine = (value) => {
     ensureSpace(lineHeight * 2);
 
     setBoldFont();
 
-    const wrapped = doc.splitTextToSize(normalizeSpaces(text), maxWidth);
+    const wrapped = doc.splitTextToSize(normalizeSpaces(value), maxWidth);
 
     for (const line of wrapped) {
       ensureSpace(lineHeight);
@@ -435,10 +691,13 @@ export async function buildContratoPdfBlob({
   /* =========================================================
      VIÑETAS
   ========================================================= */
+
   const renderBullet = (value) => {
     const text = normalizeSpaces(String(value ?? "").replace(/^\s*[•●▪]\s*/, ""));
 
-    if (!text) return;
+    if (!text) {
+      return;
+    }
 
     const bulletX = marginX + 1;
 
@@ -501,6 +760,7 @@ export async function buildContratoPdfBlob({
      RESUMEN ECONÓMICO ANTIGUO
      Se conserva como fallback temporal.
   ========================================================= */
+
   const renderFinancialSummary = (value) => {
     const text = normalizeSpaces(value);
 
@@ -508,6 +768,7 @@ export async function buildContratoPdfBlob({
 
     if (colonIndex === -1) {
       renderParagraph(text);
+
       return;
     }
 
@@ -533,6 +794,7 @@ export async function buildContratoPdfBlob({
   /* =========================================================
      TABLA ECONÓMICA DINÁMICA
   ========================================================= */
+
   const renderEconomicTable = () => {
     if (!Array.isArray(economia) || economia.length === 0) {
       renderParagraph("No existen conceptos económicos configurados para esta inscripción.");
@@ -541,10 +803,12 @@ export async function buildContratoPdfBlob({
     }
 
     const tableX = marginX;
+
     const tableWidth = maxWidth;
 
     /*
      * Distribución:
+     *
      * Concepto   23 %
      * Base       17 %
      * Beneficio  25 %
@@ -556,12 +820,15 @@ export async function buildContratoPdfBlob({
     const headers = ["Concepto", "Tarifa base", "Beneficio", "Descuento", "Total"];
 
     const cellPadding = 5;
+
     const tableFontSize = 9;
+
     const tableLineHeight = 12;
+
     const tableBottomGap = 18;
 
-    const calculateLines = (text, width) =>
-      doc.splitTextToSize(String(text ?? ""), Math.max(20, width - cellPadding * 2));
+    const calculateLines = (value, width) =>
+      doc.splitTextToSize(String(value ?? ""), Math.max(20, width - cellPadding * 2));
 
     const getRowHeight = (values) => {
       let maxLines = 1;
@@ -577,6 +844,7 @@ export async function buildContratoPdfBlob({
 
     const drawRowBorders = (rowY, rowHeight) => {
       doc.setDrawColor(185);
+
       doc.setLineWidth(0.45);
 
       doc.line(tableX, rowY, tableX + tableWidth, rowY);
@@ -658,8 +926,6 @@ export async function buildContratoPdfBlob({
 
       /*
        * La fila no se corta.
-       * Si no cabe completa,
-       * pasa a la página siguiente.
        */
       if (y + rowHeight > contentBottom) {
         newPage();
@@ -699,14 +965,14 @@ export async function buildContratoPdfBlob({
           item?.monto_descuento ?? Math.max(0, Number(item?.monto_base ?? 0) - Number(item?.monto_final ?? 0))
         ),
 
-        formatMoney(item?.monto_final ?? 0),
+        formatMoney(item?.monto_final ?? item?.monto_total ?? 0),
       ];
 
       drawDataRow(values);
     }
 
     /*
-     * Calculamos totales internamente
+     * Calculamos totales internos
      * como fallback.
      */
     const calculatedBase = economia.reduce((sum, item) => sum + Number(item?.monto_base ?? 0), 0);
@@ -714,17 +980,27 @@ export async function buildContratoPdfBlob({
     const calculatedDiscount = economia.reduce(
       (sum, item) =>
         sum +
-        Number(item?.monto_descuento ?? Math.max(0, Number(item?.monto_base ?? 0) - Number(item?.monto_final ?? 0))),
+        Number(
+          item?.monto_descuento ??
+            Math.max(0, Number(item?.monto_base ?? 0) - Number(item?.monto_final ?? item?.monto_total ?? 0))
+        ),
       0
     );
 
-    const calculatedFinal = economia.reduce((sum, item) => sum + Number(item?.monto_final ?? 0), 0);
+    const calculatedFinal = economia.reduce(
+      (sum, item) => sum + Number(item?.monto_final ?? item?.monto_total ?? 0),
+      0
+    );
 
     const totalValues = [
       "TOTAL",
+
       formatMoney(totalBase ?? roundMoney(calculatedBase)),
+
       "",
+
       formatMoney(totalDescuento ?? roundMoney(calculatedDiscount)),
+
       formatMoney(totalFinal ?? roundMoney(calculatedFinal)),
     ];
 
@@ -764,6 +1040,7 @@ export async function buildContratoPdfBlob({
   /* =========================================================
      FIRMAS
   ========================================================= */
+
   const renderSignatures = () => {
     /*
      * Toda la sección debe caber junta.
@@ -777,6 +1054,7 @@ export async function buildContratoPdfBlob({
     y += 32;
 
     const horizontalPadding = 8;
+
     const centerGap = 35;
 
     const signatureWidth = (maxWidth - centerGap - horizontalPadding * 2) / 2;
@@ -786,16 +1064,11 @@ export async function buildContratoPdfBlob({
     const rightX = leftX + signatureWidth + centerGap;
 
     doc.setDrawColor(70);
+
     doc.setLineWidth(0.7);
 
-    /*
-     * Línea de firma academia.
-     */
     doc.line(leftX, y, leftX + signatureWidth, y);
 
-    /*
-     * Línea de firma apoderado.
-     */
     doc.line(rightX, y, rightX + signatureWidth, y);
 
     y += 15;
@@ -835,6 +1108,7 @@ export async function buildContratoPdfBlob({
     y += nameLines * 11 + 11;
 
     doc.setFontSize(8.5);
+
     doc.setTextColor(90);
 
     doc.text("Firma representante", leftX + signatureWidth / 2, y, {
@@ -849,8 +1123,17 @@ export async function buildContratoPdfBlob({
   };
 
   /* =========================================================
+     VALIDACIÓN DE CONTENIDO
+  ========================================================= */
+
+  if (!String(texto ?? "").trim()) {
+    throw new Error("No fue posible generar el contrato: el contenido contractual está vacío.");
+  }
+
+  /* =========================================================
      ELIMINAR TÍTULO DUPLICADO DEL TEMPLATE
   ========================================================= */
+
   let content = String(texto ?? "")
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n");
@@ -881,6 +1164,7 @@ export async function buildContratoPdfBlob({
   /* =========================================================
      RENDER
   ========================================================= */
+
   drawHeader();
 
   y = contentTop;
@@ -891,12 +1175,8 @@ export async function buildContratoPdfBlob({
     const trimmed = line.trim();
 
     /*
-     * Las líneas vacías del template ya NO
-     * agregan espacio.
-     *
-     * De esta forma renderParagraph(),
-     * renderBullet() y renderSubtitle()
-     * controlan todo el espaciado vertical.
+     * Las líneas vacías del template no
+     * agregan espacio directamente.
      */
     if (!trimmed) {
       continue;
@@ -907,6 +1187,21 @@ export async function buildContratoPdfBlob({
      */
     if (trimmed === "[[TABLA_CONDICIONES_ECONOMICAS]]") {
       renderEconomicTable();
+
+      continue;
+    }
+
+    /*
+     * Compatibilidad adicional:
+     *
+     * Si una versión anterior del template
+     * utiliza <<detalle_tarifas>>, y por algún
+     * motivo el placeholder sobrevivió al fill,
+     * usamos igualmente la tabla estructurada.
+     */
+    if (trimmed === "<<detalle_tarifas>>") {
+      renderEconomicTable();
+
       continue;
     }
 
@@ -915,16 +1210,9 @@ export async function buildContratoPdfBlob({
      */
     if (isSubtitleLine(trimmed)) {
       /*
-       * La última sección contractual debe permanecer
-       * visualmente vinculada al bloque de firmas.
-       *
-       * Reservamos espacio suficiente para:
-       * - título INTEGRIDAD CONTRACTUAL
-       * - contenido final
-       * - firmas
-       *
-       * Si no cabe, toda la sección comienza en una
-       * página nueva, evitando una hoja exclusiva de firmas.
+       * La última sección contractual debe
+       * permanecer visualmente vinculada
+       * al bloque de firmas.
        */
       if (trimmed.toUpperCase() === "INTEGRIDAD CONTRACTUAL") {
         const finalSectionReserve = 250;
@@ -935,6 +1223,7 @@ export async function buildContratoPdfBlob({
       }
 
       renderSubtitle(trimmed);
+
       continue;
     }
 
@@ -943,6 +1232,7 @@ export async function buildContratoPdfBlob({
      */
     if (isLeadLine(trimmed)) {
       renderLeadLine(trimmed);
+
       continue;
     }
 
@@ -951,11 +1241,13 @@ export async function buildContratoPdfBlob({
      */
     if (isBulletLine(trimmed)) {
       renderBullet(trimmed);
+
       continue;
     }
 
     /*
-     * Compatibilidad con formato económico antiguo.
+     * Compatibilidad con formato
+     * económico antiguo.
      */
     if (isFinancialSummaryLine(trimmed)) {
       renderFinancialSummary(trimmed);
@@ -974,6 +1266,9 @@ export async function buildContratoPdfBlob({
    */
   renderSignatures();
 
+  /*
+   * Footer de la última página.
+   */
   drawFooter(doc.internal.getCurrentPageInfo().pageNumber);
 
   return doc.output("blob");

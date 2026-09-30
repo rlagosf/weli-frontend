@@ -1789,19 +1789,32 @@ export default function FormJugador() {
 
     const conceptos = Array.isArray(context?.financiero?.conceptos) ? context.financiero.conceptos : [];
 
-    const items = conceptos.map((item) => ({
-      tipo_pago_id: Number(item.tipo_pago_id),
-      tarifa_id: item.tarifa_id == null ? null : Number(item.tarifa_id),
-      plan_catalogo_id: item.plan_id == null ? null : Number(item.plan_id),
-      monto_base: roundMoney(item.monto_base),
-      monto_descuento: roundMoney(item.monto_descuento),
-      monto_total: roundMoney(item.monto_final),
-    }));
+    const items = conceptos
+      .map((item) => ({
+        tipo_pago_id: Number(item.tipo_pago_id),
+        plan_id: item.plan_id == null ? null : Number(item.plan_id),
+      }))
+      .filter(
+        (item) =>
+          Number.isInteger(item.tipo_pago_id) &&
+          item.tipo_pago_id > 0 &&
+          Number.isInteger(item.plan_id) &&
+          item.plan_id > 0
+      );
+
+    if (items.length === 0) {
+      throw new Error("No existen configuraciones financieras válidas para asociar al jugador.");
+    }
+
+    const fechaInicio = context?.financiero?.fecha_contrato_sql || todaySQL();
 
     await postWithFallback(
       FINANZAS_BULK_ENDPOINT,
       {
         jugador_id: Number(jugadorId),
+        fecha_inicio: fechaInicio,
+        fecha_fin: null,
+        estado_id: ESTADO_ACTIVO,
         items,
       },
       headers

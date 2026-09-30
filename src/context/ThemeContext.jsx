@@ -864,6 +864,34 @@ export const ThemeProvider = ({ children }) => {
   }, [refreshAcademiaTheme]);
 
   /* =======================================================
+   CAMBIO DE SESIÓN
+
+   El ThemeProvider permanece montado durante login/logout.
+
+   Cuando aparece un nuevo JWT, volvemos a resolver el
+   tema de la academia sin necesitar F5.
+======================================================= */
+
+  useEffect(() => {
+    const handleSessionChanged = () => {
+      const session = getAdministrativeSession();
+
+      if (!session.valid) {
+        restoreDefaultThemeLocally();
+        return;
+      }
+
+      refreshAcademiaTheme();
+    };
+
+    window.addEventListener("weli:sessionChanged", handleSessionChanged);
+
+    return () => {
+      window.removeEventListener("weli:sessionChanged", handleSessionChanged);
+    };
+  }, [getAdministrativeSession, refreshAcademiaTheme, restoreDefaultThemeLocally]);
+
+  /* =======================================================
      CAMBIO DE ACADEMIA EN SUPERADMIN
 
      SuperDashboard ya emite:

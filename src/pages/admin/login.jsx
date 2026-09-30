@@ -15,19 +15,9 @@ const ACCENT = "#aa5013";
 const SUPER_DASH_PATH = "/super-dashboard";
 const ADMIN_DASH_PATH = "/admin";
 
-const USER_INFO_KEY = "weli_user_info";
 const ALLOWED_PANEL_ROLES = new Set([1, 2, 3]);
 
 /* ───────────────────────── Storage ───────────────────────── */
-
-function safeStorageSet(key, value) {
-  try {
-    localStorage.setItem(key, value);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function safeStorageRemove(key) {
   try {
@@ -41,19 +31,10 @@ function clearAcademiaScope() {
 
 function hardClearLocal() {
   clearToken();
-  safeStorageRemove(USER_INFO_KEY);
   clearAcademiaScope();
 }
 
 /* ───────────────────────── Helpers ───────────────────────── */
-
-function safeJsonStringify(value) {
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return "";
-  }
-}
 
 /**
  * Contrato actual de auth.ts:
@@ -70,10 +51,6 @@ function safeJsonStringify(value) {
 function pickTokenFromPayload(payload) {
   const token = payload?.token;
   return typeof token === "string" && token.trim() ? token.trim() : "";
-}
-
-function pickUserFromPayload(payload) {
-  return payload?.user && typeof payload.user === "object" ? payload.user : null;
 }
 
 function safePath(path, fallback = "") {
@@ -359,17 +336,9 @@ export default function Login() {
         return;
       }
 
+      clearAcademiaScope();
+
       /* ───────── Información visible del usuario ───────── */
-
-      const user = pickUserFromPayload(payload);
-
-      if (user) {
-        const userJson = safeJsonStringify(user);
-
-        if (userJson) {
-          safeStorageSet(USER_INFO_KEY, userJson);
-        }
-      }
 
       /*
        * Nunca persistimos academia para Admin/Staff.
@@ -395,11 +364,7 @@ export default function Login() {
     } catch (error) {
       const status = Number(error?.response?.status ?? error?.status ?? 0);
 
-      const message =
-        error?.response?.data?.message ??
-        error?.data?.message ??
-        error?.message ??
-        "";
+      const message = error?.response?.data?.message ?? error?.data?.message ?? error?.message ?? "";
 
       if (
         error?.code === "TIMEOUT" ||
@@ -472,9 +437,7 @@ export default function Login() {
                   draggable={false}
                 />
 
-                <p className="text-white font-extrabold tracking-widest uppercase text-sm">
-                  Ingresando...
-                </p>
+                <p className="text-white font-extrabold tracking-widest uppercase text-sm">Ingresando...</p>
 
                 <IsLoading />
               </div>
@@ -501,9 +464,7 @@ export default function Login() {
               <div className="absolute inset-0 bg-black/25" />
 
               <div className="absolute bottom-6 left-6 right-6">
-                <p className="text-white/90 text-lg font-extrabold tracking-wide">
-                  Administración WELI
-                </p>
+                <p className="text-white/90 text-lg font-extrabold tracking-wide">Administración WELI</p>
 
                 <p className="text-white/70 text-sm mt-1 leading-relaxed">
                   Orden, trazabilidad y control en un solo panel.
@@ -530,9 +491,7 @@ export default function Login() {
                   draggable={false}
                 />
 
-                <h2 className="mt-4 text-3xl text-white font-extrabold tracking-tight">
-                  Ingreso Panel
-                </h2>
+                <h2 className="mt-4 text-3xl text-white font-extrabold tracking-tight">Ingreso Panel</h2>
 
                 <p className="text-sm text-white/70 mt-2 text-center">
                   Entrarás automáticamente al panel según tu rol.
@@ -620,9 +579,7 @@ export default function Login() {
                   {isLoading ? "Ingresando..." : "Ingresar"}
                 </button>
 
-                <p className="text-xs text-white/50 text-center mt-3">
-                  WELI • Panel Administrativo
-                </p>
+                <p className="text-xs text-white/50 text-center mt-3">WELI • Panel Administrativo</p>
               </div>
             </form>
           </div>

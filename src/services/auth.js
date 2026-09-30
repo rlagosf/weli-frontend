@@ -560,6 +560,7 @@ export async function loginApoderado(rut, password, options = {}) {
       safeStorageRemove("apoderado_must_change_password");
     }
 
+    
     return res;
   } catch (err) {
     clearToken();

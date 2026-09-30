@@ -817,18 +817,38 @@ export default function SuperDashboard() {
   }, [academias, q]);
 
   /* =========================================================
-     SELECCIÓN DE ACADEMIA
-  ========================================================= */
+   SELECCIÓN DE ACADEMIA
+========================================================= */
 
+  /**
+   * La academia seleccionada por Superadmin se persiste
+   * únicamente mediante su ID.
+   *
+   * No almacenamos en localStorage:
+   *
+   * - nombre
+   * - RUT
+   * - dirección
+   * - email
+   * - región
+   * - ciudad
+   * - comuna
+   * - estado
+   *
+   * Toda esa información debe solicitarse nuevamente
+   * al backend cuando sea necesaria.
+   */
   const clearSelectedAcademiaIfNeeded = (academiaId) => {
     try {
       const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
+
       if (!raw) return;
 
-      const selected = JSON.parse(raw);
+      const selectedId = Number(raw);
 
-      if (Number(selected?.id) === Number(academiaId)) {
+      if (Number.isInteger(selectedId) && selectedId === Number(academiaId)) {
         localStorage.removeItem(ACADEMIA_STORAGE_KEY);
+
         window.dispatchEvent(new Event("weli:selectedAcademiaChanged"));
       }
     } catch {}
@@ -845,6 +865,14 @@ export default function SuperDashboard() {
       setMsg("La academia se encuentra desactivada. Debes reactivarla antes de ingresar.");
       return;
     }
+
+    try {
+      localStorage.setItem(ACADEMIA_STORAGE_KEY, String(id));
+
+      window.dispatchEvent(new Event("weli:selectedAcademiaChanged"));
+    } catch {}
+
+    window.location.assign("/super-dashboard/admin/dashboard");
 
     const snapshot = {
       id,

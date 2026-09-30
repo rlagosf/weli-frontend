@@ -1,37 +1,101 @@
 // src/pages/admin/loginApoderado.jsx
-import { useEffect, useRef, useState, useCallback } from "react";
+
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { jwtDecode } from "jwt-decode";
 import { loginApoderado as loginService } from "../../services/auth";
+import { clearToken, getToken } from "../../services/api";
 import IsLoading from "../../components/isLoading";
+import logoOficial from "../../statics/logo/logo-oficial.png";
+import logoWeli from "../../statics/logo/logo-weli.png";
 
-import logoOficial from "../../statics/logo/logo-oficial.png"; // ✅ imagen lateral
-import logoWeli from "../../statics/logo/logo-weli.png"; // ✅ logo dentro del form (ajusta si tu nombre difiere)
+/* =========================================================
+   CONSTANTES
+========================================================= */
 
-import { getToken, setToken, clearToken } from "../../services/api"; // ✅ unificado
-
-const REQUEST_TIMEOUT_MS = 10_000;
-
-// 🎨 WELI (cobre)
 const ACCENT = "#aa5013";
+const PORTAL_ROOT = "/portal-apoderado";
+const MAX_PASSWORD_LENGTH = 200;
+const MUST_CHANGE_PASSWORD_KEY = "apoderado_must_change_password";
 
-function onlyDigits(s = "") {
-  return String(s).replace(/\D/g, "");
+/* =========================================================
+   HELPERS
+========================================================= */
+
+/**
+ * RUT interno WELI:
+ * - sólo cuerpo numérico
+ * - sin puntos
+ * - sin guion
+ * - sin DV
+ * - 7 u 8 dígitos
+ */
+function onlyDigits(value = "") {
+  return String(value).replace(/\D/g, "");
 }
 
-/* ───────────────────────────────
-   Helpers
-─────────────────────────────── */
-function pickTokenFromPayload(payload) {
+/**
+ * Decodificación local exclusivamente para decisiones de UI.
+ * NO valida firma, issuer ni audience.
+ * La autoridad continúa siendo el backend.
+ */
+function decodeApoderadoToken(token) {
+  try {
+    const decoded = jwtDecode(token);
+    const type = String(decoded?.type ?? decoded?.user?.type ?? decoded?.payload?.type ?? "")
+      .trim()
+      .toLowerCase();
+    const exp = Number(decoded?.exp ?? 0);
+    const now = Math.floor(Date.now() / 1000);
+
+    if (type !== "apoderado") return null;
+    if (!Number.isFinite(exp) || exp <= now) return null;
+
+    return { decoded, type, exp };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Un login de apoderado sólo puede redirigir dentro
+ * del árbol /portal-apoderado.
+ */
+function safeApoderadoRedirect(value) {
+  if (typeof value !== "string") return PORTAL_ROOT;
+
+  const path = value.trim();
+
+  if (path === PORTAL_ROOT || path.startsWith(`${PORTAL_ROOT}/`)) {
+    return path;
+  }
+
+  return PORTAL_ROOT;
+}
+
+/**
+ * Obtiene mensajes del contrato normalizado de api.js,
+ * conservando compatibilidad con errores Axios anteriores.
+ */
+function getErrorStatus(error) {
+  return Number(error?.status ?? error?.response?.status ?? 0);
+}
+
+function getBackendMessage(error) {
   return (
-    payload?.weli_token ||
-    payload?.token ||
-    payload?.access_token ||
-    payload?.jwt ||
-    payload?.bearer ||
-    payload?.auth_token ||
-    payload?.rafc_token // legacy backend (solo lectura)
+    error?.data?.message ??
+    error?.data?.detail ??
+    error?.data?.error ??
+    error?.response?.data?.message ??
+    error?.response?.data?.detail ??
+    error?.response?.data?.error ??
+    ""
   );
 }
+
+/* =========================================================
+   COMPONENTE
+========================================================= */
 
 export default function LoginApoderado() {
   const [form, setForm] = useState({ rut: "", password: "" });
@@ -40,49 +104,75 @@ export default function LoginApoderado() {
 
   const navigate = useNavigate();
   const location = useLocation();
+  const redirectTo = safeApoderadoRedirect(location?.state?.from);
 
-  const rawRedirect = location?.state?.from || "/portal-apoderado";
-  const redirectTo = typeof rawRedirect === "string" && rawRedirect.startsWith("/") ? rawRedirect : "/portal-apoderado";
-
+  const submittingRef = useRef(false);
   const abortRef = useRef(null);
   const mountedRef = useRef(true);
 
+  /* =======================================================
+     CICLO DE VIDA
+  ======================================================= */
+
   useEffect(() => {
     mountedRef.current = true;
+
     return () => {
       mountedRef.current = false;
+
       try {
         abortRef.current?.abort?.();
       } catch {}
+
+      abortRef.current = null;
+      submittingRef.current = false;
     };
   }, []);
 
-  // Si ya hay token, afuera al toque
+  /* =======================================================
+     SESIÓN EXISTENTE
+  ======================================================= */
+
+  /**
+   * Sólo una sesión JWT realmente perteneciente a un
+   * apoderado puede provocar redirección automática.
+   *
+   * Un JWT del panel administrativo no se interpreta como
+   * sesión del portal y tampoco se elimina desde aquí.
+   */
   useEffect(() => {
     try {
-      const t = getToken();
-      if (t) navigate(redirectTo, { replace: true });
+      const token = getToken();
+
+      if (token && decodeApoderadoToken(token)) {
+        navigate(redirectTo, { replace: true });
+      }
     } catch {}
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const setMsgSafe = useCallback((m) => {
-    if (!mountedRef.current) return;
-    setMensaje(m);
+  /* =======================================================
+     SETTERS SEGUROS
+  ======================================================= */
+
+  const setMsgSafe = useCallback((message) => {
+    if (mountedRef.current) setMensaje(message);
   }, []);
 
-  const setLoadingSafe = useCallback((v) => {
-    if (!mountedRef.current) return;
-    setIsLoading(v);
+  const setLoadingSafe = useCallback((value) => {
+    if (mountedRef.current) setIsLoading(value);
   }, []);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
+  /* =======================================================
+     INPUTS
+  ======================================================= */
+
+  const handleChange = (event) => {
+    const { name, value } = event.target;
 
     if (name === "rut") {
-      // 7 u 8 dígitos, sin DV
-      const clean = onlyDigits(value).slice(0, 8);
-      setForm((prev) => ({ ...prev, rut: clean }));
+      setForm((prev) => ({ ...prev, rut: onlyDigits(value).slice(0, 8) }));
       return;
     }
 
@@ -91,108 +181,208 @@ export default function LoginApoderado() {
     }
   };
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    if (isLoading) return;
+  /* =======================================================
+     LOGIN
+  ======================================================= */
 
-    setMsgSafe("");
+  const handleLogin = async (event) => {
+    event.preventDefault();
+
+    // Bloqueo real contra doble submit.
+    if (submittingRef.current) return;
 
     const rut = onlyDigits(form.rut);
     const password = String(form.password ?? "");
 
-    if (!(rut.length === 7 || rut.length === 8) || password.length < 4) {
+    setMsgSafe("");
+
+    /* -----------------------------------------------------
+       VALIDACIÓN LOCAL
+    ----------------------------------------------------- */
+
+    if (!(rut.length === 7 || rut.length === 8) || password.length < 4 || password.length > MAX_PASSWORD_LENGTH) {
       setMsgSafe("❌ RUT o contraseña inválidos");
       return;
     }
 
+    submittingRef.current = true;
     setLoadingSafe(true);
 
-    // limpiar sesión previa
+    /* -----------------------------------------------------
+       ESTADO OPERACIONAL DEL PORTAL
+    ----------------------------------------------------- */
+
+    /**
+     * Antes de una nueva autenticación se limpia solamente
+     * el flag de cambio obligatorio de contraseña.
+     *
+     * No se persisten:
+     * - RUT
+     * - contraseña
+     * - nombre
+     * - email
+     * - teléfono
+     * - datos de jugadores
+     */
     try {
-      clearToken();
+      localStorage.removeItem(MUST_CHANGE_PASSWORD_KEY);
     } catch {}
-    try {
-      localStorage.removeItem("user_info");
-      localStorage.removeItem("apoderado_must_change_password");
-      localStorage.removeItem("rafc_token");
-      localStorage.removeItem("rafc_auth_debug");
-    } catch {}
+
+    /* -----------------------------------------------------
+       PETICIÓN
+    ----------------------------------------------------- */
 
     const controller = new AbortController();
     abortRef.current = controller;
 
-    const timeoutId = setTimeout(() => {
-      try {
-        controller.abort();
-      } catch {}
-    }, REQUEST_TIMEOUT_MS);
-
     try {
-      let res;
-      try {
-        res = await loginService(rut, password, { signal: controller.signal });
-      } catch (err) {
-        // compat fetch/axios
-        if (err?.name === "TypeError") res = await loginService(rut, password);
-        else throw err;
-      }
+      /**
+       * services/auth.js mantiene la responsabilidad de:
+       * - llamar al backend;
+       * - recibir el JWT;
+       * - persistirlo mediante setToken();
+       * - entregar must_change_password.
+       *
+       * Este componente NO vuelve a ejecutar setToken().
+       */
+      const res = await loginService(rut, password, {
+        signal: controller.signal,
+      });
 
       const payload = res?.data ?? res ?? {};
-      const token = pickTokenFromPayload(payload);
+
+      /* ---------------------------------------------------
+         VALIDAR SESIÓN PERSISTIDA
+      --------------------------------------------------- */
+
+      const token = getToken();
 
       if (!token) {
-        setMsgSafe("❌ No se recibió token desde el servidor.");
+        setMsgSafe("❌ No se pudo persistir la sesión. Intenta nuevamente.");
         return;
       }
 
-      setToken(String(token));
+      /**
+       * Verificación defensiva adicional.
+       * Si por cualquier anomalía se almacenó un JWT que no
+       * pertenece a un apoderado, se elimina inmediatamente.
+       */
+      if (!decodeApoderadoToken(token)) {
+        clearToken();
+        setMsgSafe("❌ El servidor entregó una sesión inválida.");
+        return;
+      }
 
-      // Flag UI (backend igual manda y protege)
-      const mustChange = payload?.must_change_password === true;
+      /* ---------------------------------------------------
+         CAMBIO OBLIGATORIO DE CONTRASEÑA
+      --------------------------------------------------- */
+
+      const mustChange = payload?.must_change_password === true || Number(payload?.must_change_password) === 1;
+
+      /**
+       * Único estado adicional persistido por este componente.
+       * Es un flag operacional 0/1 y no contiene PII.
+       */
       try {
-        localStorage.setItem("apoderado_must_change_password", mustChange ? "1" : "0");
+        localStorage.setItem(MUST_CHANGE_PASSWORD_KEY, mustChange ? "1" : "0");
       } catch {}
 
       if (mustChange) {
-        navigate("/portal-apoderado/cambiar-clave", { replace: true });
+        navigate("/portal-apoderado/cambiar-clave", {
+          replace: true,
+        });
         return;
       }
 
-      // Defensa extra: asegura persistencia
-      try {
-        const t = getToken();
-        if (!t) {
-          setMsgSafe("❌ No se pudo persistir la sesión. Intenta nuevamente.");
-          return;
-        }
-      } catch {}
+      /* ---------------------------------------------------
+         REDIRECCIÓN
+      --------------------------------------------------- */
 
       navigate(redirectTo, { replace: true });
     } catch (err) {
-      const status = err?.response?.status ?? err?.status;
+      if (!mountedRef.current) return;
 
-      if (err?.name === "AbortError") {
+      const status = getErrorStatus(err);
+      const code = String(err?.code ?? "");
+      const name = String(err?.name ?? "");
+
+      /* ---------------------------------------------------
+         TIMEOUT / CANCELACIÓN
+      --------------------------------------------------- */
+
+      if (code === "TIMEOUT" || code === "ECONNABORTED") {
         setMsgSafe("❌ El servidor tardó demasiado (timeout). Intenta nuevamente.");
-      } else if (status === 400 || status === 401) {
-        const msg = err?.response?.data?.message;
-        setMsgSafe(msg ? `❌ ${msg}` : "❌ Credenciales inválidas");
-      } else if (status === 429) {
-        const ra = Number(err?.response?.headers?.["retry-after"] ?? 0);
-        setMsgSafe(ra ? `❌ Demasiados intentos. Espera ${ra}s.` : "❌ Demasiados intentos.");
-      } else {
-        const msg = err?.response?.data?.message || err?.message || "Error de conexión";
-        setMsgSafe(`❌ ${msg}`);
+        return;
       }
+
+      if (name === "AbortError" || name === "CanceledError" || code === "ERR_CANCELED") {
+        return;
+      }
+
+      /* ---------------------------------------------------
+         CREDENCIALES
+      --------------------------------------------------- */
+
+      if (status === 400 || status === 401) {
+        /**
+         * No revelamos si el problema corresponde a:
+         * - RUT inexistente
+         * - contraseña incorrecta
+         */
+        setMsgSafe("❌ Credenciales inválidas");
+        return;
+      }
+
+      /* ---------------------------------------------------
+         RATE LIMIT
+      --------------------------------------------------- */
+
+      if (status === 429) {
+        const retryAfter = Number(
+          err?.data?.retryAfter ?? err?.data?.retry_after ?? err?.response?.headers?.["retry-after"] ?? 0
+        );
+
+        setMsgSafe(
+          retryAfter > 0
+            ? `❌ Demasiados intentos. Espera ${retryAfter}s.`
+            : "❌ Demasiados intentos. Intenta nuevamente más tarde."
+        );
+
+        return;
+      }
+
+      /* ---------------------------------------------------
+         ACCESO / SERVIDOR / RED
+      --------------------------------------------------- */
+
+      if (status === 403) {
+        setMsgSafe("❌ Acceso denegado");
+        return;
+      }
+
+      if (status >= 500) {
+        setMsgSafe("❌ El servidor no pudo procesar el inicio de sesión.");
+        return;
+      }
+
+      const backendMessage = getBackendMessage(err);
+      const errorMessage = backendMessage || err?.message || "No fue posible conectar con el servidor.";
+
+      setMsgSafe(`❌ ${errorMessage}`);
     } finally {
-      clearTimeout(timeoutId);
       abortRef.current = null;
+      submittingRef.current = false;
       setLoadingSafe(false);
     }
   };
 
+  /* =======================================================
+     UI
+  ======================================================= */
+
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-ra-marron via-ra-terracotta to-ra-sand font-sans">
-      {/* Halo / difuminado WELI (barato) */}
+      {/* Halo WELI */}
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
         <div
           className="absolute -top-44 left-1/2 -translate-x-1/2 w-[920px] h-[920px] rounded-full blur-3xl opacity-35"
@@ -208,7 +398,7 @@ export default function LoginApoderado() {
         />
       </div>
 
-      {/* Overlay Loading */}
+      {/* Loading */}
       {isLoading && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-md">
           <div className="w-full max-w-md px-4">
@@ -230,12 +420,17 @@ export default function LoginApoderado() {
         </div>
       )}
 
-      {/* Body */}
+      {/* Contenido */}
       <main className="flex-1 flex items-center justify-center px-4 py-10">
         <div className="flex w-full max-w-5xl overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm">
-          {/* ✅ Form LEFT (para diferenciar del admin) */}
+          {/* Formulario */}
           <div className="w-full md:w-1/2 flex items-center justify-center py-10">
-            <form onSubmit={handleLogin} className="w-full max-w-md px-6 sm:px-10 flex flex-col" autoComplete="on">
+            <form
+              onSubmit={handleLogin}
+              className="w-full max-w-md px-6 sm:px-10 flex flex-col"
+              autoComplete="on"
+              noValidate
+            >
               <div className="flex flex-col items-center">
                 <img
                   src={logoWeli}
@@ -269,12 +464,16 @@ export default function LoginApoderado() {
                       fill="rgba(255,255,255,0.65)"
                     />
                   </svg>
-
                   <input
                     name="rut"
+                    type="text"
                     placeholder="RUT sin puntos ni DV (ej: 16978094)"
                     inputMode="numeric"
                     autoComplete="username"
+                    maxLength={8}
+                    pattern="[0-9]*"
+                    spellCheck={false}
+                    autoCapitalize="none"
                     className="bg-transparent text-white/90 placeholder-white/50 outline-none text-sm w-full h-full pr-5"
                     value={form.rut}
                     onChange={handleChange}
@@ -282,7 +481,8 @@ export default function LoginApoderado() {
                     disabled={isLoading}
                   />
                 </div>
-                {/* Password */}
+
+                {/* Contraseña */}
                 <div className="flex items-center w-full bg-transparent border border-white/20 h-12 rounded-full overflow-hidden pl-5 gap-3">
                   <svg
                     width="13"
@@ -297,12 +497,13 @@ export default function LoginApoderado() {
                       fill="rgba(255,255,255,0.65)"
                     />
                   </svg>
-
                   <input
                     name="password"
                     type="password"
                     autoComplete="current-password"
                     placeholder="Contraseña"
+                    minLength={4}
+                    maxLength={MAX_PASSWORD_LENGTH}
                     className="bg-transparent text-white/90 placeholder-white/50 outline-none text-sm w-full h-full pr-5"
                     value={form.password}
                     onChange={handleChange}
@@ -311,8 +512,12 @@ export default function LoginApoderado() {
                   />
                 </div>
 
-                {/* Mensaje error */}
-                {mensaje && <div className="text-center text-sm font-bold text-red-300">{mensaje}</div>}
+                {/* Mensaje */}
+                {mensaje && (
+                  <div className="text-center text-sm font-bold text-red-300" role="alert">
+                    {mensaje}
+                  </div>
+                )}
 
                 {/* Submit */}
                 <button
@@ -329,7 +534,7 @@ export default function LoginApoderado() {
             </form>
           </div>
 
-          {/* ✅ Image RIGHT (desktop) */}
+          {/* Imagen desktop */}
           <div className="w-full hidden md:block md:w-1/2">
             <div className="relative h-full">
               <img
@@ -340,7 +545,6 @@ export default function LoginApoderado() {
                 decoding="async"
                 draggable={false}
               />
-              {/* overlay para legibilidad/estética */}
               <div className="absolute inset-0 bg-black/25" />
               <div className="absolute bottom-6 left-6 right-6">
                 <p className="text-white/90 text-lg font-extrabold tracking-wide">Portal de Apoderados</p>

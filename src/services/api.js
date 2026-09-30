@@ -13,7 +13,10 @@ export const ACADEMIA_HEADER = "x-academia-id";
 const API_DEBUG_KEY = "weli_api_debug";
 
 /* =========================================================
-   STORAGE SEGURO
+   STORAGE HELPERS
+   El frontend no debe almacenar ciphertext, blind indexes
+   ni claves de cifrado. Este módulo sólo persiste token y
+   contexto operacional de academia.
 ========================================================= */
 
 function safeStorageGet(key) {
@@ -46,13 +49,8 @@ function safeStorageRemove(key) {
 /**
  * Elimina un header sin depender del casing.
  *
- * Ejemplos equivalentes:
- *
- * Authorization
- * authorization
- *
- * x-academia-id
- * X-Academia-Id
+ * Authorization === authorization
+ * x-academia-id === X-Academia-Id
  */
 function removeHeaderIgnoreCase(headers, headerName) {
   if (!headers || !headerName) return;
@@ -60,9 +58,7 @@ function removeHeaderIgnoreCase(headers, headerName) {
   const target = String(headerName).toLowerCase();
 
   for (const key of Object.keys(headers)) {
-    if (String(key).toLowerCase() === target) {
-      delete headers[key];
-    }
+    if (String(key).toLowerCase() === target) delete headers[key];
   }
 }
 
@@ -86,6 +82,13 @@ function getHeaderIgnoreCase(headers, headerName) {
 
 /* =========================================================
    DEBUG
+   Nunca imprimimos:
+   - Authorization
+   - token
+   - payloads
+   - request body
+   - responses completas
+   - PII
 ========================================================= */
 
 const API_DEBUG =
@@ -102,10 +105,7 @@ const pickBaseUrl = () => {
 
   url = url.trim();
 
-  /*
-   * No permitimos que query/hash formen parte
-   * accidentalmente de la URL base.
-   */
+  // Evita incorporar query/hash accidentalmente.
   url = url.split("#")[0].split("?")[0];
 
   if (!/^https?:\/\//i.test(url)) {
@@ -114,9 +114,7 @@ const pickBaseUrl = () => {
 
   url = url.replace(/\/+$/, "");
 
-  /*
-   * El frontend trabaja siempre contra /api.
-   */
+  // El frontend siempre opera contra /api.
   if (!/\/api$/i.test(url)) {
     url = `${url}/api`;
   }
@@ -135,20 +133,18 @@ export const API_BASE_URL = pickBaseUrl();
 ========================================================= */
 
 /**
- * Solo endpoints realmente públicos.
+ * Endpoints públicos.
  *
- * Nunca:
+ * Esta instancia jamás debe enviar:
  * - Authorization
  * - x-academia-id
  */
 export const apiPublic = axios.create({
   baseURL: API_BASE_URL,
-
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
   },
-
   timeout: 15000,
 });
 
@@ -157,12 +153,10 @@ export const apiPublic = axios.create({
  */
 export const apiPrivate = axios.create({
   baseURL: API_BASE_URL,
-
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
   },
-
   timeout: 15000,
 });
 
@@ -175,6 +169,13 @@ const api = apiPrivate;
    TOKEN
 ========================================================= */
 
+/**
+ * El JWT continúa temporalmente en localStorage para preservar
+ * la arquitectura actual.
+ *
+ * Migrarlo a cookie HttpOnly sería una mejora posterior que
+ * requiere cambios coordinados backend + frontend.
+ */
 export const getToken = () => {
   const token = safeStorageGet(TOKEN_KEY);
 
@@ -184,11 +185,11 @@ export const getToken = () => {
 export const clearToken = () => {
   safeStorageRemove(TOKEN_KEY);
 
-  /*
-   * Eliminamos cualquier Authorization persistente
-   * del axios instance.
-   */
   removeHeaderIgnoreCase(apiPrivate.defaults.headers.common, "Authorization");
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("weli:sessionChanged"));
+  }
 };
 
 export const setToken = (token) => {
@@ -201,11 +202,13 @@ export const setToken = (token) => {
 
   const stored = safeStorageSet(TOKEN_KEY, normalized);
 
-  if (!stored) {
-    return false;
-  }
+  if (!stored) return false;
 
   apiPrivate.defaults.headers.common.Authorization = `Bearer ${normalized}`;
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("weli:sessionChanged"));
+  }
 
   return true;
 };
@@ -217,8 +220,11 @@ export const setToken = (token) => {
 /**
  * Exclusivamente para SUPERADMIN.
  *
- * Admin y Staff nunca deben depender
- * de localStorage para determinar su tenant.
+ * Admin y Staff nunca deben determinar tenant desde localStorage.
+ *
+ * Este módulo sólo extrae el ID operacional.
+ * Aunque exista un snapshot histórico con nombre u otros campos,
+ * esos valores jamás se utilizan para autorización ni headers.
  */
 export function clearSelectedAcademia() {
   safeStorageRemove(ACADEMIA_STORAGE_KEY);
@@ -228,9 +234,7 @@ function readSelectedAcademiaId() {
   try {
     const raw = safeStorageGet(ACADEMIA_STORAGE_KEY);
 
-    if (!raw) {
-      return 0;
-    }
+    if (!raw) return 0;
 
     /*
      * Compatibilidad con almacenamiento simple:
@@ -244,22 +248,18 @@ function readSelectedAcademiaId() {
     }
 
     /*
-     * Formato actual WELI:
+     * Compatibilidad con snapshot histórico:
      *
      * {
      *   id: 2,
      *   nombre: "...",
      *   ...
      * }
+     *
+     * ÚNICAMENTE se utiliza el ID.
      */
     const parsed = JSON.parse(raw);
 
-    /*
-     * `id` es el estándar actual.
-     *
-     * Los aliases se mantienen temporalmente
-     * para no romper snapshots antiguos.
-     */
     const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
 
     return Number.isInteger(id) && id > 0 ? id : 0;
@@ -276,18 +276,15 @@ function readSelectedAcademiaId() {
  * IMPORTANTE:
  *
  * Esto NO valida:
- * - firma;
- * - issuer;
- * - audience;
- * - expiración criptográfica.
+ * - firma
+ * - issuer
+ * - audience
+ * - expiración criptográfica
  *
- * Se utiliza exclusivamente para decisiones
- * de interfaz y construcción de headers.
+ * Sólo se utiliza para UI y construcción controlada de headers.
  *
- * La autoridad continúa siendo:
+ * La autoridad real permanece en backend:
  *
- * backend
- *   ↓
  * jwt.verify()
  *   ↓
  * requireAuth
@@ -300,18 +297,13 @@ function decodeJwtPayload(token) {
   try {
     const parts = String(token || "").split(".");
 
-    if (parts.length !== 3) {
-      return null;
-    }
+    if (parts.length !== 3) return null;
 
     const b64url = parts[1];
-
     const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
-
     const padded = b64 + "===".slice((b64.length + 3) % 4);
 
     const binary = atob(padded);
-
     const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
 
     const json = new TextDecoder("utf-8").decode(bytes);
@@ -327,17 +319,13 @@ function decodeJwtPayload(token) {
 ========================================================= */
 
 /**
- * Prioriza el formato JWT actual.
- *
- * Después conserva aliases antiguos
- * durante la transición.
+ * Prioriza formato JWT actual.
+ * Conserva aliases antiguos durante transición.
  */
 function extractRolFromToken(token) {
   const payload = decodeJwtPayload(token);
 
-  if (!payload) {
-    return 0;
-  }
+  if (!payload) return 0;
 
   const raw =
     payload?.rol_id ??
@@ -354,17 +342,15 @@ function extractRolFromToken(token) {
 }
 
 /**
- * Se mantiene para compatibilidad/UI.
+ * Compatibilidad/UI.
  *
- * No se utiliza para construir el header
- * de Admin/Staff.
+ * Para Admin/Staff NO se utiliza para construir
+ * x-academia-id.
  */
 function extractAcademiaIdFromToken(token) {
   const payload = decodeJwtPayload(token);
 
-  if (!payload) {
-    return 0;
-  }
+  if (!payload) return 0;
 
   const raw =
     payload?.academia_id ?? payload?.user?.academia_id ?? payload?.payload?.academia_id ?? payload?.academy_id ?? 0;
@@ -382,9 +368,7 @@ function safePathFromAxiosUrl(url = "") {
   try {
     const raw = String(url || "").trim();
 
-    if (!raw) {
-      return "/";
-    }
+    if (!raw) return "/";
 
     let path;
 
@@ -392,22 +376,19 @@ function safePathFromAxiosUrl(url = "") {
       path = new URL(raw).pathname || "/";
     } else {
       /*
-       * Axios puede recibir rutas relativas con query/hash:
+       * Axios puede recibir:
        *
-       * /jugadores?include_inactivos=1
+       * /jugadores?estado_id=1
        * /jugadores?estado_id=1#top
        *
-       * Para decidir si una ruta es tenantizada solamente
-       * interesa el pathname.
+       * Para tenant sólo importa pathname.
        */
       const clean = raw.split("#")[0].split("?")[0];
 
       path = clean.startsWith("/") ? clean : `/${clean}`;
     }
 
-    if (path === "/api") {
-      return "/";
-    }
+    if (path === "/api") return "/";
 
     if (path.startsWith("/api/")) {
       path = path.slice(4);
@@ -423,12 +404,9 @@ function safePathFromAxiosUrl(url = "") {
 
 function joinUrl(baseURL, url) {
   const base = String(baseURL || "").replace(/\/+$/, "");
-
   const path = String(url || "");
 
-  if (!path) {
-    return base;
-  }
+  if (!path) return base;
 
   if (/^https?:\/\//i.test(path)) {
     return path;
@@ -446,127 +424,107 @@ function joinUrl(baseURL, url) {
 ========================================================= */
 
 /**
- * Determina si un recurso opera dentro
- * de una academia.
+ * Determina si un endpoint pertenece a contexto de academia.
  *
- * MUY IMPORTANTE:
+ * IMPORTANTE:
  *
- * shouldSendAcademiaHeader()
- * NO significa que todos estos endpoints
- * recibirán necesariamente el header.
- *
- * Posteriormente el interceptor verifica el rol:
+ * isTenantRoute() NO significa que siempre se enviará
+ * x-academia-id.
  *
  * SUPERADMIN
- *     ↓
- * x-academia-id ✅
+ *   → x-academia-id desde academia seleccionada.
  *
  * ADMIN / STAFF
- *     ↓
- * x-academia-id ❌
- * academia firmada JWT ✅
+ *   → NO se envía x-academia-id.
+ *   → tenant viene del JWT firmado.
  */
 function isTenantRoute(url = "") {
   const path = safePathFromAxiosUrl(url);
 
-  /* ───────── Apoderado ───────── */
+  /* -------------------------
+     Portal apoderado
+  ------------------------- */
 
-  if (path.startsWith("/portal-apoderado")) {
-    return false;
-  }
+  if (path.startsWith("/portal-apoderado")) return false;
+  if (path.startsWith("/auth-apoderado")) return false;
 
-  if (path.startsWith("/auth-apoderado")) {
-    return false;
-  }
+  /* -------------------------
+     Auth panel
+  ------------------------- */
 
-  /* ───────── Auth panel ───────── */
+  if (path.startsWith("/auth")) return false;
 
-  if (path.startsWith("/auth")) {
-    return false;
-  }
+  /* -------------------------
+     Academias
+  ------------------------- */
 
-  /* ───────── Academias ───────── */
-
-  /*
-   * Listado/administración global.
-   */
+  // Administración global.
   if (path === "/academias" || path === "/academias/") {
     return false;
   }
 
-  /*
-   * Recurso lógico de academia seleccionada.
-   */
+  // Academia específica.
   if (/^\/academias\/\d+\/?$/.test(path)) {
     return true;
   }
 
-  /*
-   * Todos los endpoints que utilizan
-   * contexto de academia.
-   */
+  /* -------------------------
+     Recursos tenantizados
+  ------------------------- */
+
   const tenantPrefixes = [
-    /* Core */
+    // Core
     "/jugadores",
 
-    /* Finanzas */
+    // Finanzas
     "/pagos-jugador",
     "/pagos_jugador",
     "/cargos-jugador",
 
-    /* Planes */
+    // Planes
     "/planes",
     "/plan-sucursales",
     "/plan-tarifas",
     "/jugador-planes",
 
-    /* Tarifas */
+    // Tarifas
     "/tarifa-sucursales",
 
-    /* Promociones */
+    // Promociones
     "/promociones",
     "/promocion-planes",
     "/promocion-sucursales",
     "/promocion-tipos-pago",
 
-    /* Estadísticas */
+    // Estadísticas
     "/estadisticas",
 
-    /* Convocatorias */
+    // Convocatorias
     "/convocatorias",
 
-    /* Agenda / eventos */
+    // Agenda / eventos
     "/agenda",
     "/eventos",
 
-    /* Catálogos tenantizados / compatibles */
+    // Catálogos
     "/categorias",
     "/categoria",
-
     "/estado",
     "/estados",
-
     "/comunas",
-
     "/establecimientos-educ",
-
     "/prevision-medica",
-
     "/posiciones",
-
     "/sucursales-real",
     "/sucursales_real",
-
     "/situacion-pago",
     "/situacion_pago",
-
     "/tipo-pago",
     "/tipo_pago",
-
     "/medio-pago",
     "/medios-pago",
 
-    /* Usuarios */
+    // Usuarios
     "/usuarios",
   ];
 
@@ -587,19 +545,18 @@ if (bootToken) {
    PUBLIC REQUEST INTERCEPTOR
 ========================================================= */
 
+/**
+ * La instancia pública jamás permite:
+ *
+ * Authorization
+ * x-academia-id
+ */
 apiPublic.interceptors.request.use((config) => {
   const headers = config.headers ?? {};
 
   const plain = typeof headers?.toJSON === "function" ? headers.toJSON() : { ...headers };
 
-  /*
-   * La instancia pública nunca debe filtrar:
-   *
-   * - JWT
-   * - tenant
-   */
   removeHeaderIgnoreCase(plain, "Authorization");
-
   removeHeaderIgnoreCase(plain, ACADEMIA_HEADER);
 
   config.headers = plain;
@@ -618,26 +575,29 @@ apiPrivate.interceptors.request.use((config) => {
 
   const plain = typeof headers?.toJSON === "function" ? headers.toJSON() : { ...headers };
 
-  /* ─────────────────────────────────────────
-       Authorization
-    ───────────────────────────────────────── */
+  /* -------------------------------------------------------
+     AUTHORIZATION
+  ------------------------------------------------------- */
 
+  /*
+   * Nunca confiamos en Authorization manual de componentes.
+   * Se reconstruye exclusivamente desde TOKEN_KEY.
+   */
   removeHeaderIgnoreCase(plain, "Authorization");
 
   if (token) {
     plain.Authorization = `Bearer ${token}`;
   }
 
-  /* ─────────────────────────────────────────
-       Academia
-    ───────────────────────────────────────── */
+  /* -------------------------------------------------------
+     ACADEMIA
+  ------------------------------------------------------- */
 
   /*
-   * Nunca confiamos en un header manual
-   * agregado por un componente.
+   * Nunca confiamos en x-academia-id manual agregado
+   * por un componente.
    *
-   * Lo eliminamos primero y posteriormente
-   * lo reconstruimos bajo nuestras reglas.
+   * Se elimina y se reconstruye según rol.
    */
   removeHeaderIgnoreCase(plain, ACADEMIA_HEADER);
 
@@ -650,8 +610,9 @@ apiPrivate.interceptors.request.use((config) => {
     rol = extractRolFromToken(token);
 
     /*
-     * ÚNICAMENTE SUPERADMIN
-     * controla x-academia-id desde frontend.
+     * SUPERADMIN:
+     *
+     * únicamente él puede enviar x-academia-id.
      */
     if (rol === 3) {
       academiaId = readSelectedAcademiaId();
@@ -662,48 +623,37 @@ apiPrivate.interceptors.request.use((config) => {
     }
 
     /*
-     * ADMIN / STAFF
+     * ADMIN / STAFF:
      *
      * NO enviamos x-academia-id.
-     *
-     * Su tenant proviene exclusivamente
-     * del JWT firmado.
+     * El backend obtiene tenant exclusivamente
+     * desde el JWT firmado.
      */
     if (rol === 1 || rol === 2) {
       academiaId = extractAcademiaIdFromToken(token);
 
       /*
-       * Solo se obtiene para debug/UI.
+       * academiaId sólo sirve para diagnóstico/UI.
        *
-       * NO:
+       * Nunca hacemos:
        *
        * plain[ACADEMIA_HEADER] = academiaId
        */
     }
   }
 
-  /* ─────────────────────────────────────────
-       Debug
-    ───────────────────────────────────────── */
+  /* -------------------------------------------------------
+     DEBUG SEGURO
+  ------------------------------------------------------- */
 
   if (API_DEBUG) {
     const full = joinUrl(config?.baseURL, config?.url);
 
     console.log("[WELI API REQ]", (config?.method || "GET").toUpperCase(), full, {
       hasAuth: hasHeaderIgnoreCase(plain, "Authorization"),
-
       tenantRoute,
-
       rol,
-
-      /*
-       * Para Admin/Staff esto puede mostrar
-       * la academia del JWT solo como debug,
-       * pero NO significa que el header
-       * haya sido enviado.
-       */
       effectiveAcademiaHint: academiaId || null,
-
       xAcademia: getHeaderIgnoreCase(plain, ACADEMIA_HEADER) ?? null,
     });
   }
@@ -718,14 +668,16 @@ apiPrivate.interceptors.request.use((config) => {
 ========================================================= */
 
 apiPrivate.interceptors.response.use(
-  /*
-   * Respuesta normal.
-   */
+  /* -------------------------------------------------------
+     RESPUESTA CORRECTA
+  ------------------------------------------------------- */
+
   (response) => response,
 
-  /*
-   * Error.
-   */
+  /* -------------------------------------------------------
+     ERROR
+  ------------------------------------------------------- */
+
   (error) => {
     const isCanceled =
       error?.code === "ERR_CANCELED" || error?.name === "CanceledError" || Boolean(axios.isCancel?.(error));
@@ -734,9 +686,9 @@ apiPrivate.interceptors.response.use(
 
     const data = error?.response?.data ?? null;
 
-    /* =====================================================
+    /* -----------------------------------------------------
        401 / TOKEN
-    ===================================================== */
+    ----------------------------------------------------- */
 
     if (status === 401) {
       const message = String(data?.message ?? data?.detail ?? data?.error ?? "").toLowerCase();
@@ -744,9 +696,10 @@ apiPrivate.interceptors.response.use(
       /*
        * Compatible con:
        *
-       * index.ts
        * authz.ts
-       * routers antiguos
+       * auth.ts
+       * auth_apoderado.ts
+       * routers legacy
        */
       const shouldClearToken =
         message.includes("invalid_token") ||
@@ -767,9 +720,9 @@ apiPrivate.interceptors.response.use(
       }
     }
 
-    /* =====================================================
+    /* -----------------------------------------------------
        ERROR NORMALIZADO
-    ===================================================== */
+    ----------------------------------------------------- */
 
     const method = error?.config?.method ?? null;
 
@@ -783,6 +736,24 @@ apiPrivate.interceptors.response.use(
 
     const requestHeaders = error?.config?.headers ?? {};
 
+    /**
+     * No incluimos:
+     *
+     * error.response completo
+     * error.request
+     * error.config
+     * _raw
+     *
+     * porque config puede contener:
+     *
+     * Authorization
+     * request body
+     * formularios
+     * datos personales
+     *
+     * Los componentes reciben únicamente metadata segura
+     * y data devuelta explícitamente por nuestro backend.
+     */
     const normalized = {
       status,
       method,
@@ -804,27 +775,11 @@ apiPrivate.interceptors.response.use(
 
         xAcademia: getHeaderIgnoreCase(requestHeaders, ACADEMIA_HEADER) ?? null,
       },
-
-      /*
-       * Datos internos solamente
-       * durante desarrollo.
-       */
-      ...(import.meta.env.DEV
-        ? {
-            response: error?.response ?? null,
-
-            request: error?.request ?? null,
-
-            config: error?.config ?? null,
-
-            _raw: error,
-          }
-        : {}),
     };
 
-    /* =====================================================
-       LOG DESARROLLO
-    ===================================================== */
+    /* -----------------------------------------------------
+       LOG DESARROLLO SEGURO
+    ----------------------------------------------------- */
 
     if (!isCanceled && (API_DEBUG || import.meta.env.DEV)) {
       const requestMethod = (method || "GET").toUpperCase();
@@ -833,9 +788,13 @@ apiPrivate.interceptors.response.use(
         status: normalized.status,
 
         path: normalized.path,
+
         code: normalized.code,
+
         message: normalized.message,
+
         hasAuth: normalized.requestHint.hasAuth,
+
         xAcademia: normalized.requestHint.xAcademia,
 
         isNetworkError:
@@ -848,6 +807,7 @@ apiPrivate.interceptors.response.use(
             .includes("failed to fetch"),
       });
     }
+
     return Promise.reject(normalized);
   }
 );
@@ -857,4 +817,5 @@ apiPrivate.interceptors.response.use(
 ========================================================= */
 
 export default api;
+
 export { decodeJwtPayload, extractRolFromToken, extractAcademiaIdFromToken };
