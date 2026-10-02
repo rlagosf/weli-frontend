@@ -1,21 +1,25 @@
 // src/services/auth.js
 
-import {
-  apiPublic,
-  apiPrivate,
-  setToken,
-  clearToken,
-  getToken,
-  ACADEMIA_STORAGE_KEY,
-  clearSelectedAcademia,
-  decodeJwtPayload,
-} from "./api";
+import { apiPublic, apiPrivate, setToken, clearToken, getToken, clearSelectedAcademia, decodeJwtPayload } from "./api";
 
 /* =========================================================
-   CONFIG
+   CONFIGURACIÓN
 ========================================================= */
 
 const DEFAULT_TIMEOUT_MS = 10_000;
+const LOGOUT_TIMEOUT_MS = 8_000;
+const MUST_CHANGE_PASSWORD_KEY = "apoderado_must_change_password";
+const AUTH_DEBUG_KEY = "weli_auth_debug";
+
+const PANEL_ROLES = new Set([1, 2, 3]);
+const MIN_USERNAME_LENGTH = 3;
+const MAX_USERNAME_LENGTH = 80;
+const MIN_PASSWORD_LENGTH = 4;
+const MAX_PASSWORD_LENGTH = 200;
+
+/* =========================================================
+   STORAGE SEGURO
+========================================================= */
 
 function safeStorageGet(key) {
   try {
@@ -41,17 +45,19 @@ function safeStorageRemove(key) {
 }
 
 const AUTH_DEBUG =
-  String(import.meta?.env?.VITE_AUTH_DEBUG ?? "0") === "1" || String(safeStorageGet("weli_auth_debug") ?? "0") === "1";
+  String(import.meta?.env?.VITE_AUTH_DEBUG ?? "0") === "1" || String(safeStorageGet(AUTH_DEBUG_KEY) ?? "0") === "1";
 
 /* =========================================================
-   RUT
+   RUT APODERADO
 ========================================================= */
 
 /**
- * RUT sin DV.
- *
- * En el modelo actual WELI el RUT numérico
- * se envía sin puntos, guion ni dígito verificador.
+ * RUT interno WELI:
+ * - sólo cuerpo numérico;
+ * - sin puntos;
+ * - sin guion;
+ * - sin DV;
+ * - exactamente 7 u 8 dígitos.
  */
 function normalizeRut(rut) {
   return String(rut ?? "")
@@ -59,22 +65,20 @@ function normalizeRut(rut) {
     .slice(0, 8);
 }
 
+function isValidRut(rut) {
+  return /^\d{7,8}$/.test(rut);
+}
+
 /* =========================================================
    ABORT / TIMEOUT
 ========================================================= */
 
 /**
- * Combina:
- *
- * - AbortSignal externo
- * - timeout interno
- *
- * y además distingue un timeout real
- * de una cancelación solicitada por el componente.
+ * Combina un AbortSignal externo con el timeout interno
+ * del servicio y permite distinguir timeout de cancelación.
  */
 function buildAbortSignal({ signal, timeoutMs }) {
   const controller = new AbortController();
-
   const ms = Number(timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
   let timer = null;
@@ -84,7 +88,6 @@ function buildAbortSignal({ signal, timeoutMs }) {
   if (Number.isFinite(ms) && ms > 0) {
     timer = setTimeout(() => {
       timedOut = true;
-
       try {
         controller.abort();
       } catch {}
@@ -110,9 +113,7 @@ function buildAbortSignal({ signal, timeoutMs }) {
   }
 
   const cleanup = () => {
-    if (timer) {
-      clearTimeout(timer);
-    }
+    if (timer) clearTimeout(timer);
 
     if (signal && onAbort) {
       try {
@@ -123,9 +124,7 @@ function buildAbortSignal({ signal, timeoutMs }) {
 
   return {
     signal: controller.signal,
-
     cleanup,
-
     didTimeout: () => timedOut,
   };
 }
@@ -135,25 +134,19 @@ function buildAbortSignal({ signal, timeoutMs }) {
 ========================================================= */
 
 /**
- * Permite decidir explícitamente si una llamada
- * pertenece al cliente público o privado.
+ * LOGIN  -> apiPublic
+ * LOGOUT -> apiPrivate
  *
- * LOGIN:
- *   apiPublic
- *
- * LOGOUT:
- *   apiPrivate
+ * apiPublic elimina Authorization y x-academia-id.
+ * apiPrivate reconstruye Authorization desde la sesión actual.
  */
 async function postWithTimeout(client, path, body, opts = {}) {
   const timeoutMs = Number(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-
   const externalSignal = opts.signal;
-
   const t0 = performance.now();
 
   const { signal, cleanup, didTimeout } = buildAbortSignal({
     signal: externalSignal,
-
     timeoutMs,
   });
 
@@ -165,9 +158,7 @@ async function postWithTimeout(client, path, body, opts = {}) {
 
       console.log("[WELI AUTH]", path, "OK", {
         ms: Math.round(t1 - t0),
-
         status: res?.status,
-
         baseURL: res?.config?.baseURL,
       });
     }
@@ -183,38 +174,22 @@ async function postWithTimeout(client, path, body, opts = {}) {
 
       console.log("[WELI AUTH]", path, "FAIL", {
         ms: Math.round(t1 - t0),
-
         status,
-
         message: err?.message ?? "Error",
-
         timeout: didTimeout(),
-
         canceled,
       });
     }
 
-    /*
-     * Cancelación causada realmente
-     * por nuestro timeout.
-     */
     if (canceled && didTimeout()) {
       const timeoutError = new Error("TIMEOUT");
-
       timeoutError.code = "TIMEOUT";
 
-      if (status) {
-        timeoutError.status = status;
-      }
+      if (status) timeoutError.status = status;
 
       throw timeoutError;
     }
 
-    /*
-     * Cancelación externa:
-     * dejamos que Axios conserve
-     * su semántica original.
-     */
     throw err;
   } finally {
     cleanup();
@@ -222,19 +197,26 @@ async function postWithTimeout(client, path, body, opts = {}) {
 }
 
 /* =========================================================
-   VALIDACIÓN LOCAL DEL TOKEN
+   VALIDACIÓN LOCAL JWT
 ========================================================= */
 
 /**
- * IMPORTANTE:
+ * Estas validaciones son únicamente controles de coherencia
+ * del frontend.
  *
- * Solo validación de coherencia para frontend.
+ * NO validan:
+ * - firma;
+ * - issuer;
+ * - audience.
  *
- * NO verifica firma JWT.
- *
- * La autenticidad del token sigue dependiendo
- * exclusivamente del backend.
+ * La autenticidad continúa siendo responsabilidad exclusiva
+ * del backend mediante jwt.verify().
  */
+
+/* ---------------------------------------------------------
+   TOKEN PANEL
+--------------------------------------------------------- */
+
 function validatePanelTokenLocal(token) {
   const payload = decodeJwtPayload(token);
 
@@ -248,7 +230,7 @@ function validatePanelTokenLocal(token) {
 
   const rol = Number(payload?.rol_id ?? payload?.user?.rol_id ?? 0);
 
-  if (!Number.isInteger(rol) || ![1, 2, 3].includes(rol)) {
+  if (!Number.isInteger(rol) || !PANEL_ROLES.has(rol)) {
     return {
       ok: false,
       rol: 0,
@@ -256,15 +238,10 @@ function validatePanelTokenLocal(token) {
     };
   }
 
-  /*
-   * También podemos detectar localmente
-   * expiración evidente.
-   *
-   * Esto NO reemplaza al backend.
-   */
   const exp = Number(payload?.exp ?? 0);
+  const now = Math.floor(Date.now() / 1000);
 
-  if (!Number.isInteger(exp) || exp <= Math.floor(Date.now() / 1000)) {
+  if (!Number.isInteger(exp) || exp <= now) {
     return {
       ok: false,
       rol: 0,
@@ -276,9 +253,9 @@ function validatePanelTokenLocal(token) {
 
   const academiaId = rawAcademia == null ? null : Number(rawAcademia);
 
-  /*
+  /**
    * Admin / Staff:
-   * academia debe venir firmada.
+   * academia_id debe venir firmada dentro del JWT.
    */
   if ((rol === 1 || rol === 2) && (!Number.isInteger(academiaId) || academiaId <= 0)) {
     return {
@@ -288,16 +265,81 @@ function validatePanelTokenLocal(token) {
     };
   }
 
-  /*
+  /**
    * Superadmin:
-   * academia firmada puede ser NULL.
+   * academia_id puede ser NULL hasta que seleccione
+   * explícitamente una academia.
    */
   return {
     ok: true,
     rol,
-
     academia_id: Number.isInteger(academiaId) && academiaId > 0 ? academiaId : null,
   };
+}
+
+/* ---------------------------------------------------------
+   TOKEN APODERADO
+--------------------------------------------------------- */
+
+function validateApoderadoTokenLocal(token) {
+  const payload = decodeJwtPayload(token);
+
+  if (!payload) {
+    return {
+      ok: false,
+      type: "",
+    };
+  }
+
+  const type = String(payload?.type ?? payload?.user?.type ?? payload?.payload?.type ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (type !== "apoderado") {
+    return {
+      ok: false,
+      type,
+    };
+  }
+
+  const exp = Number(payload?.exp ?? 0);
+  const now = Math.floor(Date.now() / 1000);
+
+  if (!Number.isInteger(exp) || exp <= now) {
+    return {
+      ok: false,
+      type,
+    };
+  }
+
+  return {
+    ok: true,
+    type,
+  };
+}
+
+/* =========================================================
+   LIMPIEZA LOCAL
+========================================================= */
+
+/**
+ * Limpia exclusivamente estado vigente de autenticación WELI.
+ *
+ * No existen:
+ * - claves RAFC;
+ * - user_info;
+ * - snapshots de usuario.
+ */
+function clearLocalAuth() {
+  clearToken();
+  clearSelectedAcademia();
+  safeStorageRemove(MUST_CHANGE_PASSWORD_KEY);
+
+  /**
+   * weli_auth_debug NO se elimina.
+   * Es una configuración de desarrollo y no forma
+   * parte de la sesión ni contiene PII.
+   */
 }
 
 /* =========================================================
@@ -308,85 +350,60 @@ function validatePanelTokenLocal(token) {
  * POST /api/auth/login
  *
  * Body:
- *
  * {
  *   nombre_usuario,
  *   password
  * }
  *
- * NO:
+ * Admin/Staff:
+ * academia_id viene desde DB y queda firmada en JWT.
  *
- * {
- *   academia_id
- * }
- *
- * La academia de Admin/Staff viene de DB
- * y queda firmada dentro del JWT.
- *
- * El Superadmin selecciona posteriormente
- * academia desde el SuperDashboard.
+ * Superadmin:
+ * selecciona academia posteriormente.
  */
 export async function login(nombre_usuario, password, options = {}) {
   const username = String(nombre_usuario ?? "").trim();
 
   const secret = String(password ?? "");
 
-  /*
-   * Validación básica de cliente.
-   *
-   * La validación real permanece en backend/Zod.
-   */
-  if (!username) {
-    const error = new Error("Nombre de usuario requerido");
+  /* -------------------------------------------------------
+     VALIDACIÓN LOCAL
+  ------------------------------------------------------- */
+
+  if (username.length < MIN_USERNAME_LENGTH || username.length > MAX_USERNAME_LENGTH) {
+    const error = new Error("Nombre de usuario inválido");
 
     error.code = "INVALID_USERNAME";
-
     throw error;
   }
 
-  if (!secret) {
-    const error = new Error("Contraseña requerida");
+  if (secret.length < MIN_PASSWORD_LENGTH || secret.length > MAX_PASSWORD_LENGTH) {
+    const error = new Error("Contraseña inválida");
 
     error.code = "INVALID_PASSWORD";
-
     throw error;
   }
 
   try {
-    /*
-     * Eliminamos contexto de una sesión
-     * anterior antes de autenticar.
-     *
-     * Especialmente importante si el usuario
-     * anterior era Superadmin.
-     */
-    clearToken();
+    /* -----------------------------------------------------
+       LIMPIAR SESIÓN ANTERIOR
+    ----------------------------------------------------- */
 
-    clearSelectedAcademia?.();
+    clearLocalAuth();
 
-    safeStorageRemove("user_info");
+    /* -----------------------------------------------------
+       LOGIN PÚBLICO
+    ----------------------------------------------------- */
 
-    safeStorageRemove("apoderado_must_change_password");
-
-    /*
-     * LOGIN SIEMPRE PÚBLICO.
-     *
-     * Esto garantiza que no viaje:
-     *
-     * Authorization viejo
-     * x-academia-id viejo
-     */
     const res = await postWithTimeout(
       apiPublic,
       "/auth/login",
       {
         nombre_usuario: username,
-
         password: secret,
       },
       {
         timeoutMs: DEFAULT_TIMEOUT_MS,
-
         ...options,
       }
     );
@@ -399,15 +416,13 @@ export async function login(nombre_usuario, password, options = {}) {
       const error = new Error("El servidor no entregó un token válido");
 
       error.code = "NO_TOKEN";
-
       throw error;
     }
 
-    /*
-     * Sanity check local.
-     *
-     * No autentica criptográficamente.
-     */
+    /* -----------------------------------------------------
+       VALIDAR JWT ANTES DE PERSISTIR
+    ----------------------------------------------------- */
+
     const tokenInfo = validatePanelTokenLocal(token);
 
     if (!tokenInfo.ok) {
@@ -416,54 +431,53 @@ export async function login(nombre_usuario, password, options = {}) {
       const error = new Error("El servidor entregó una sesión inválida");
 
       error.code = "INVALID_SESSION";
-
       throw error;
     }
 
-    /*
-     * Solo almacenamos después de comprobar
-     * que el token tiene una estructura
-     * coherente con WELI.
-     */
+    /* -----------------------------------------------------
+       PERSISTIR SESIÓN
+    ----------------------------------------------------- */
+
     const stored = setToken(token);
 
     if (!stored) {
+      clearToken();
+
       const error = new Error("No fue posible almacenar la sesión");
 
       error.code = "TOKEN_STORAGE_ERROR";
-
       throw error;
     }
 
-    /*
-     * Por seguridad NO restauramos ninguna
-     * academia seleccionada anteriormente.
+    /**
+     * Nunca se restaura una academia seleccionada
+     * anteriormente.
      *
-     * Superadmin tendrá que seleccionar
-     * academia explícitamente.
+     * Para Superadmin, una academia nueva debe elegirse
+     * explícitamente desde SuperDashboard.
      */
-    clearSelectedAcademia?.();
+    clearSelectedAcademia();
 
     if (AUTH_DEBUG) {
       console.log("[WELI AUTH] login context", {
         rol: tokenInfo.rol,
-
         academiaJwt: tokenInfo.academia_id,
-
         superadmin: tokenInfo.rol === 3,
       });
     }
 
     return res;
   } catch (err) {
-    /*
-     * Evitamos dejar media sesión
-     * cuando el login no termina.
+    /**
+     * Nunca dejamos una sesión parcial cuando el
+     * proceso de autenticación falla.
      */
     clearToken();
+    clearSelectedAcademia();
+    safeStorageRemove(MUST_CHANGE_PASSWORD_KEY);
 
     if (AUTH_DEBUG || import.meta.env.DEV) {
-      console.warn("[WELI] Error en login:", err?.message || err);
+      console.warn("[WELI] Error en login:", err?.message ?? "Error");
     }
 
     throw err;
@@ -474,52 +488,64 @@ export async function login(nombre_usuario, password, options = {}) {
    LOGIN APODERADO
 ========================================================= */
 
+/**
+ * POST /api/auth-apoderado/login
+ *
+ * Body:
+ * {
+ *   rut,
+ *   password
+ * }
+ *
+ * El RUT enviado utiliza exclusivamente el cuerpo
+ * numérico de 7 u 8 dígitos.
+ */
 export async function loginApoderado(rut, password, options = {}) {
   const rutClean = normalizeRut(rut);
-
   const secret = String(password ?? "");
 
-  if (!rutClean) {
-    const error = new Error("RUT requerido");
+  /* -------------------------------------------------------
+     VALIDACIÓN LOCAL
+  ------------------------------------------------------- */
+
+  if (!isValidRut(rutClean)) {
+    const error = new Error("RUT inválido");
 
     error.code = "INVALID_RUT";
-
     throw error;
   }
 
-  if (!secret) {
-    const error = new Error("Contraseña requerida");
+  if (secret.length < MIN_PASSWORD_LENGTH || secret.length > MAX_PASSWORD_LENGTH) {
+    const error = new Error("Contraseña inválida");
 
     error.code = "INVALID_PASSWORD";
-
     throw error;
   }
 
   try {
-    /*
-     * Una nueva sesión de apoderado reemplaza
-     * cualquier sesión del panel anterior.
+    /* -----------------------------------------------------
+       LIMPIAR SESIÓN ANTERIOR
+    ----------------------------------------------------- */
+
+    /**
+     * Una nueva sesión de apoderado reemplaza cualquier
+     * sesión previa del panel.
      */
-    clearToken();
+    clearLocalAuth();
 
-    clearSelectedAcademia?.();
+    /* -----------------------------------------------------
+       LOGIN PÚBLICO
+    ----------------------------------------------------- */
 
-    safeStorageRemove("user_info");
-
-    /*
-     * LOGIN APODERADO TAMBIÉN ES PÚBLICO.
-     */
     const res = await postWithTimeout(
       apiPublic,
       "/auth-apoderado/login",
       {
         rut: rutClean,
-
         password: secret,
       },
       {
         timeoutMs: DEFAULT_TIMEOUT_MS,
-
         ...options,
       }
     );
@@ -532,41 +558,65 @@ export async function loginApoderado(rut, password, options = {}) {
       const error = new Error("El servidor no entregó un token válido");
 
       error.code = "NO_TOKEN";
-
       throw error;
     }
+
+    /* -----------------------------------------------------
+       VALIDAR JWT ANTES DE PERSISTIR
+    ----------------------------------------------------- */
+
+    const tokenInfo = validateApoderadoTokenLocal(token);
+
+    if (!tokenInfo.ok) {
+      clearToken();
+
+      const error = new Error("El servidor entregó una sesión de apoderado inválida");
+
+      error.code = "INVALID_SESSION";
+      throw error;
+    }
+
+    /* -----------------------------------------------------
+       PERSISTIR JWT
+    ----------------------------------------------------- */
 
     const stored = setToken(token);
 
     if (!stored) {
+      clearToken();
+
       const error = new Error("No fue posible almacenar la sesión");
 
       error.code = "TOKEN_STORAGE_ERROR";
-
       throw error;
     }
 
-    /*
-     * Contexto de academia del panel nunca
-     * debe sobrevivir una sesión apoderado.
+    /**
+     * Una sesión de apoderado jamás conserva contexto
+     * seleccionado por un Superadmin.
      */
-    clearSelectedAcademia?.();
+    clearSelectedAcademia();
+
+    /* -----------------------------------------------------
+       CAMBIO OBLIGATORIO DE CONTRASEÑA
+    ----------------------------------------------------- */
 
     if (typeof data?.must_change_password !== "undefined") {
       const mustChange = data.must_change_password === true || Number(data.must_change_password) === 1;
 
-      safeStorageSet("apoderado_must_change_password", mustChange ? "1" : "0");
+      safeStorageSet(MUST_CHANGE_PASSWORD_KEY, mustChange ? "1" : "0");
     } else {
-      safeStorageRemove("apoderado_must_change_password");
+      safeStorageRemove(MUST_CHANGE_PASSWORD_KEY);
     }
 
-    
     return res;
   } catch (err) {
     clearToken();
+    clearSelectedAcademia();
+    safeStorageRemove(MUST_CHANGE_PASSWORD_KEY);
 
     if (AUTH_DEBUG || import.meta.env.DEV) {
-      console.warn("[WELI] Error en loginApoderado:", err?.message || err);
+      console.warn("[WELI] Error en loginApoderado:", err?.message ?? "Error");
     }
 
     throw err;
@@ -577,65 +627,28 @@ export async function loginApoderado(rut, password, options = {}) {
    LOGOUT HELPER
 ========================================================= */
 
+/**
+ * El logout utiliza apiPrivate porque debe enviar
+ * el Bearer correspondiente a la sesión actual.
+ *
+ * La limpieza local se realizará igualmente aunque
+ * el backend no responda.
+ */
 async function safePostLogout(path) {
   const token = getToken();
 
-  if (!token) {
-    return;
-  }
+  if (!token) return;
 
   try {
-    /*
-     * LOGOUT usa apiPrivate porque aquí
-     * sí necesitamos enviar el Bearer token.
-     */
     await postWithTimeout(apiPrivate, path, null, {
-      timeoutMs: 8_000,
+      timeoutMs: LOGOUT_TIMEOUT_MS,
     });
   } catch {
-    /*
-     * Logout es idempotente desde frontend.
-     *
-     * Aunque el servidor no responda,
-     * limpiamos la sesión local.
+    /**
+     * Logout idempotente desde el frontend.
+     * La sesión local se limpiará de todas formas.
      */
   }
-}
-
-/* =========================================================
-   CLEAR LOCAL AUTH
-========================================================= */
-
-function clearLocalAuth() {
-  clearToken();
-
-  /*
-   * Muy importante:
-   *
-   * nunca dejar la academia elegida por
-   * un Superadmin anterior.
-   */
-  clearSelectedAcademia?.();
-
-  /*
-   * Fallback por compatibilidad por si
-   * clearSelectedAcademia no estuviese
-   * disponible durante alguna transición.
-   */
-  if (ACADEMIA_STORAGE_KEY) {
-    safeStorageRemove(ACADEMIA_STORAGE_KEY);
-  }
-
-  safeStorageRemove("user_info");
-
-  safeStorageRemove("apoderado_must_change_password");
-
-  /*
-   * No eliminamos weli_auth_debug.
-   *
-   * Es configuración de desarrollo,
-   * no información de sesión.
-   */
 }
 
 /* =========================================================
@@ -667,10 +680,10 @@ export async function logoutApoderado() {
 ========================================================= */
 
 /**
- * Se conserva para componentes que todavía
- * no conocen explícitamente el tipo de sesión.
+ * Se mantiene para componentes que todavía no conocen
+ * explícitamente el tipo de sesión.
  *
- * Los endpoints son idempotentes desde
+ * Ambos endpoints se consideran idempotentes desde
  * la perspectiva del frontend.
  */
 export async function logoutAuto() {

@@ -1,11 +1,9 @@
 // src/pages/admin/estadisticasGlobales.jsx
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Pie, Bar } from "react-chartjs-2";
 import { Chart, ArcElement, Tooltip, Legend, BarElement, CategoryScale, LinearScale } from "chart.js";
-
-import api, { getToken, clearToken } from "../../services/api";
+import api, { getToken, clearToken, clearSelectedAcademia, getSelectedAcademiaId } from "../../services/api";
 import { useTheme } from "../../context/ThemeContext";
 import IsLoading from "../../components/isLoading";
 import { jwtDecode } from "jwt-decode";
@@ -16,7 +14,6 @@ Chart.register(ArcElement, Tooltip, Legend, BarElement, CategoryScale, LinearSca
 /* =======================
    🎨 Colores gráficos
 ======================= */
-
 const EVENT_COLORS = [
   "#2563EB",
   "#0EA5E9",
@@ -33,7 +30,6 @@ const EVENT_COLORS = [
 /* =======================
    Helpers visual
 ======================= */
-
 const hexToRgba = (hex, a = 0.75) => {
   const h = String(hex || "")
     .replace("#", "")
@@ -52,7 +48,6 @@ const hexToRgba = (hex, a = 0.75) => {
       : h;
 
   const n = parseInt(full, 16);
-
   const r = (n >> 16) & 255;
   const g = (n >> 8) & 255;
   const b = n & 255;
@@ -63,46 +58,31 @@ const hexToRgba = (hex, a = 0.75) => {
 /* ─────────────────────────────────────────────────────────
    Valor centrado en porción
 ───────────────────────────────────────────────────────── */
-
 const PieValueInsidePlugin = {
   id: "pieValueInside",
 
   afterDatasetsDraw(chart, _args, pluginOptions) {
     const { ctx } = chart;
-
     const ds = chart.data.datasets?.[0];
 
-    if (!ds) {
-      return;
-    }
+    if (!ds) return;
 
     const meta = chart.getDatasetMeta(0);
-
     const values = ds.data || [];
 
     ctx.save();
-
     ctx.textAlign = "center";
-
     ctx.textBaseline = "middle";
-
     ctx.font = (pluginOptions && pluginOptions.font) || "12px sans-serif";
-
     ctx.fillStyle = (pluginOptions && pluginOptions.color) || chart.options?.plugins?.legend?.labels?.color || "#fff";
 
     meta.data.forEach((arc, i) => {
       const val = Number(values[i] || 0);
 
-      if (!arc || !Number.isFinite(val)) {
-        return;
-      }
-
-      if ((arc.circumference || 0) < 0.1) {
-        return;
-      }
+      if (!arc || !Number.isFinite(val)) return;
+      if ((arc.circumference || 0) < 0.1) return;
 
       const p = arc.tooltipPosition();
-
       ctx.fillText(String(val), p.x, p.y);
     });
 
@@ -113,124 +93,75 @@ const PieValueInsidePlugin = {
 /* ─────────────────────────────────────────────────────────
    Leyenda HTML
 ───────────────────────────────────────────────────────── */
-
 const HtmlLegendPlugin = {
   id: "htmlLegend",
 
   afterUpdate(chart, _args, options) {
     const containerID = options?.containerID;
-
-    if (!containerID) {
-      return;
-    }
+    if (!containerID) return;
 
     const root = document.getElementById(containerID);
-
-    if (!root) {
-      return;
-    }
+    if (!root) return;
 
     const textColor = options?.textColor || "rgba(255,255,255,0.86)";
-
     const borderColor = options?.borderColor || "rgba(255,255,255,0.12)";
-
     const itemBg = options?.itemBg || "rgba(0,0,0,0.12)";
-
     const itemBgHover = options?.itemBgHover || "rgba(255,255,255,0.10)";
 
     root.innerHTML = "";
-
     root.setAttribute("data-weli-legend", "1");
-
     root.style.setProperty("display", "block", "important");
-
     root.style.setProperty("width", "100%", "important");
-
     root.style.setProperty("max-width", "240px", "important");
-
     root.style.setProperty("overflow-x", "hidden", "important");
-
     root.style.setProperty("overflow-y", "auto", "important");
-
     root.style.setProperty("white-space", "normal", "important");
-
     root.style.setProperty("float", "none", "important");
 
     const labels = Array.isArray(chart.data?.labels) ? chart.data.labels : [];
-
     const ds0 = chart.data?.datasets?.[0];
 
-    if (!ds0 || !labels.length) {
-      return;
-    }
+    if (!ds0 || !labels.length) return;
 
     const values = Array.isArray(ds0.data) ? ds0.data : [];
-
     const bg = ds0.backgroundColor;
 
     const col = document.createElement("div");
-
     col.setAttribute("data-weli-legend-col", "1");
-
     col.style.setProperty("display", "grid", "important");
-
     col.style.setProperty("grid-template-columns", "repeat(2, minmax(0, 1fr))", "important");
-
     col.style.setProperty("gap", "6px", "important");
-
     col.style.setProperty("width", "100%", "important");
-
     col.style.setProperty("align-items", "stretch", "important");
 
     labels.forEach((label, i) => {
       const item = document.createElement("div");
-
       item.setAttribute("data-weli-legend-item", "1");
-
       item.style.setProperty("display", "block", "important");
-
       item.style.setProperty("width", "100%", "important");
-
       item.style.setProperty("clear", "both", "important");
-
       item.style.setProperty("padding", "4px 6px", "important");
-
       item.style.setProperty("border-radius", "10px", "important");
-
       item.style.setProperty("border", `1px solid ${borderColor}`, "important");
-
       item.style.setProperty("cursor", "pointer", "important");
-
       item.style.setProperty("user-select", "none", "important");
-
       item.style.setProperty("background", itemBg, "important");
 
       item.onmouseenter = () => item.style.setProperty("background", itemBgHover, "important");
-
       item.onmouseleave = () => item.style.setProperty("background", itemBg, "important");
 
       const row = document.createElement("div");
-
       row.style.setProperty("display", "flex", "important");
-
       row.style.setProperty("align-items", "center", "important");
-
       row.style.setProperty("gap", "6px", "important");
-
       row.style.setProperty("width", "100%", "important");
-
       row.style.setProperty("min-width", "0", "important");
 
       const box = document.createElement("span");
-
       box.style.setProperty("display", "inline-block", "important");
-
       box.style.setProperty("width", "10px", "important");
-
       box.style.setProperty("height", "10px", "important");
-
       box.style.setProperty("border-radius", "4px", "important");
-
       box.style.setProperty("flex-shrink", "0", "important");
 
       const color = Array.isArray(bg)
@@ -240,49 +171,33 @@ const HtmlLegendPlugin = {
       box.style.setProperty("background", color, "important");
 
       const visible = chart.getDataVisibility(i);
-
       box.style.setProperty("opacity", visible ? "1" : "0.3", "important");
 
       const val = Number(values?.[i] ?? 0);
-
       const text = document.createElement("span");
 
       text.style.setProperty("display", "block", "important");
-
       text.style.setProperty("width", "100%", "important");
-
       text.style.setProperty("min-width", "0", "important");
-
       text.style.setProperty("white-space", "nowrap", "important");
-
       text.style.setProperty("overflow", "hidden", "important");
-
       text.style.setProperty("text-overflow", "ellipsis", "important");
-
       text.style.setProperty("font-size", "11px", "important");
-
       text.style.setProperty("line-height", "1.1", "important");
-
       text.style.setProperty("color", textColor, "important");
-
       text.style.setProperty("opacity", visible ? "1" : "0.55", "important");
 
       text.textContent = `${String(label)} (${val})`;
-
       text.title = `${String(label)} (${val})`;
 
       item.onclick = () => {
         chart.toggleDataVisibility(i);
-
         chart.update();
       };
 
       row.appendChild(box);
-
       row.appendChild(text);
-
       item.appendChild(row);
-
       col.appendChild(item);
     });
 
@@ -295,56 +210,45 @@ Chart.register(PieValueInsidePlugin, HtmlLegendPlugin);
 /* =========================================================
    SCOPE SUPERADMIN
 ========================================================= */
+const readSelectedAcademiaId = () => {
+  return getSelectedAcademiaId();
+};
 
-const STORAGE_KEY = "weli_selected_academia";
-
-const readSelectedAcademia = () => {
+const clearPanelSession = () => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    clearToken?.();
+  } catch {}
 
-    if (!raw) {
-      return null;
-    }
+  try {
+    clearSelectedAcademia?.();
+  } catch {}
+};
 
-    /*
-     * Compatibilidad:
-     * "2"
-     */
+const fetchSelectedAcademiaContext = async (academiaId, signal) => {
+  const response = await api.get(`/academias/${encodeURIComponent(String(academiaId))}`, {
+    signal,
+    headers: {
+      "Cache-Control": "no-cache",
+    },
+  });
 
-    const direct = Number(raw);
+  const item = response?.data?.item ?? response?.data?.academia ?? response?.data ?? null;
 
-    if (Number.isInteger(direct) && direct > 0) {
-      return {
-        id: direct,
+  const id = Number(item?.id ?? 0);
 
-        deporte_id: null,
-
-        nombre: null,
-      };
-    }
-
-    const parsed = JSON.parse(raw);
-
-    const id = Number(
-      parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? parsed?.academy_id ?? parsed?.academyId ?? 0
-    );
-
-    if (!Number.isInteger(id) || id <= 0) {
-      return null;
-    }
-
-    const deporteId = Number(parsed?.deporte_id ?? parsed?.sport_id ?? 0);
-
-    return {
-      id,
-
-      deporte_id: Number.isInteger(deporteId) && deporteId > 0 ? deporteId : null,
-
-      nombre: parsed?.nombre ?? null,
-    };
-  } catch {
-    return null;
+  if (!Number.isInteger(id) || id <= 0 || id !== Number(academiaId)) {
+    const error = new Error("ACADEMIA_CONTEXT_INVALID");
+    error.code = "ACADEMIA_CONTEXT_INVALID";
+    throw error;
   }
+
+  const deporteId = Number(item?.deporte_id ?? item?.sport_id ?? 0);
+
+  return {
+    id,
+    deporte_id: Number.isInteger(deporteId) && deporteId > 0 ? deporteId : null,
+    nombre: String(item?.nombre ?? "").trim() || null,
+  };
 };
 
 const isSuperTreePath = (pathname) => String(pathname || "").startsWith("/super-dashboard/admin/dashboard");
@@ -352,24 +256,17 @@ const isSuperTreePath = (pathname) => String(pathname || "").startsWith("/super-
 /* =========================================================
    DEPORTES
 ========================================================= */
-
 function SPORT_META_FALLBACK_BASE(nombre) {
   return {
     nombre,
-
     grupos: {
       base: ["minutos_jugados", "partidos_jugados", "lesiones", "dias_baja", "sanciones_federativas"],
     },
-
     traducciones: {
       minutos_jugados: "Minutos Jugados",
-
       partidos_jugados: "Partidos Jugados",
-
       lesiones: "Lesiones",
-
       dias_baja: "Días de Baja",
-
       sanciones_federativas: "Sanciones Federativas",
     },
   };
@@ -378,7 +275,6 @@ function SPORT_META_FALLBACK_BASE(nombre) {
 const SPORT_META = {
   1: {
     nombre: "Fútbol",
-
     grupos: {
       ofensivas: [
         "goles",
@@ -392,9 +288,7 @@ const SPORT_META = {
         "centros_acertados",
         "pases_clave",
       ],
-
       defensivas: ["intercepciones", "despejes", "duelos_ganados", "entradas_exitosas", "bloqueos", "recuperaciones"],
-
       tecnicas: [
         "pases_completados",
         "pases_errados",
@@ -403,453 +297,254 @@ const SPORT_META = {
         "faltas_cometidas",
         "faltas_recibidas",
       ],
-
       fisicas: ["distancia_recorrida_km", "sprints", "duelos_aereos_ganados"],
-
       disciplina: ["tarjetas_amarillas", "tarjetas_rojas"],
-
       base: ["minutos_jugados", "partidos_jugados", "lesiones", "dias_baja", "sanciones_federativas"],
     },
-
     traducciones: {
       goles: "Goles",
-
       asistencias: "Asistencias",
-
       tiros_libres: "Tiros Libres",
-
       penales: "Penales",
-
       tiros_arco: "Tiros al Arco",
-
       tiros_fuera: "Tiros Fuera",
-
       tiros_bloqueados: "Tiros Bloqueados",
-
       regates_exitosos: "Regates Exitosos",
-
       centros_acertados: "Centros Acertados",
-
       pases_clave: "Pases Clave",
-
       intercepciones: "Intercepciones",
-
       despejes: "Despejes",
-
       duelos_ganados: "Duelos Ganados",
-
       entradas_exitosas: "Entradas Exitosas",
-
       bloqueos: "Bloqueos",
-
       recuperaciones: "Recuperaciones",
-
       pases_completados: "Pases Completados",
-
       pases_errados: "Pases Errados",
-
       posesion_perdida: "Pérdidas de Posesión",
-
       offsides: "Offsides",
-
       faltas_cometidas: "Faltas Cometidas",
-
       faltas_recibidas: "Faltas Recibidas",
-
       distancia_recorrida_km: "Distancia Recorrida (km)",
-
       sprints: "Sprints",
-
       duelos_aereos_ganados: "Duelos Aéreos Ganados",
-
       tarjetas_amarillas: "Tarjetas Amarillas",
-
       tarjetas_rojas: "Tarjetas Rojas",
-
       minutos_jugados: "Minutos Jugados",
-
       partidos_jugados: "Partidos Jugados",
-
       lesiones: "Lesiones",
-
       dias_baja: "Días de Baja",
-
       sanciones_federativas: "Sanciones Federativas",
     },
   },
 
   2: {
     nombre: "Vóleibol",
-
     grupos: {
       ataque: ["ataque_intentos", "ataque_puntos", "ataque_errores"],
-
       saque: ["saques_total", "saques_aces", "saques_positivos", "saques_errores"],
-
       bloqueo: ["bloqueos_punto", "bloqueos_toques"],
-
       recepcion: ["recepciones_total", "recepcion_positiva", "recepcion_perfecta"],
-
       defensa: ["defensas_recuperadas"],
-
       armado: ["armados_total", "armados_precision"],
-
       eficiencia: ["sideout_pct", "breakpoints_pct", "errores_totales"],
-
       base: ["minutos_jugados", "partidos_jugados", "lesiones", "dias_baja", "sanciones_federativas"],
     },
-
     traducciones: {
       ataque_intentos: "Ataque - Intentos",
-
       ataque_puntos: "Ataque - Puntos",
-
       ataque_errores: "Ataque - Errores",
-
       saques_total: "Saques Totales",
-
       saques_aces: "Aces de Saque",
-
       saques_positivos: "Saques Positivos",
-
       saques_errores: "Errores de Saque",
-
       bloqueos_punto: "Bloqueos Punto",
-
       bloqueos_toques: "Toques de Bloqueo",
-
       recepciones_total: "Recepciones Totales",
-
       recepcion_positiva: "Recepción Positiva",
-
       recepcion_perfecta: "Recepción Perfecta",
-
       defensas_recuperadas: "Defensas Recuperadas",
-
       armados_total: "Armados Totales",
-
       armados_precision: "Precisión de Armado",
-
       sideout_pct: "Sideout (%)",
-
       breakpoints_pct: "Breakpoints (%)",
-
       errores_totales: "Errores Totales",
-
       minutos_jugados: "Minutos Jugados",
-
       partidos_jugados: "Partidos Jugados",
-
       lesiones: "Lesiones",
-
       dias_baja: "Días de Baja",
-
       sanciones_federativas: "Sanciones Federativas",
     },
   },
 
   3: {
     nombre: "Tenis",
-
     grupos: {
       servicio: ["primer_servicio_pct", "puntos_primer_servicio", "puntos_segundo_servicio", "aces", "dobles_faltas"],
-
       break_points: ["break_points_oportunidades", "break_points_convertidos"],
-
       juego: ["winners", "errores_no_forzados", "peloteos_cortos_ganados"],
-
       totales: ["puntos_ganados_total", "juegos_ganados_total"],
-
       base: ["minutos_jugados", "partidos_jugados", "lesiones", "dias_baja", "sanciones_federativas"],
     },
-
     traducciones: {
       primer_servicio_pct: "Primer Servicio (%)",
-
       puntos_primer_servicio: "Puntos con Primer Servicio",
-
       puntos_segundo_servicio: "Puntos con Segundo Servicio",
-
       aces: "Aces",
-
       dobles_faltas: "Dobles Faltas",
-
       break_points_oportunidades: "Break Points - Oportunidades",
-
       break_points_convertidos: "Break Points - Convertidos",
-
       winners: "Winners",
-
       errores_no_forzados: "Errores No Forzados",
-
       peloteos_cortos_ganados: "Peloteos Cortos Ganados",
-
       puntos_ganados_total: "Puntos Ganados",
-
       juegos_ganados_total: "Juegos Ganados",
-
       minutos_jugados: "Minutos Jugados",
-
       partidos_jugados: "Partidos Jugados",
-
       lesiones: "Lesiones",
-
       dias_baja: "Días de Baja",
-
       sanciones_federativas: "Sanciones Federativas",
     },
   },
 
   4: {
     nombre: "Pádel",
-
     grupos: {
       servicio: ["primer_saque_pct", "puntos_primer_saque", "puntos_segundo_saque"],
-
       puntos_oro: ["puntos_oro_jugados", "puntos_oro_ganados", "puntos_oro_ganados_con_saque"],
-
       precision: ["errores_no_forzados", "errores_forzados", "winners"],
-
       posicionamiento: ["tiempo_red_pct", "tiempo_fondo_pct", "puntos_red_ganados"],
-
       voleas: ["voleas_total", "voleas_ganadoras", "voleas_errores"],
-
       remates: ["remates_total", "remates_ganadores", "remates_errores"],
-
       base: ["minutos_jugados", "partidos_jugados", "lesiones", "dias_baja", "sanciones_federativas"],
     },
-
     traducciones: {
       primer_saque_pct: "Primer Saque (%)",
-
       puntos_primer_saque: "Puntos con Primer Saque",
-
       puntos_segundo_saque: "Puntos con Segundo Saque",
-
       puntos_oro_jugados: "Puntos de Oro Jugados",
-
       puntos_oro_ganados: "Puntos de Oro Ganados",
-
       puntos_oro_ganados_con_saque: "Puntos de Oro Ganados con Saque",
-
       errores_no_forzados: "Errores No Forzados",
-
       errores_forzados: "Errores Forzados",
-
       winners: "Winners",
-
       tiempo_red_pct: "Tiempo en Red (%)",
-
       tiempo_fondo_pct: "Tiempo en Fondo (%)",
-
       puntos_red_ganados: "Puntos Ganados en Red",
-
       voleas_total: "Voleas Totales",
-
       voleas_ganadoras: "Voleas Ganadoras",
-
       voleas_errores: "Errores de Volea",
-
       remates_total: "Remates Totales",
-
       remates_ganadores: "Remates Ganadores",
-
       remates_errores: "Errores de Remate",
-
       minutos_jugados: "Minutos Jugados",
-
       partidos_jugados: "Partidos Jugados",
-
       lesiones: "Lesiones",
-
       dias_baja: "Días de Baja",
-
       sanciones_federativas: "Sanciones Federativas",
     },
   },
 
   5: {
     nombre: "Tenis de mesa",
-
     grupos: {
       servicio_recepcion: ["efectividad_servicio_pct", "efectividad_devolucion_pct", "primer_saque_pct"],
-
       juego: ["errores_no_forzados", "winners"],
-
       presion: ["puntos_presion_jugados", "puntos_presion_ganados"],
-
       dobles: ["dobles_puntos_jugados", "dobles_puntos_ganados"],
-
       fisiologia: ["fc_media", "fc_max", "lactato"],
-
       base: ["minutos_jugados", "partidos_jugados", "lesiones", "dias_baja", "sanciones_federativas"],
     },
-
     traducciones: {
       efectividad_servicio_pct: "Efectividad de Servicio (%)",
-
       efectividad_devolucion_pct: "Efectividad de Devolución (%)",
-
       primer_saque_pct: "Primer Saque (%)",
-
       errores_no_forzados: "Errores No Forzados",
-
       winners: "Winners",
-
       puntos_presion_jugados: "Puntos de Presión Jugados",
-
       puntos_presion_ganados: "Puntos de Presión Ganados",
-
       dobles_puntos_jugados: "Puntos de Dobles Jugados",
-
       dobles_puntos_ganados: "Puntos de Dobles Ganados",
-
       fc_media: "Frecuencia Cardíaca Media",
-
       fc_max: "Frecuencia Cardíaca Máxima",
-
       lactato: "Lactato",
-
       minutos_jugados: "Minutos Jugados",
-
       partidos_jugados: "Partidos Jugados",
-
       lesiones: "Lesiones",
-
       dias_baja: "Días de Baja",
-
       sanciones_federativas: "Sanciones Federativas",
     },
   },
 
   6: {
     nombre: "Básquetbol",
-
     grupos: {
       produccion: ["puntos", "asistencias", "plus_minus", "pir", "per"],
-
       rebotes: ["rebotes_ofensivos", "rebotes_defensivos"],
-
       defensa: ["robos", "bloqueos"],
-
       control: ["perdidas", "faltas"],
-
       eficiencia: ["ts_pct", "efg_pct", "usg_pct"],
-
       base: ["minutos_jugados", "partidos_jugados", "lesiones", "dias_baja", "sanciones_federativas"],
     },
-
     traducciones: {
       puntos: "Puntos",
-
       rebotes_ofensivos: "Rebotes Ofensivos",
-
       rebotes_defensivos: "Rebotes Defensivos",
-
       asistencias: "Asistencias",
-
       robos: "Robos",
-
       bloqueos: "Bloqueos",
-
       perdidas: "Pérdidas",
-
       faltas: "Faltas",
-
       ts_pct: "True Shooting (%)",
-
       efg_pct: "eFG (%)",
-
       usg_pct: "Usage (%)",
-
       plus_minus: "+/-",
-
       pir: "PIR",
-
       per: "PER",
-
       minutos_jugados: "Minutos Jugados",
-
       partidos_jugados: "Partidos Jugados",
-
       lesiones: "Lesiones",
-
       dias_baja: "Días de Baja",
-
       sanciones_federativas: "Sanciones Federativas",
     },
   },
 
   7: {
     nombre: "Fútbol Americano",
-
     grupos: {
       pases: ["pases_completos", "pases_intentados", "pases_yardas", "pases_touchdowns", "pases_intercepciones"],
-
       acarreos: ["acarreos_intentos", "acarreos_yardas", "acarreos_touchdowns"],
-
       recepciones: ["recepciones_total", "recepciones_yardas", "recepciones_touchdowns"],
-
       defensa: ["tackles_totales", "sacks", "intercepciones_defensivas", "fumbles_recuperados"],
-
       generales: ["yardas_totales", "perdidas_balon", "tiempo_posesion_segundos"],
-
       tercer_down: ["tercer_down_intentos", "tercer_down_conversiones", "tercer_down_efectividad_pct"],
-
       base: ["minutos_jugados", "partidos_jugados", "lesiones", "dias_baja", "sanciones_federativas"],
     },
-
     traducciones: {
       pases_completos: "Pases Completos",
-
       pases_intentados: "Pases Intentados",
-
       pases_yardas: "Yardas por Pase",
-
       pases_touchdowns: "Touchdowns por Pase",
-
       pases_intercepciones: "Intercepciones Sufridas",
-
       acarreos_intentos: "Intentos de Acarreo",
-
       acarreos_yardas: "Yardas por Acarreo",
-
       acarreos_touchdowns: "Touchdowns por Acarreo",
-
       recepciones_total: "Recepciones",
-
       recepciones_yardas: "Yardas por Recepción",
-
       recepciones_touchdowns: "Touchdowns por Recepción",
-
       tackles_totales: "Tackles Totales",
-
       sacks: "Sacks",
-
       intercepciones_defensivas: "Intercepciones Defensivas",
-
       fumbles_recuperados: "Fumbles Recuperados",
-
       yardas_totales: "Yardas Totales",
-
       perdidas_balon: "Pérdidas de Balón",
-
       tiempo_posesion_segundos: "Tiempo de Posesión (seg)",
-
       tercer_down_intentos: "3rd Down - Intentos",
-
       tercer_down_conversiones: "3rd Down - Conversiones",
-
       tercer_down_efectividad_pct: "3rd Down - Efectividad (%)",
-
       minutos_jugados: "Minutos Jugados",
-
       partidos_jugados: "Partidos Jugados",
-
       lesiones: "Lesiones",
-
       dias_baja: "Días de Baja",
-
       sanciones_federativas: "Sanciones Federativas",
     },
   },
@@ -858,10 +553,8 @@ const SPORT_META = {
 /* =========================================================
    AUTH HELPERS
 ========================================================= */
-
 const isExpired = (decoded) => {
   const now = Math.floor(Date.now() / 1000);
-
   return !decoded?.exp || decoded.exp <= now;
 };
 
@@ -869,7 +562,6 @@ const extractRol = (decoded) => {
   const raw = decoded?.rol_id ?? decoded?.user?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol ?? 0;
 
   const n = Number(raw);
-
   return Number.isInteger(n) && [1, 2, 3].includes(n) ? n : 0;
 };
 
@@ -877,7 +569,6 @@ const extractRol = (decoded) => {
    ACADEMIA JWT
    ADMIN / STAFF
 ========================================================= */
-
 const extractTokenAcademiaId = (decoded) => {
   const raw =
     decoded?.academia_id ??
@@ -895,7 +586,6 @@ const extractTokenAcademiaId = (decoded) => {
 /* =========================================================
    DEPORTE JWT
 ========================================================= */
-
 const extractTokenDeporteId = (decoded) => {
   const raw =
     decoded?.deporte_id ??
@@ -917,41 +607,18 @@ const getErrStatus = (e) => e?.status ?? e?.response?.status ?? 0;
 /* =========================================================
    RESPUESTAS LISTA
 ========================================================= */
-
 const normalizeListResponse = (resOrArr) => {
-  if (Array.isArray(resOrArr)) {
-    return resOrArr;
-  }
-
-  if (!resOrArr || resOrArr.status === 204) {
-    return [];
-  }
+  if (Array.isArray(resOrArr)) return resOrArr;
+  if (!resOrArr || resOrArr.status === 204) return [];
 
   const d = resOrArr?.data ?? resOrArr;
 
-  if (Array.isArray(d)) {
-    return d;
-  }
-
-  if (Array.isArray(d?.results)) {
-    return d.results;
-  }
-
-  if (Array.isArray(d?.items)) {
-    return d.items;
-  }
-
-  if (Array.isArray(d?.rows)) {
-    return d.rows;
-  }
-
-  if (d?.ok && Array.isArray(d.items)) {
-    return d.items;
-  }
-
-  if (d?.ok && Array.isArray(d.data)) {
-    return d.data;
-  }
+  if (Array.isArray(d)) return d;
+  if (Array.isArray(d?.results)) return d.results;
+  if (Array.isArray(d?.items)) return d.items;
+  if (Array.isArray(d?.rows)) return d.rows;
+  if (d?.ok && Array.isArray(d.items)) return d.items;
+  if (d?.ok && Array.isArray(d.data)) return d.data;
 
   return [];
 };
@@ -959,14 +626,12 @@ const normalizeListResponse = (resOrArr) => {
 /* =========================================================
    CATÁLOGOS
 ========================================================= */
-
 const normalizeCatalog = (arr) =>
   (Array.isArray(arr) ? arr : [])
     .map((x) => ({
       id: Number(
         x?.id ?? x?.categoria_id ?? x?.posicion_id ?? x?.estado_id ?? x?.sucursal_id ?? x?.prevision_medica_id
       ),
-
       nombre: String(x?.nombre ?? x?.descripcion ?? "").trim(),
     }))
     .filter((x) => Number.isFinite(x.id) && x.nombre);
@@ -974,30 +639,23 @@ const normalizeCatalog = (arr) =>
 /* =========================================================
    GET CON FALLBACK CONTROLADO
 ========================================================= */
-
 const tryGetList = async (paths, { signal } = {}) => {
   const list = Array.isArray(paths) ? paths : [paths];
-
   const variants = [];
 
   for (const p0 of list) {
     const p = String(p0 || "");
-
     const base = p.startsWith("/") ? p : `/${p}`;
 
     variants.push(base, base.endsWith("/") ? base.slice(0, -1) : `${base}/`);
   }
 
   const uniq = [...new Set(variants)];
-
   let lastError = null;
 
   for (const url of uniq) {
     try {
-      const response = await api.get(url, {
-        signal,
-      });
-
+      const response = await api.get(url, { signal });
       return normalizeListResponse(response);
     } catch (error) {
       lastError = error;
@@ -1008,28 +666,13 @@ const tryGetList = async (paths, { signal } = {}) => {
 
       const status = getErrStatus(error);
 
-      /*
-       * Auth / AuthZ:
-       * nunca probar otra ruta.
-       */
-
       if (status === 401 || status === 403) {
         throw error;
       }
 
-      /*
-       * Solo 404/405 justifican
-       * probar una variante.
-       */
-
       if (status === 404 || status === 405) {
         continue;
       }
-
-      /*
-       * 400, 409, 422, 500...
-       * son errores reales.
-       */
 
       throw error;
     }
@@ -1041,38 +684,35 @@ const tryGetList = async (paths, { signal } = {}) => {
 /* =========================================================
    RESOLVER DEPORTE
 
-   IMPORTANTE:
    academia_id NO se resuelve aquí.
 
    Admin / Staff:
    academia exclusivamente desde JWT.
 
    Superadmin:
-   academia exclusivamente desde selector.
+   academia exclusivamente desde selector ID;
+   deporte/nombre se recuperan desde backend.
 ========================================================= */
-
-const resolveDeporteId = ({ decoded, snap, locStateScope, allowSnapshot = false }) => {
+const resolveDeporteId = ({ decoded, academiaContext, locStateScope }) => {
   const stateScope = locStateScope || {};
 
-  const fromSnapshot = allowSnapshot && snap ? Number(snap?.deporte_id ?? 0) : 0;
+  const fromAcademia = Number(academiaContext?.deporte_id ?? 0);
 
   const fromState = Number(stateScope?.deporte_id ?? stateScope?.sport_id ?? 0);
 
   const fromToken = extractTokenDeporteId(decoded);
 
-  const deporteId =
-    (Number.isFinite(fromSnapshot) && fromSnapshot > 0 ? fromSnapshot : 0) ||
+  return (
+    (Number.isFinite(fromAcademia) && fromAcademia > 0 ? fromAcademia : 0) ||
     (Number.isFinite(fromToken) && fromToken > 0 ? fromToken : 0) ||
     (Number.isFinite(fromState) && fromState > 0 ? fromState : 0) ||
-    null;
-
-  return deporteId;
+    null
+  );
 };
 
 /* =========================================================
    AGGREGATE PATH
 ========================================================= */
-
 const buildAggPath = ({ academia_id, deporte_id }) => {
   const qs = new URLSearchParams();
 
@@ -1092,7 +732,6 @@ const buildAggPath = ({ academia_id, deporte_id }) => {
 /* =========================================================
    DERIVAR DEPORTE DESDE JUGADORES
 ========================================================= */
-
 const deriveDeporteFromPlayers = (arr) => {
   const safe = Array.isArray(arr) ? arr : [];
 
@@ -1107,13 +746,11 @@ const deriveDeporteFromPlayers = (arr) => {
   }
 
   let best = null;
-
   let bestCount = 0;
 
   for (const [key, value] of freq.entries()) {
     if (value > bestCount) {
       best = key;
-
       bestCount = value;
     }
   }
@@ -1124,43 +761,27 @@ const deriveDeporteFromPlayers = (arr) => {
 /* =========================================================
    COMPONENT
 ========================================================= */
-
 export default function EstadisticasGlobales() {
   const { darkMode, themeTokens } = useTheme();
-
   const navigate = useNavigate();
-
   const location = useLocation();
 
   const [jugadoresActivos, setJugadoresActivos] = useState([]);
-
   const [jugadoresTodos, setJugadoresTodos] = useState([]);
-
   const [categorias, setCategorias] = useState([]);
-
   const [posiciones, setPosiciones] = useState([]);
-
   const [estados, setEstados] = useState([]);
-
   const [sucursales, setSucursales] = useState([]);
-
   const [previsiones, setPrevisiones] = useState([]);
-
   const [totals, setTotals] = useState(null);
-
   const [aggMeta, setAggMeta] = useState(null);
-
   const [isLoading, setIsLoading] = useState(true);
-
   const [error, setError] = useState("");
-
   const [rol, setRol] = useState(null);
 
   const [scope, setScope] = useState({
     academia_id: null,
-
     deporte_id: null,
-
     academia_nombre: null,
   });
 
@@ -1171,7 +792,6 @@ export default function EstadisticasGlobales() {
   /* =======================================================
      DERIVADOS
   ======================================================= */
-
   const deporteId = scope.deporte_id ? Number(scope.deporte_id) : null;
 
   const sportMeta =
@@ -1179,115 +799,64 @@ export default function EstadisticasGlobales() {
 
   /* =======================================================
      TOKENS DE APARIENCIA
-
-     ThemeContext es la fuente visual principal.
-     Dashboard conserva el fondo global de la aplicación.
   ======================================================= */
-
   const tokens = useMemo(() => {
-    if (themeTokens) {
-      return themeTokens;
-    }
+    if (themeTokens) return themeTokens;
 
     if (darkMode) {
       return {
         surface: "#1F2937",
-
         surfaceSoft: "#172033",
-
         surface2: "#263244",
-
         surfaceHover: "#374151",
-
         primary: "#FFDDA1",
-
         primaryHover: "#FFE5B8",
-
         primaryContrast: "#3F2D18",
-
         secondary: "#B79F69",
-
         secondaryHover: "#C8B27F",
-
         secondaryContrast: "#111827",
-
         text: "#F9FAFB",
-
         textMuted: "#D1D5DB",
-
         icon: "#FFDDA1",
-
         border: "#374151",
-
         borderStrong: "#4B5563",
-
         inputBg: "#111827",
-
         inputText: "#F9FAFB",
-
         inputBorder: "#4B5563",
-
         tableHead: "#172033",
-
         focus: "#FFDDA1",
-
         overlay: "rgba(0,0,0,.65)",
       };
     }
 
     return {
       surface: "#FFFFFF",
-
       surfaceSoft: "#FAF6EE",
-
       surface2: "#F7EAD4",
-
       surfaceHover: "#FFF9F2",
-
       primary: "#AA5013",
-
       primaryHover: "#994812",
-
       primaryContrast: "#FFFFFF",
-
       secondary: "#6D5829",
-
       secondaryHover: "#5E4B23",
-
       secondaryContrast: "#FFFFFF",
-
       text: "#3B2A1E",
-
       textMuted: "#766657",
-
       icon: "#AA5013",
-
       border: "#D8C7AE",
-
       borderStrong: "#BFA684",
-
       inputBg: "#FFFFFF",
-
       inputText: "#3B2A1E",
-
       inputBorder: "#9B7B50",
-
       tableHead: "#F7EAD4",
-
       focus: "#AA5013",
-
       overlay: "rgba(0,0,0,.55)",
     };
   }, [themeTokens, darkMode]);
 
   /* =======================================================
      UI
-
-     - El fondo de página permanece transparente.
-     - Las superficies reales consumen themeTokens.
-     - Errores y advertencias conservan colores semánticos.
   ======================================================= */
-
   const ui = useMemo(() => {
     const page = "min-h-[calc(100vh-100px)] w-full bg-transparent px-3 sm:px-5 lg:px-7 2xl:px-10 pt-4 pb-16";
 
@@ -1306,20 +875,14 @@ export default function EstadisticasGlobales() {
     const card = "rounded-2xl shadow-[0_14px_42px_rgba(0,0,0,0.12)] border p-6 transition-colors duration-200";
 
     const axisText = tokens.textMuted;
-
     const grid = hexToRgba(tokens.borderStrong, 0.35);
-
     const legendText = tokens.textMuted;
-
     const pieLabel = tokens.text;
 
     const legendTheme = {
       textColor: tokens.textMuted,
-
       borderColor: tokens.border,
-
       itemBg: tokens.surfaceSoft,
-
       itemBgHover: tokens.surfaceHover,
     };
 
@@ -1350,9 +913,7 @@ export default function EstadisticasGlobales() {
 
       cardStyle: {
         backgroundColor: tokens.surface,
-
         borderColor: tokens.border,
-
         color: tokens.text,
       },
 
@@ -1365,10 +926,8 @@ export default function EstadisticasGlobales() {
   /* =======================================================
      TITLE / BREADCRUMB
   ======================================================= */
-
   useEffect(() => {
     const prevTitle = document.title;
-
     const title = `Estadísticas Globales — ${sportMeta.nombre}`;
 
     document.dispatchEvent(
@@ -1394,73 +953,138 @@ export default function EstadisticasGlobales() {
 
   /* =======================================================
      AUTH / SCOPE
-
-     SEGURIDAD CONSERVADA:
-
-     Admin / Staff:
-     academia desde JWT.
-
-     Superadmin:
-     academia desde selector.
   ======================================================= */
-
   useEffect(() => {
     derivedOnceRef.current = false;
 
-    try {
-      const token = getToken();
+    const abort = new AbortController();
 
-      if (!token) {
-        throw new Error("no-token");
-      }
+    (async () => {
+      try {
+        const token = getToken();
 
-      const decoded = jwtDecode(token);
+        if (!token) {
+          throw new Error("no-token");
+        }
 
-      if (isExpired(decoded)) {
-        throw new Error("expired");
-      }
+        const decoded = jwtDecode(token);
 
-      const parsedRol = extractRol(decoded);
+        if (isExpired(decoded)) {
+          throw new Error("expired");
+        }
 
-      if (![1, 2, 3].includes(parsedRol)) {
-        navigate("/admin", {
-          replace: true,
-        });
+        const parsedRol = extractRol(decoded);
 
-        return;
-      }
-
-      const isSuperTree = isSuperTreePath(location.pathname);
-
-      /* =================================================
-         SUPERADMIN
-      ================================================= */
-
-      if (parsedRol === 3) {
-        /*
-         * Superadmin no opera desde /admin.
-         *
-         * NO logout.
-         */
-
-        if (!isSuperTree) {
-          navigate("/super-dashboard", {
+        if (![1, 2, 3].includes(parsedRol)) {
+          navigate("/admin", {
             replace: true,
           });
 
           return;
         }
 
-        const snap = readSelectedAcademia();
+        const isSuperTree = isSuperTreePath(location.pathname);
 
-        /*
-         * Superadmin válido sin academia.
-         *
-         * NO logout.
-         */
+        /* =================================================
+           SUPERADMIN
+        ================================================= */
+        if (parsedRol === 3) {
+          if (!isSuperTree) {
+            navigate("/super-dashboard", {
+              replace: true,
+            });
 
-        if (!snap?.id) {
-          navigate("/super-dashboard", {
+            return;
+          }
+
+          const academiaId = readSelectedAcademiaId();
+
+          if (!academiaId) {
+            navigate("/super-dashboard", {
+              replace: true,
+            });
+
+            return;
+          }
+
+          let academiaContext = null;
+
+          try {
+            academiaContext = await fetchSelectedAcademiaContext(academiaId, abort.signal);
+          } catch (errorAcademia) {
+            if (abort.signal.aborted) {
+              return;
+            }
+
+            const status = getErrStatus(errorAcademia);
+
+            if (status === 401) {
+              clearPanelSession();
+
+              navigate("/login", {
+                replace: true,
+              });
+
+              return;
+            }
+
+            if (status === 403 || status === 404 || errorAcademia?.code === "ACADEMIA_CONTEXT_INVALID") {
+              try {
+                clearSelectedAcademia?.();
+              } catch {}
+
+              navigate("/super-dashboard", {
+                replace: true,
+              });
+
+              return;
+            }
+
+            setError(
+              errorAcademia?.response?.data?.message ||
+                errorAcademia?.message ||
+                "No fue posible cargar el contexto de la academia seleccionada."
+            );
+          }
+
+          if (abort.signal.aborted) {
+            return;
+          }
+
+          const deporteIdResolved = resolveDeporteId({
+            decoded,
+            academiaContext,
+            locStateScope: location.state?.scope,
+          });
+
+          setRol(parsedRol);
+
+          setScope({
+            academia_id: academiaId,
+            deporte_id: deporteIdResolved,
+            academia_nombre: academiaContext?.nombre ?? null,
+          });
+
+          return;
+        }
+
+        /* =================================================
+           ADMIN / STAFF
+        ================================================= */
+        if (isSuperTree) {
+          navigate("/admin", {
+            replace: true,
+          });
+
+          return;
+        }
+
+        const academiaId = extractTokenAcademiaId(decoded);
+
+        if (!academiaId) {
+          clearPanelSession();
+
+          navigate("/login", {
             replace: true,
           });
 
@@ -1469,98 +1093,33 @@ export default function EstadisticasGlobales() {
 
         const deporteIdResolved = resolveDeporteId({
           decoded,
-          snap,
-
+          academiaContext: null,
           locStateScope: location.state?.scope,
-
-          allowSnapshot: true,
         });
 
         setRol(parsedRol);
 
         setScope({
-          /*
-           * Academia EXCLUSIVAMENTE
-           * desde selector.
-           */
-
-          academia_id: Number(snap.id),
-
+          academia_id: academiaId,
           deporte_id: deporteIdResolved,
-
-          academia_nombre: snap?.nombre ?? null,
+          academia_nombre: null,
         });
+      } catch {
+        if (abort.signal.aborted) {
+          return;
+        }
 
-        return;
-      }
-
-      /* =================================================
-         ADMIN / STAFF
-      ================================================= */
-
-      /*
-       * Admin/Staff no pueden operar
-       * desde árbol Superadmin.
-       *
-       * NO logout.
-       */
-
-      if (isSuperTree) {
-        navigate("/admin", {
-          replace: true,
-        });
-
-        return;
-      }
-
-      const academiaId = extractTokenAcademiaId(decoded);
-
-      /*
-       * Token de Admin/Staff sin academia_id
-       * no cumple el contrato vigente.
-       */
-
-      if (!academiaId) {
-        clearToken();
+        clearPanelSession();
 
         navigate("/login", {
           replace: true,
         });
-
-        return;
       }
+    })();
 
-      const deporteIdResolved = resolveDeporteId({
-        decoded,
-
-        snap: null,
-
-        locStateScope: location.state?.scope,
-
-        allowSnapshot: false,
-      });
-
-      setRol(parsedRol);
-
-      setScope({
-        /*
-         * Academia EXCLUSIVAMENTE
-         * desde JWT firmado.
-         */
-
-        academia_id: academiaId,
-
-        deporte_id: deporteIdResolved,
-
-        academia_nombre: null,
-      });
-    } catch {
-      clearToken();
-
-      navigate("/login", {
-        replace: true,
-      });
-    }
+    return () => {
+      abort.abort();
+    };
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate, location.pathname, location.state]);
@@ -1568,7 +1127,6 @@ export default function EstadisticasGlobales() {
   /* =======================================================
      LOAD DATA
   ======================================================= */
-
   useEffect(() => {
     if (rol == null) {
       return;
@@ -1584,7 +1142,6 @@ export default function EstadisticasGlobales() {
 
     (async () => {
       setIsLoading(true);
-
       setError("");
 
       try {
@@ -1595,7 +1152,6 @@ export default function EstadisticasGlobales() {
         /* =============================================
              JUGADORES TODOS
         ============================================= */
-
         const jugadoresTodosPaths =
           rol === 2
             ? [
@@ -1613,7 +1169,6 @@ export default function EstadisticasGlobales() {
         /* =============================================
              JUGADORES ACTIVOS
         ============================================= */
-
         const jugadoresActivosPaths =
           rol === 2
             ? [
@@ -1625,10 +1180,6 @@ export default function EstadisticasGlobales() {
                 "/jugadores",
               ]
             : ["/jugadores?estado_id=1", "/jugadores?estado=1", "/jugadores"];
-
-        /* =============================================
-             JUGADORES
-        ============================================= */
 
         const [rawTodos, rawActivos] = await Promise.all([
           tryGetList(jugadoresTodosPaths, {
@@ -1647,7 +1198,6 @@ export default function EstadisticasGlobales() {
         /* =============================================
              DERIVAR DEPORTE
         ============================================= */
-
         if (!depId) {
           const d1 = deriveDeporteFromPlayers(rawActivos);
 
@@ -1660,7 +1210,6 @@ export default function EstadisticasGlobales() {
 
             setScope((previous) => ({
               ...previous,
-
               deporte_id: d2,
             }));
           }
@@ -1669,7 +1218,6 @@ export default function EstadisticasGlobales() {
         /* =============================================
              CATÁLOGOS
         ============================================= */
-
         const [cats, poss, ests, sucs, prevs] = await Promise.all([
           tryGetList(["/categorias"], {
             signal: abort.signal,
@@ -1707,13 +1255,9 @@ export default function EstadisticasGlobales() {
         const prevsN = normalizeCatalog(prevs);
 
         setCategorias(catsN);
-
         setPosiciones(possN);
-
         setEstados(estsN);
-
         setSucursales(sucsN);
-
         setPrevisiones(prevsN);
 
         const posMapLocal = new Map((possN ?? []).map((p) => [Number(p.id), p.nombre]));
@@ -1729,7 +1273,6 @@ export default function EstadisticasGlobales() {
         /* =============================================
              NORMALIZAR JUGADORES
         ============================================= */
-
         const normalizeJugadores = (arr) => {
           const safe = Array.isArray(arr) ? arr : [];
 
@@ -1780,10 +1323,8 @@ export default function EstadisticasGlobales() {
 
         /* =============================================
              FILTRO VISUAL DE SCOPE
-
              Backend sigue siendo autoridad.
         ============================================= */
-
         const applyScopeFilter = (arr) => {
           const safe = Array.isArray(arr) ? arr : [];
 
@@ -1819,14 +1360,12 @@ export default function EstadisticasGlobales() {
         /* =============================================
              AGGREGATE
         ============================================= */
-
         if (!depId) {
           setTotals(null);
-
           setAggMeta(null);
 
           setError(
-            (previous) => previous || "Falta deporte_id en el scope (no viene en token/selector ni en jugadores)."
+            (previous) => previous || "Falta deporte_id en el scope (no viene en token/academia ni en jugadores)."
           );
 
           return;
@@ -1834,7 +1373,6 @@ export default function EstadisticasGlobales() {
 
         const aggPath = buildAggPath({
           academia_id: acadId,
-
           deporte_id: depId,
         });
 
@@ -1857,17 +1395,11 @@ export default function EstadisticasGlobales() {
         } catch (errorAggregate) {
           const status = getErrStatus(errorAggregate);
 
-          /*
-           * Auth/AuthZ se propagan
-           * al catch principal.
-           */
-
           if (status === 401 || status === 403) {
             throw errorAggregate;
           }
 
           setTotals(null);
-
           setAggMeta(null);
 
           const message =
@@ -1886,13 +1418,10 @@ export default function EstadisticasGlobales() {
         const status = getErrStatus(errorRequest);
 
         /* =============================================
-             401
-
-             SESIÓN INVÁLIDA
+             401 - SESIÓN INVÁLIDA
         ============================================= */
-
         if (status === 401) {
-          clearToken();
+          clearPanelSession();
 
           navigate("/login", {
             replace: true,
@@ -1902,13 +1431,8 @@ export default function EstadisticasGlobales() {
         }
 
         /* =============================================
-             403
-
-             SESIÓN VÁLIDA / SIN PERMISO
-
-             NO logout.
+             403 - SESIÓN VÁLIDA / SIN PERMISO
         ============================================= */
-
         if (status === 403) {
           setError("No tienes permisos para ver las estadísticas globales de esta academia.");
 
@@ -1923,7 +1447,9 @@ export default function EstadisticasGlobales() {
       }
     })();
 
-    return () => abort.abort();
+    return () => {
+      abort.abort();
+    };
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rol, scope.academia_id, scope.deporte_id, location.pathname, navigate]);
@@ -1931,7 +1457,6 @@ export default function EstadisticasGlobales() {
   /* =======================================================
      MAPAS
   ======================================================= */
-
   const grupos = sportMeta.grupos || {};
 
   const traducciones = sportMeta.traducciones || {};
@@ -1949,7 +1474,6 @@ export default function EstadisticasGlobales() {
   /* =======================================================
      CONTEOS
   ======================================================= */
-
   const conteos = useMemo(() => {
     const activos = Array.isArray(jugadoresActivos) ? jugadoresActivos : [];
 
@@ -1996,15 +1520,10 @@ export default function EstadisticasGlobales() {
 
     return {
       edades,
-
       categorias: sumBy(activos, getCategoriaNombre),
-
       posiciones: sumBy(activos, getPosicionNombre),
-
       sucursales: sumBy(activos, getSucursalNombre),
-
       previsiones: sumBy(activos, getPrevisionNombre),
-
       estados: sumBy(todos, getEstadoNombre),
     };
   }, [jugadoresActivos, jugadoresTodos, catMap, posMap, estMap, sucMap, prevMap]);
@@ -2012,7 +1531,6 @@ export default function EstadisticasGlobales() {
   /* =======================================================
      AGREGADOS POR GRUPO
   ======================================================= */
-
   const sumasPorGrupo = useMemo(() => {
     if (!totals || typeof totals !== "object") {
       return {};
@@ -2042,13 +1560,11 @@ export default function EstadisticasGlobales() {
   /* =======================================================
      COLORES
   ======================================================= */
-
   const pieColors = useMemo(() => EVENT_COLORS.map((color) => hexToRgba(color, 0.75)), []);
 
   /* =======================================================
      PIE DATA
   ======================================================= */
-
   const generatePieData = (conteo) => {
     const labels = Object.keys(conteo || {});
 
@@ -2058,15 +1574,11 @@ export default function EstadisticasGlobales() {
 
     return {
       labels,
-
       datasets: [
         {
           data,
-
           backgroundColor: colors,
-
           borderColor: tokens.border,
-
           borderWidth: 1,
         },
       ],
@@ -2076,7 +1588,6 @@ export default function EstadisticasGlobales() {
   /* =======================================================
      BAR DATA
   ======================================================= */
-
   const crearDatosBar = (datos) => {
     const keys = Object.keys(datos || {});
 
@@ -2088,7 +1599,6 @@ export default function EstadisticasGlobales() {
       datasets: [
         {
           label: "Total",
-
           data: values,
 
           backgroundColor: values.map((_, index) => hexToRgba(EVENT_COLORS[index % EVENT_COLORS.length], 0.55)),
@@ -2104,7 +1614,6 @@ export default function EstadisticasGlobales() {
   /* =======================================================
      LOADING
   ======================================================= */
-
   if (isLoading) {
     return <IsLoading />;
   }
@@ -2112,7 +1621,6 @@ export default function EstadisticasGlobales() {
   /* =======================================================
      ERROR SIN DATOS
   ======================================================= */
-
   if (error && !jugadoresActivos.length && !jugadoresTodos.length) {
     return (
       <div className={`${ui.page} font-sans flex items-center justify-center`} style={ui.pageStyle}>
@@ -2124,53 +1632,35 @@ export default function EstadisticasGlobales() {
   /* =======================================================
      TARJETAS PIE
   ======================================================= */
-
   const tarjetasPie = [
     {
       key: "edades",
-
       label: "Edades (Activos)",
-
       data: conteos.edades,
     },
-
     {
       key: "categorias",
-
       label: "Categorías (Activos)",
-
       data: conteos.categorias,
     },
-
     {
       key: "posiciones",
-
       label: "Posiciones (Activos)",
-
       data: conteos.posiciones,
     },
-
     {
       key: "estados",
-
       label: "Estado (Histórico completo)",
-
       data: conteos.estados,
     },
-
     {
       key: "sucursales",
-
       label: "Sucursales (Activos)",
-
       data: conteos.sucursales,
     },
-
     {
       key: "previsiones",
-
       label: "Previsión Médica (Activos)",
-
       data: conteos.previsiones,
     },
   ];
@@ -2178,7 +1668,6 @@ export default function EstadisticasGlobales() {
   /* =======================================================
      SCOPE LABEL
   ======================================================= */
-
   const scopeLabelParts = [];
 
   if (scope.academia_id) {
@@ -2200,13 +1689,8 @@ export default function EstadisticasGlobales() {
   /* =======================================================
      RENDER
   ======================================================= */
-
   return (
     <div className={`${ui.page} font-sans`} style={ui.pageStyle}>
-      {/* =================================================
-          HEADER
-      ================================================= */}
-
       <header>
         <div className="text-center">
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight" style={ui.titleStyle}>
@@ -2219,24 +1703,12 @@ export default function EstadisticasGlobales() {
         </div>
       </header>
 
-      {/* =================================================
-          MAIN
-      ================================================= */}
-
       <main className={ui.content}>
-        {/* ===============================================
-            ERROR / WARNING
-        =============================================== */}
-
         {!!error && (
           <div className="mt-8 max-w-6xl mx-auto">
             <div className={ui.warnBox}>{error}</div>
           </div>
         )}
-
-        {/* ===============================================
-            SIN DEPORTE
-        =============================================== */}
 
         {!scope.deporte_id && (
           <div className="mt-6 max-w-6xl mx-auto">
@@ -2244,14 +1716,10 @@ export default function EstadisticasGlobales() {
               Falta <b>deporte_id</b> en el scope.
               <br />
               Nota: intentamos derivarlo desde jugadores. Si tampoco viene ahí, debe estar disponible en el contexto del
-              token o en el selector correspondiente.
+              token o de la academia.
             </div>
           </div>
         )}
-
-        {/* ===============================================
-            PIE CHARTS
-        =============================================== */}
 
         <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
           {tarjetasPie.map(({ key, label, data }) => {
@@ -2328,10 +1796,6 @@ export default function EstadisticasGlobales() {
             );
           })}
         </div>
-
-        {/* ===============================================
-            AGGREGATE BAR CHARTS
-        =============================================== */}
 
         {hasAgg ? (
           <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">

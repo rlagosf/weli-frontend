@@ -11,7 +11,7 @@ import { Chart as ChartJS, BarElement, CategoryScale, LinearScale, Tooltip, Lege
 import IsLoading from "../../components/isLoading";
 import { jwtDecode } from "jwt-decode";
 
-import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
+import api, { getToken, clearToken, clearSelectedAcademia, getSelectedAcademiaId } from "../../services/api";
 
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
@@ -488,50 +488,11 @@ const extractTokenAcademiaId = (decoded) => {
 /* Exclusivamente para Superadmin. */
 
 const getAcademiaIdFromStorage = () => {
-  try {
-    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
-
-    if (!raw) {
-      return null;
-    }
-
-    const direct = Number(raw);
-
-    if (Number.isFinite(direct) && direct > 0) {
-      return direct;
-    }
-
-    const parsed = JSON.parse(raw);
-
-    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
-
-    return Number.isFinite(id) && id > 0 ? id : null;
-  } catch {
-    return null;
-  }
+  const academiaId = getSelectedAcademiaId();
+  return academiaId > 0 ? academiaId : null;
 };
 
-const buildHeadersFallback = (rol) => {
-  const token = getToken?.() || "";
-
-  const h = token
-    ? {
-        Authorization: `Bearer ${token}`,
-      }
-    : {};
-
-  if (rol === 3) {
-    const a = getAcademiaIdFromStorage();
-
-    if (a) {
-      h["x-academia-id"] = String(a);
-    }
-  }
-
-  return h;
-};
-
-const tryGetList = async (paths, { signal, headers } = {}) => {
+const tryGetList = async (paths, { signal } = {}) => {
   const variants = [];
 
   for (const p of paths) {
@@ -548,7 +509,6 @@ const tryGetList = async (paths, { signal, headers } = {}) => {
     try {
       const r = await api.get(url, {
         signal,
-        headers,
       });
 
       return asList(r);
@@ -1154,8 +1114,6 @@ export default function DetalleJugador() {
 
     const abort = new AbortController();
 
-    const headers = buildHeadersFallback(rolActual);
-
     (async () => {
       setIsLoading(true);
 
@@ -1164,7 +1122,6 @@ export default function DetalleJugador() {
       try {
         const rj = await getWithFallback(`/jugadores/rut/${encodeURIComponent(rut)}`, {
           signal: abort.signal,
-          headers,
         });
 
         const j = unwrapOne(rj);
@@ -1214,7 +1171,6 @@ export default function DetalleJugador() {
               try {
                 const r = await getWithFallback(url, {
                   signal: abort.signal,
-                  headers,
                 });
 
                 const d = r?.data ?? r;
@@ -1267,37 +1223,35 @@ export default function DetalleJugador() {
         const [posList, catList, estbList, prevList, estList, sucList, comList] = await Promise.all([
           tryGetList(["/posiciones"], {
             signal: abort.signal,
-            headers,
           }),
 
           tryGetList(["/categorias"], {
             signal: abort.signal,
-            headers,
           }),
 
           tryGetList(["/establecimientos-educ"], {
             signal: abort.signal,
-            headers,
+
           }),
 
           tryGetList(["/prevision-medica"], {
             signal: abort.signal,
-            headers,
+
           }),
 
           tryGetList(["/estado", "/estados"], {
             signal: abort.signal,
-            headers,
+
           }),
 
           tryGetList(["/sucursales-real"], {
             signal: abort.signal,
-            headers,
+
           }),
 
           tryGetList(["/comunas", "/catalogos/comunas", "/catalogos/comuna"], {
             signal: abort.signal,
-            headers,
+
           }),
         ]);
 
@@ -1461,7 +1415,7 @@ export default function DetalleJugador() {
 
         if (st === 401) {
           clearToken();
-
+          clearSelectedAcademia();
           navigate("/login", {
             replace: true,
           });
@@ -1580,7 +1534,6 @@ export default function DetalleJugador() {
     setIsLoading(true);
 
     try {
-      const headers = buildHeadersFallback(rolActual);
 
       const ALLOWED = new Set([
         "nombre_jugador",
@@ -1640,7 +1593,6 @@ export default function DetalleJugador() {
       }
 
       await api.patch(`/jugadores/rut/${encodeURIComponent(rut)}`, payload, {
-        headers,
       });
 
       setJugador((prev) => ({
@@ -1679,7 +1631,7 @@ export default function DetalleJugador() {
 
       if (st === 401) {
         clearToken();
-
+        clearSelectedAcademia();
         navigate("/login", {
           replace: true,
         });
@@ -1703,7 +1655,6 @@ export default function DetalleJugador() {
     setErr("");
 
     try {
-      const headers = buildHeadersFallback(rolActual);
 
       let b64 = jugador?.contrato_prestacion;
 
@@ -1711,7 +1662,6 @@ export default function DetalleJugador() {
 
       if (!b64 || String(b64).trim().length < 50) {
         const r = await getWithFallback(`/jugadores/rut/${encodeURIComponent(rut)}`, {
-          headers,
         });
 
         const j = unwrapOne(r);
@@ -1755,7 +1705,7 @@ export default function DetalleJugador() {
 
       if (st === 401) {
         clearToken();
-
+        clearSelectedAcademia();
         navigate("/login", {
           replace: true,
         });

@@ -20,7 +20,7 @@ import { Bar, Doughnut, Line } from "react-chartjs-2";
 
 import { useTheme } from "../../context/ThemeContext";
 
-import api, { ACADEMIA_STORAGE_KEY, clearToken, getToken } from "../../services/api";
+import api, { clearSelectedAcademia, clearToken, getSelectedAcademiaId, getToken } from "../../services/api";
 
 import IsLoading from "../../components/isLoading";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
@@ -57,43 +57,8 @@ const ESTADO_PAGADO_ID = 1;
 ========================================================= */
 
 const getAcademiaIdFromStorage = () => {
-  try {
-    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
-
-    if (!raw) {
-      return null;
-    }
-
-    const direct = Number(raw);
-
-    if (Number.isFinite(direct) && direct > 0) {
-      return direct;
-    }
-
-    const parsed = JSON.parse(raw);
-
-    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
-
-    return Number.isFinite(id) && id > 0 ? id : null;
-  } catch {
-    return null;
-  }
-};
-
-const buildHeaders = (rol, academiaId) => {
-  const token = getToken();
-
-  const headers = token
-    ? {
-        Authorization: `Bearer ${token}`,
-      }
-    : {};
-
-  if (rol === 3 && academiaId) {
-    headers["x-academia-id"] = String(academiaId);
-  }
-
-  return headers;
+  const academiaId = getSelectedAcademiaId();
+  return academiaId > 0 ? academiaId : null;
 };
 
 const safeNumber = (value, fallback = 0) => {
@@ -389,7 +354,7 @@ export default function PowerbiFinanzas() {
       setIsLoading(false);
     } catch {
       clearToken();
-
+      clearSelectedAcademia();
       navigate("/login", {
         replace: true,
       });
@@ -412,7 +377,7 @@ export default function PowerbiFinanzas() {
 
   const handleAuth = useCallback(() => {
     clearToken();
-
+    clearSelectedAcademia();
     navigate("/login", {
       replace: true,
     });
@@ -465,8 +430,6 @@ export default function PowerbiFinanzas() {
 
     const abort = new AbortController();
 
-    const headers = buildHeaders(rol, academiaId);
-
     (async () => {
       setIsLoading(true);
 
@@ -475,8 +438,6 @@ export default function PowerbiFinanzas() {
       try {
         const config = {
           signal: abort.signal,
-
-          headers,
         };
 
         const [tiposRes, mediosRes, situacionesRes, jugadoresRes, categoriasRes, pagosRes] = await Promise.all([

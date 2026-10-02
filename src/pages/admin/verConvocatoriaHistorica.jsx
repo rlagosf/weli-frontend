@@ -5,7 +5,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { useTheme } from "../../context/ThemeContext";
 
-import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
+import api, { getToken, clearToken, clearSelectedAcademia, getSelectedAcademiaId } from "../../services/api";
 
 import IsLoading from "../../components/isLoading";
 import { FileText, X } from "lucide-react";
@@ -102,46 +102,11 @@ const extractRol = (decoded) => {
 };
 
 const getAcademiaIdFromStorage = () => {
-  try {
-    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
-
-    if (!raw) {
-      return null;
-    }
-
-    const direct = Number(raw);
-
-    if (Number.isFinite(direct) && direct > 0) {
-      return direct;
-    }
-
-    const parsed = JSON.parse(raw);
-
-    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
-
-    return Number.isFinite(id) && id > 0 ? id : null;
-  } catch {
-    return null;
-  }
+  const academiaId = getSelectedAcademiaId();
+  return academiaId > 0 ? academiaId : null;
 };
 
-const buildHeaders = (rol, academiaId) => {
-  const token = getToken();
-
-  const h = token
-    ? {
-        Authorization: `Bearer ${token}`,
-      }
-    : {};
-
-  if (rol === 3 && academiaId) {
-    h["x-academia-id"] = String(academiaId);
-  }
-
-  return h;
-};
-
-const getWithFallback = async (path, { signal, headers } = {}) => {
+const getWithFallback = async (path, { signal } = {}) => {
   const urls = path.endsWith("/") ? [path, path.slice(0, -1)] : [path, `${path}/`];
 
   let lastErr = null;
@@ -150,7 +115,6 @@ const getWithFallback = async (path, { signal, headers } = {}) => {
     try {
       return await api.get(url, {
         signal,
-        headers,
       });
     } catch (e) {
       lastErr = e;
@@ -320,14 +284,18 @@ export default function VerConvocacionHistorica() {
         const a = getAcademiaIdFromStorage();
 
         if (!a) {
-          throw new Error("missing-academia-target");
+          navigate("/super-dashboard", {
+            replace: true,
+          });
+
+          return;
         }
       }
 
       setRolActual(rol);
     } catch {
       clearToken();
-
+      clearSelectedAcademia();
       navigate("/login", {
         replace: true,
       });
@@ -355,8 +323,6 @@ export default function VerConvocacionHistorica() {
 
     const abort = new AbortController();
 
-    const headers = buildHeaders(rolActual, academiaId);
-
     (async () => {
       setIsLoading(true);
 
@@ -366,14 +332,10 @@ export default function VerConvocacionHistorica() {
         const [evRes, hRes] = await Promise.all([
           getWithFallback("/eventos", {
             signal: abort.signal,
-
-            headers,
           }),
 
           getWithFallback("/convocatorias-historico", {
             signal: abort.signal,
-
-            headers,
           }),
         ]);
 
@@ -411,7 +373,7 @@ export default function VerConvocacionHistorica() {
 
         if (st === 401 || st === 403) {
           clearToken();
-
+          clearSelectedAcademia();
           navigate("/login", {
             replace: true,
           });
@@ -439,14 +401,10 @@ export default function VerConvocacionHistorica() {
 
     const abort = new AbortController();
 
-    const headers = buildHeaders(rolActual, academiaId);
-
     (async () => {
       try {
         const resp = await getWithFallback("/jugadores", {
           signal: abort.signal,
-
-          headers,
         });
 
         if (abort.signal.aborted) {
@@ -510,7 +468,7 @@ export default function VerConvocacionHistorica() {
 
         if (st === 401 || st === 403) {
           clearToken();
-
+          clearSelectedAcademia();
           navigate("/login", {
             replace: true,
           });
@@ -989,21 +947,13 @@ export default function VerConvocacionHistorica() {
 
   /* ========= Acciones ========= */
 
-  const fetchConvocadosHistorico = useCallback(
-    async ({ evento_id, convocatoria_id }) => {
-      const headers = buildHeaders(rolActual, academiaId);
+  const fetchConvocadosHistorico = useCallback(async ({ evento_id, convocatoria_id }) => {
+    const res = await getWithFallback(
+      `/convocatorias/evento/${Number(evento_id)}/convocatoria/${Number(convocatoria_id)}`
+    );
 
-      const res = await getWithFallback(
-        `/convocatorias/evento/${Number(evento_id)}/convocatoria/${Number(convocatoria_id)}`,
-        {
-          headers,
-        }
-      );
-
-      return toArray(res);
-    },
-    [rolActual, academiaId]
-  );
+    return toArray(res);
+  }, []);
 
   const verPDFDeHistorico = async (h) => {
     if (generatingRef.current) {
@@ -1046,7 +996,7 @@ export default function VerConvocacionHistorica() {
 
       if (st === 401 || st === 403) {
         clearToken();
-
+        clearSelectedAcademia();
         navigate("/login", {
           replace: true,
         });
@@ -1095,7 +1045,7 @@ export default function VerConvocacionHistorica() {
 
       if (st === 401 || st === 403) {
         clearToken();
-
+        clearSelectedAcademia();
         navigate("/login", {
           replace: true,
         });

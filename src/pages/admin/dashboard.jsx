@@ -4,11 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { useTheme } from "../../context/ThemeContext";
-
-import api, { ACADEMIA_STORAGE_KEY, clearToken, getToken } from "../../services/api";
-
+import api, { clearSelectedAcademia, clearToken, getSelectedAcademiaId, getToken } from "../../services/api";
+import { logoutAdmin } from "../../services/auth";
 import IsLoading from "../../components/isLoading";
-
 import {
   LogOut,
   Sun,
@@ -29,7 +27,6 @@ import {
   Building2,
   CornerUpLeft,
 } from "lucide-react";
-
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
 /* =========================================================
@@ -40,15 +37,9 @@ const ADMIN_HOME = "/admin";
 const SUPER_HOME = "/super-dashboard";
 const SUPER_ADMIN_ROOT = "/super-dashboard/admin/dashboard";
 
-/* =========================================================
-   STORAGE / PANEL
-========================================================= */
-
-const USER_INFO_KEY = "weli_user_info";
-
 const PANEL_ROLES = new Set([1, 2, 3]);
-
 const PANEL_TYPES = new Set(["admin", "user", "staff", "superadmin"]);
+const ESTADO_ACADEMIA_ACTIVA = 1;
 
 /* =========================================================
    BREADCRUMB
@@ -74,15 +65,10 @@ const segToLabel = (segment) => {
     noticias: "Registro Noticias",
   };
 
-  if (Object.prototype.hasOwnProperty.call(map, segment)) {
-    return map[segment];
-  }
+  if (Object.prototype.hasOwnProperty.call(map, segment)) return map[segment];
 
   const value = String(segment ?? "");
-
-  if (!value) {
-    return "";
-  }
+  if (!value) return "";
 
   return value.charAt(0).toUpperCase() + value.slice(1).replaceAll("-", " ");
 };
@@ -91,6 +77,10 @@ const segToLabel = (segment) => {
    JWT HELPERS
 ========================================================= */
 
+/**
+ * Esta decodificación es exclusivamente para navegación/UI.
+ * La autenticidad del JWT continúa validándose en backend.
+ */
 function decodeToken(token) {
   try {
     return jwtDecode(token);
@@ -101,11 +91,7 @@ function decodeToken(token) {
 
 function isExpired(decoded) {
   const exp = Number(decoded?.exp ?? 0);
-
-  if (!Number.isFinite(exp) || exp <= 0) {
-    return true;
-  }
-
+  if (!Number.isFinite(exp) || exp <= 0) return true;
   return Date.now() >= exp * 1000;
 }
 
@@ -117,13 +103,11 @@ function extractType(decoded) {
 
 function extractRol(decoded) {
   const rol = Number(decoded?.rol_id ?? decoded?.user?.rol_id ?? 0);
-
   return Number.isInteger(rol) && PANEL_ROLES.has(rol) ? rol : 0;
 }
 
 function extractTokenAcademiaId(decoded) {
   const academiaId = Number(decoded?.academia_id ?? decoded?.user?.academia_id ?? 0);
-
   return Number.isInteger(academiaId) && academiaId > 0 ? academiaId : 0;
 }
 
@@ -131,72 +115,75 @@ function extractTokenAcademiaId(decoded) {
    ACADEMIA SUPERADMIN
 ========================================================= */
 
-function readSelectedAcademia() {
-  try {
-    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
+/**
+ * Contrato definitivo:
+ *
+ * weli_selected_academia contiene EXCLUSIVAMENTE:
+ *
+ * "1"
+ * "2"
+ * "15"
+ *
+ * No acepta snapshots JSON ni información adicional.
+ */
+function readSelectedAcademiaId() {
+  return getSelectedAcademiaId();
+}
 
-    if (!raw) {
-      return null;
-    }
+/**
+ * Recupera desde backend únicamente la información
+ * necesaria para representar la academia en el Dashboard.
+ *
+ * Los datos no se persisten nuevamente en localStorage.
+ */
+async function fetchAcademiaContext(academiaId, signal) {
+  const response = await api.get(`/academias/${academiaId}`, {
+    signal,
+    headers: { "Cache-Control": "no-cache" },
+  });
 
-    const direct = Number(raw);
+  const item = response?.data?.item ?? response?.data?.academia ?? response?.data ?? null;
 
-    if (Number.isInteger(direct) && direct > 0) {
-      return {
-        id: direct,
-        nombre: null,
-        deporte_id: null,
-        deporte_nombre: null,
-        estado_id: null,
-        estado_nombre: null,
-        rut_academia: null,
-        ts: null,
-      };
-    }
+  const id = Number(item?.id ?? 0);
 
-    const parsed = JSON.parse(raw);
-
-    const id = Number(
-      parsed?.id ?? parsed?.academia_id ?? parsed?.academy_id ?? parsed?.academiaId ?? parsed?.academyId ?? 0
-    );
-
-    if (!Number.isInteger(id) || id <= 0) {
-      return null;
-    }
-
-    return {
-      id,
-
-      nombre: parsed?.nombre ?? null,
-
-      deporte_id: parsed?.deporte_id ?? null,
-
-      deporte_nombre: parsed?.deporte_nombre ?? null,
-
-      estado_id: parsed?.estado_id ?? null,
-
-      estado_nombre: parsed?.estado_nombre ?? null,
-
-      rut_academia: parsed?.rut_academia ?? null,
-
-      ts: parsed?.ts ?? null,
-    };
-  } catch {
-    return null;
+  if (!Number.isInteger(id) || id <= 0 || id !== Number(academiaId)) {
+    const error = new Error("ACADEMIA_CONTEXT_INVALID");
+    error.code = "ACADEMIA_CONTEXT_INVALID";
+    throw error;
   }
+
+  const estadoId = Number(item?.estado_id ?? 0);
+
+  if (Number.isInteger(estadoId) && estadoId > 0 && estadoId !== ESTADO_ACADEMIA_ACTIVA) {
+    const error = new Error("ACADEMIA_INACTIVA");
+    error.code = "ACADEMIA_INACTIVA";
+    throw error;
+  }
+
+  const nombre = String(item?.nombre ?? "").trim();
+
+  return {
+    id,
+    nombre: nombre || null,
+  };
 }
 
 /* =========================================================
-   LIMPIEZA SESIÓN LOCAL
+   SESIÓN LOCAL
 ========================================================= */
 
+/**
+ * Limpia únicamente el estado vigente de WELI.
+ *
+ * No existen user_info, weli_user_info ni compatibilidades RAFC.
+ */
 function clearLocalSession() {
   try {
     clearToken();
   } catch {}
 
   try {
-    localStorage.removeItem(USER_INFO_KEY);
+    clearSelectedAcademia();
   } catch {}
 }
 
@@ -207,67 +194,47 @@ function clearLocalSession() {
 export default function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
-
   const { darkMode, toggleTheme, themeTokens } = useTheme();
 
   const mountedRef = useRef(true);
 
   const [rol, setRol] = useState(null);
-
   const [isLoading, setIsLoading] = useState(true);
-
   const [selectedAcademia, setSelectedAcademia] = useState(null);
 
   useMobileAutoScrollTop();
 
   /* =======================================================
      TOKENS DE APARIENCIA
-
-     ThemeContext es la única fuente visual efectiva.
-
-     El fallback existe únicamente como protección defensiva
-     mientras el contexto termina de inicializar.
   ======================================================= */
 
   const tokens = useMemo(() => {
-    if (themeTokens) {
-      return themeTokens;
-    }
+    if (themeTokens) return themeTokens;
 
     if (darkMode) {
       return {
         bg: "#111827",
         bgSoft: "#172033",
-
         surface: "#1F2937",
         surfaceSoft: "#172033",
         surface2: "#263244",
         surfaceHover: "#374151",
-
         primary: "#FFDDA1",
         primaryHover: "#FFE5B8",
         primaryContrast: "#3F2D18",
-
         secondary: "#B79F69",
         secondaryHover: "#C8B27F",
         secondaryContrast: "#111827",
-
         text: "#F9FAFB",
         textMuted: "#D1D5DB",
-
         icon: "#FFDDA1",
-
         border: "#374151",
         borderStrong: "#4B5563",
-
         inputBg: "#111827",
         inputText: "#F9FAFB",
         inputBorder: "#4B5563",
-
         tableHead: "#172033",
-
         focus: "#FFDDA1",
-
         overlay: "rgba(0,0,0,.65)",
       };
     }
@@ -275,42 +242,32 @@ export default function Dashboard() {
     return {
       bg: "#E8DAC4",
       bgSoft: "#FFDDA1",
-
       surface: "#FFFFFF",
       surfaceSoft: "#FAF6EE",
       surface2: "#F7EAD4",
       surfaceHover: "#FFF9F2",
-
       primary: "#AA5013",
       primaryHover: "#994812",
       primaryContrast: "#FFFFFF",
-
       secondary: "#6D5829",
       secondaryHover: "#5E4B23",
       secondaryContrast: "#FFFFFF",
-
       text: "#3B2A1E",
       textMuted: "#766657",
-
       icon: "#AA5013",
-
       border: "#D8C7AE",
       borderStrong: "#BFA684",
-
       inputBg: "#FFFFFF",
       inputText: "#3B2A1E",
       inputBorder: "#9B7B50",
-
       tableHead: "#F7EAD4",
-
       focus: "#AA5013",
-
       overlay: "rgba(0,0,0,.55)",
     };
   }, [themeTokens, darkMode]);
 
   /* =======================================================
-     MOUNT STATUS
+     MOUNT
   ======================================================= */
 
   useEffect(() => {
@@ -327,12 +284,10 @@ export default function Dashboard() {
 
   const isSuperTree = useMemo(() => {
     const path = String(location.pathname ?? "");
-
     return path === SUPER_ADMIN_ROOT || path.startsWith(`${SUPER_ADMIN_ROOT}/`);
   }, [location.pathname]);
 
   const ROOT = isSuperTree ? SUPER_ADMIN_ROOT : ADMIN_HOME;
-
   const BASE = ROOT;
 
   /* =======================================================
@@ -347,63 +302,54 @@ export default function Dashboard() {
         roles: [1, 3],
         Icon: UserPlus,
       },
-
       {
         to: `${BASE}/listar-jugadores`,
         label: "Listar Jugadores",
         roles: [1, 2, 3],
         Icon: Users,
       },
-
       {
         to: `${BASE}/registrar-estadisticas`,
         label: "Registrar Estadísticas",
         roles: [1, 2, 3],
         Icon: ClipboardList,
       },
-
       {
         to: `${BASE}/estadisticas`,
         label: "Estadísticas Globales",
         roles: [1, 2, 3],
         Icon: BarChart3,
       },
-
       {
         to: `${BASE}/convocatorias`,
         label: "Crear Convocatorias",
         roles: [1, 3],
         Icon: CalendarPlus,
       },
-
       {
         to: `${BASE}/ver-convocaciones-historicas`,
         label: "Historial Convocatorias",
         roles: [1, 2, 3],
         Icon: History,
       },
-
       {
         to: `${BASE}/agenda`,
         label: "Agenda de eventos",
         roles: [1, 2, 3],
         Icon: CalendarDays,
       },
-
       {
         to: `${BASE}/gestionar-pagos`,
         label: "Gestión de pagos",
         roles: [1, 3],
         Icon: Banknote,
       },
-
       {
         to: `${BASE}/power-bi`,
         label: "POWER BI FINANCIERO",
         roles: [1, 3],
         Icon: PieChart,
       },
-
       {
         to: `${BASE}/noticias`,
         label: "Registro Noticias",
@@ -411,21 +357,18 @@ export default function Dashboard() {
         Icon: Newspaper,
         disabled: true,
       },
-
       {
         to: `${BASE}/crear-usuario`,
         label: "Crear Usuario",
         roles: [1, 3],
         Icon: UserCog,
       },
-
       {
         to: `${BASE}/configuracion`,
         label: "Configuración",
         roles: [1, 3],
         Icon: Settings,
       },
-
       {
         to: `${BASE}/seguimiento-medico`,
         label: "Seguimiento médico",
@@ -438,137 +381,174 @@ export default function Dashboard() {
   );
 
   /* =======================================================
-     AUTH CONTEXT
+     VALIDACIÓN DE ACCESO
   ======================================================= */
 
   useEffect(() => {
-    const validateDashboardAccess = () => {
+    const controller = new AbortController();
+
+    const validateDashboardAccess = async () => {
       try {
         const token = getToken() || "";
 
-        /* SIN TOKEN */
+        /* ---------------- SIN TOKEN ---------------- */
 
         if (!token) {
           clearLocalSession();
-
-          navigate("/login", {
-            replace: true,
-          });
-
+          navigate("/login", { replace: true });
           return;
         }
 
         const decoded = decodeToken(token);
 
-        /* TOKEN INVÁLIDO / EXPIRADO */
+        /* -------- TOKEN INVÁLIDO / EXPIRADO -------- */
 
         if (!decoded || isExpired(decoded)) {
           clearLocalSession();
-
-          navigate("/login", {
-            replace: true,
-          });
-
+          navigate("/login", { replace: true });
           return;
         }
 
         const type = extractType(decoded);
-
         const currentRol = extractRol(decoded);
 
-        /* TOKEN NO VÁLIDO PARA PANEL */
+        /* -------- TOKEN NO VÁLIDO PARA PANEL -------- */
 
         if (!PANEL_TYPES.has(type) || !currentRol) {
           clearLocalSession();
-
-          navigate("/login", {
-            replace: true,
-          });
-
+          navigate("/login", { replace: true });
           return;
         }
 
-        /* =============================================
-             ADMIN / STAFF
-             roles 1 / 2
-          ============================================= */
+        /* =================================================
+           ADMIN / STAFF
+           roles 1 / 2
+        ================================================= */
 
         if (currentRol === 1 || currentRol === 2) {
           const tokenAcademiaId = extractTokenAcademiaId(decoded);
 
           if (!tokenAcademiaId) {
             clearLocalSession();
-
-            navigate("/login", {
-              replace: true,
-            });
-
+            navigate("/login", { replace: true });
             return;
           }
 
+          /* Admin/Staff nunca ingresan al árbol Superadmin. */
           if (isSuperTree) {
-            navigate(ADMIN_HOME, {
-              replace: true,
-            });
-
+            navigate(ADMIN_HOME, { replace: true });
             return;
           }
 
-          if (mountedRef.current) {
+          if (mountedRef.current && !controller.signal.aborted) {
             setRol(currentRol);
-
             setSelectedAcademia(null);
           }
 
           return;
         }
 
-        /* =============================================
-             SUPERADMIN
-             rol 3
-          ============================================= */
+        /* =================================================
+           SUPERADMIN
+           rol 3
+        ================================================= */
 
         if (currentRol === 3) {
           if (!isSuperTree) {
-            navigate(SUPER_HOME, {
-              replace: true,
-            });
-
+            navigate(SUPER_HOME, { replace: true });
             return;
           }
 
-          const snapshot = readSelectedAcademia();
+          /**
+           * Desde este punto localStorage entrega únicamente
+           * el identificador de academia.
+           */
+          const academiaId = readSelectedAcademiaId();
 
-          if (!snapshot) {
-            navigate(SUPER_HOME, {
-              replace: true,
-            });
-
+          if (!academiaId) {
+            clearSelectedAcademia();
+            navigate(SUPER_HOME, { replace: true });
             return;
           }
 
-          if (mountedRef.current) {
-            setRol(currentRol);
+          try {
+            /**
+             * El nombre visible se obtiene siempre desde DB/API.
+             * No se recupera desde localStorage.
+             */
+            const academia = await fetchAcademiaContext(academiaId, controller.signal);
 
-            setSelectedAcademia(snapshot);
+            if (controller.signal.aborted) return;
+
+            if (mountedRef.current) {
+              setRol(currentRol);
+              setSelectedAcademia(academia);
+            }
+          } catch (requestError) {
+            if (controller.signal.aborted) return;
+
+            const status = Number(requestError?.status ?? requestError?.response?.status ?? 0);
+
+            const code = String(requestError?.code ?? "");
+
+            /* JWT rechazado por backend. */
+            if (status === 401) {
+              clearLocalSession();
+              navigate("/login", { replace: true });
+              return;
+            }
+
+            /**
+             * Selección inexistente/no autorizada/inactiva:
+             * volvemos al selector de academias.
+             */
+            if (
+              status === 400 ||
+              status === 403 ||
+              status === 404 ||
+              code === "ACADEMIA_CONTEXT_INVALID" ||
+              code === "ACADEMIA_INACTIVA"
+            ) {
+              clearSelectedAcademia();
+              navigate(SUPER_HOME, { replace: true });
+              return;
+            }
+
+            /**
+             * Ante una falla temporal de red/servidor,
+             * no destruimos una selección válida.
+             *
+             * Conservamos únicamente el ID y permitimos que
+             * las peticiones posteriores vuelvan a intentarlo.
+             */
+            if (mountedRef.current) {
+              setRol(currentRol);
+              setSelectedAcademia({
+                id: academiaId,
+                nombre: null,
+              });
+            }
           }
 
           return;
         }
       } catch {
         clearLocalSession();
-
-        navigate("/login", {
-          replace: true,
-        });
+        navigate("/login", { replace: true });
       } finally {
-        if (mountedRef.current) {
+        if (mountedRef.current && !controller.signal.aborted) {
           setIsLoading(false);
         }
       }
     };
 
-    validateDashboardAccess();
+    void validateDashboardAccess();
+
+    return () => {
+      try {
+        controller.abort();
+      } catch {}
+    };
   }, [navigate, isSuperTree]);
 
   /* =======================================================
@@ -577,36 +557,26 @@ export default function Dashboard() {
 
   const handleCerrarSesion = useCallback(async () => {
     try {
-      await api.post("/auth/logout", null, {
-        meta: {
-          isPublic: false,
-        },
-      });
-    } catch {
+      await logoutAdmin();
     } finally {
-      clearLocalSession();
-
-      try {
-        localStorage.removeItem(ACADEMIA_STORAGE_KEY);
-      } catch {}
-
       window.location.replace("/");
     }
   }, []);
 
   /* =======================================================
-     SUPERADMIN
-     CAMBIAR ACADEMIA
+     SUPERADMIN - CAMBIAR ACADEMIA
   ======================================================= */
 
   const handleCambiarAcademia = useCallback(() => {
     try {
-      localStorage.removeItem(ACADEMIA_STORAGE_KEY);
+      clearSelectedAcademia();
     } catch {}
 
-    navigate(SUPER_HOME, {
-      replace: true,
-    });
+    if (mountedRef.current) {
+      setSelectedAcademia(null);
+    }
+
+    navigate(SUPER_HOME, { replace: true });
   }, [navigate]);
 
   /* =======================================================
@@ -636,7 +606,6 @@ export default function Dashboard() {
     const rest = path.startsWith(ROOT) ? path.slice(ROOT.length) : path;
 
     const parts = rest.split("/").filter(Boolean);
-
     let accumulator = ROOT;
 
     const tail = parts.map((segment, index) => {
@@ -644,9 +613,7 @@ export default function Dashboard() {
 
       return {
         to: accumulator,
-
         label: segToLabel(segment),
-
         last: index === parts.length - 1,
       };
     });
@@ -655,7 +622,6 @@ export default function Dashboard() {
 
     return all.map((item, index) => ({
       ...item,
-
       last: index === all.length - 1,
     }));
   }, [location.pathname, ROOT]);
@@ -675,18 +641,15 @@ export default function Dashboard() {
   const isRoot = location.pathname === ROOT;
 
   /* =======================================================
-     UI BASADA EXCLUSIVAMENTE EN themeTokens
+     ESTILOS
 
-     IMPORTANTE:
-     Dashboard continúa siendo el dueño del fondo global.
-
-     Los componentes hijos renderizados por <Outlet />
-     permanecen transparentes.
+     Dashboard continúa siendo dueño del fondo global.
+     Los hijos renderizados por <Outlet /> permanecen
+     transparentes.
   ======================================================= */
 
   const shellStyle = {
     backgroundColor: tokens.bg,
-
     color: tokens.text,
   };
 
@@ -712,23 +675,16 @@ export default function Dashboard() {
 
   const buttonIconStyle = {
     backgroundColor: tokens.surfaceSoft,
-
     borderColor: tokens.border,
-
     color: tokens.icon,
-
     "--weli-dashboard-button-hover": tokens.surfaceHover,
-
     "--weli-dashboard-button-border-hover": tokens.borderStrong,
-
     "--weli-dashboard-focus": tokens.focus,
   };
 
   const academiaBadgeStyle = {
     backgroundColor: tokens.surface,
-
     borderColor: tokens.border,
-
     color: tokens.text,
   };
 
@@ -742,46 +698,26 @@ export default function Dashboard() {
 
   const academiaChangeStyle = {
     backgroundColor: tokens.surfaceSoft,
-
     borderColor: tokens.borderStrong,
-
     color: tokens.text,
-
     "--weli-dashboard-change-hover": tokens.surfaceHover,
-
     "--weli-dashboard-focus": tokens.focus,
   };
 
   const cardStyle = {
     backgroundColor: tokens.surface,
-
     borderColor: tokens.border,
-
     color: tokens.text,
-
     "--weli-dashboard-card-bg": tokens.surface,
-
     "--weli-dashboard-card-hover": tokens.surfaceHover,
-
     "--weli-dashboard-card-border": tokens.border,
-
     "--weli-dashboard-card-border-hover": tokens.borderStrong,
-
     "--weli-dashboard-focus": tokens.focus,
   };
 
-  /*
-   * El icono está situado sobre primary.
-   *
-   * Por contraste utilizamos primaryContrast.
-   * tokens.icon continúa utilizándose para iconos
-   * sobre superficies normales.
-   */
   const iconWrapStyle = {
     backgroundColor: tokens.primary,
-
     borderColor: tokens.borderStrong,
-
     color: tokens.primaryContrast,
   };
 
@@ -795,9 +731,7 @@ export default function Dashboard() {
 
   const badgeStyle = {
     backgroundColor: tokens.surfaceSoft,
-
     borderColor: tokens.border,
-
     color: tokens.textMuted,
   };
 
@@ -809,80 +743,44 @@ export default function Dashboard() {
     <div className="min-h-screen w-full font-sans transition-colors duration-300" style={shellStyle}>
       <style>
         {`
-          /* ================================================
-             CONTROLES SUPERIORES
-          ================================================ */
-
           .weli-dashboard-icon-button {
-            background-color:
-              var(--weli-dashboard-button-bg);
-
-            border-color:
-              var(--weli-dashboard-button-border);
-
-            color:
-              var(--weli-dashboard-button-color);
+            background-color: var(--weli-dashboard-button-bg);
+            border-color: var(--weli-dashboard-button-border);
+            color: var(--weli-dashboard-button-color);
           }
 
           .weli-dashboard-icon-button:hover {
-            background-color:
-              var(--weli-dashboard-button-hover) !important;
-
-            border-color:
-              var(--weli-dashboard-button-border-hover) !important;
+            background-color: var(--weli-dashboard-button-hover) !important;
+            border-color: var(--weli-dashboard-button-border-hover) !important;
           }
 
           .weli-dashboard-icon-button:focus-visible {
-            outline:
-              2px solid var(--weli-dashboard-focus);
-
-            outline-offset:
-              3px;
+            outline: 2px solid var(--weli-dashboard-focus);
+            outline-offset: 3px;
           }
 
-          /* ================================================
-             CAMBIAR ACADEMIA
-          ================================================ */
-
           .weli-dashboard-change-academia:hover {
-            background-color:
-              var(--weli-dashboard-change-hover) !important;
+            background-color: var(--weli-dashboard-change-hover) !important;
           }
 
           .weli-dashboard-change-academia:focus-visible {
-            outline:
-              2px solid var(--weli-dashboard-focus);
-
-            outline-offset:
-              3px;
+            outline: 2px solid var(--weli-dashboard-focus);
+            outline-offset: 3px;
           }
 
-          /* ================================================
-             TARJETAS
-          ================================================ */
-
           .weli-dashboard-card {
-            background-color:
-              var(--weli-dashboard-card-bg) !important;
-
-            border-color:
-              var(--weli-dashboard-card-border) !important;
+            background-color: var(--weli-dashboard-card-bg) !important;
+            border-color: var(--weli-dashboard-card-border) !important;
           }
 
           .weli-dashboard-card:not(.weli-dashboard-card-disabled):hover {
-            background-color:
-              var(--weli-dashboard-card-hover) !important;
-
-            border-color:
-              var(--weli-dashboard-card-border-hover) !important;
+            background-color: var(--weli-dashboard-card-hover) !important;
+            border-color: var(--weli-dashboard-card-border-hover) !important;
           }
 
           .weli-dashboard-card:focus-visible {
-            outline:
-              2px solid var(--weli-dashboard-focus);
-
-            outline-offset:
-              4px;
+            outline: 2px solid var(--weli-dashboard-focus);
+            outline-offset: 4px;
           }
         `}
       </style>
@@ -894,10 +792,7 @@ export default function Dashboard() {
       <header className="w-full px-3 sm:px-5 lg:px-7 2xl:px-10 pt-4 sm:pt-5">
         <div className="w-full max-w-[1700px] mx-auto">
           <div className="flex items-center justify-between gap-3">
-            {/* =============================================
-                BREADCRUMB
-            ============================================= */}
-
+            {/* BREADCRUMB */}
             <nav className="text-[12px] sm:text-sm min-w-0" aria-label="breadcrumb">
               <ol className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0">
                 {breadcrumb.map((item, index) => (
@@ -926,13 +821,9 @@ export default function Dashboard() {
               </ol>
             </nav>
 
-            {/* =============================================
-                CONTROLES SUPERIORES
-            ============================================= */}
-
+            {/* CONTROLES */}
             <div className="flex items-center gap-2 flex-shrink-0">
-              {/* SUPERADMIN ACADEMIA */}
-
+              {/* SUPERADMIN - ACADEMIA */}
               {rol === 3 && isSuperTree && selectedAcademia && (
                 <div
                   className="hidden sm:flex items-center gap-2 rounded-2xl px-3.5 py-2 border shadow-[0_8px_24px_rgba(0,0,0,0.08)] transition-colors duration-200"
@@ -944,12 +835,7 @@ export default function Dashboard() {
                     Academia:
                   </span>
 
-                  <span
-                    className="text-xs font-extrabold max-w-[180px] truncate"
-                    style={{
-                      color: tokens.text,
-                    }}
-                  >
+                  <span className="text-xs font-extrabold max-w-[180px] truncate" style={{ color: tokens.text }}>
                     {selectedAcademia.nombre ?? `#${selectedAcademia.id}`}
                   </span>
 
@@ -961,14 +847,12 @@ export default function Dashboard() {
                     title="Cambiar academia"
                   >
                     <CornerUpLeft className="w-4 h-4" />
-
                     <span className="text-xs font-semibold">Cambiar</span>
                   </button>
                 </div>
               )}
 
               {/* TEMA */}
-
               <button
                 type="button"
                 title="Cambiar tema"
@@ -976,11 +860,8 @@ export default function Dashboard() {
                 className="weli-dashboard-icon-button h-10 w-10 inline-flex items-center justify-center rounded-xl border transition"
                 style={{
                   ...buttonIconStyle,
-
                   "--weli-dashboard-button-bg": tokens.surfaceSoft,
-
                   "--weli-dashboard-button-border": tokens.border,
-
                   "--weli-dashboard-button-color": tokens.icon,
                 }}
               >
@@ -988,7 +869,6 @@ export default function Dashboard() {
               </button>
 
               {/* LOGOUT */}
-
               <button
                 type="button"
                 title="Cerrar sesión"
@@ -996,11 +876,8 @@ export default function Dashboard() {
                 className="weli-dashboard-icon-button h-10 w-10 inline-flex items-center justify-center rounded-xl border transition"
                 style={{
                   ...buttonIconStyle,
-
                   "--weli-dashboard-button-bg": tokens.surfaceSoft,
-
                   "--weli-dashboard-button-border": tokens.border,
-
                   "--weli-dashboard-button-color": tokens.icon,
                 }}
               >
@@ -1009,10 +886,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* =============================================
-              TÍTULO
-          ============================================= */}
-
+          {/* TÍTULO */}
           <div className="text-center mt-5 sm:mt-6">
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight" style={titleStyle}>
               Panel de Administración
@@ -1042,15 +916,11 @@ export default function Dashboard() {
             <div className="mt-6 sm:mt-7 grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {cards
                 .filter((item) => !item.roles || item.roles.includes(rol))
-                .sort((a, b) =>
-                  (a.label ?? "").localeCompare(b.label ?? "", "es", {
-                    sensitivity: "base",
-                  })
-                )
+                .sort((a, b) => (a.label ?? "").localeCompare(b.label ?? "", "es", { sensitivity: "base" }))
                 .map(({ to, label, Icon, disabled }) => {
-                  /* =====================================
-                         DESHABILITADO
-                    ===================================== */
+                  /* -----------------------------
+                       CARD DESHABILITADA
+                    ----------------------------- */
 
                   if (disabled) {
                     return (
@@ -1081,9 +951,9 @@ export default function Dashboard() {
                     );
                   }
 
-                  /* =====================================
-                         ACTIVO
-                    ===================================== */
+                  /* -----------------------------
+                       CARD ACTIVA
+                    ----------------------------- */
 
                   return (
                     <Link

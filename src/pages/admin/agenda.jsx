@@ -1,40 +1,27 @@
 // src/pages/admin/agenda.jsx
-
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { useTheme } from "../../context/ThemeContext";
-
-import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
-
+import api, { getToken, clearToken, clearSelectedAcademia, getSelectedAcademiaId } from "../../services/api";
 import IsLoading from "../../components/isLoading";
-
 import { Calendar, dateFnsLocalizer } from "react-big-calendar";
 import { format, parse, startOfWeek, getDay, addDays, addMinutes, startOfDay, isBefore } from "date-fns";
 import esES from "date-fns/locale/es";
-
 import "react-big-calendar/lib/css/react-big-calendar.css";
-
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
 /* =========================================================
    CALENDAR LOCALIZER
 ========================================================= */
-
-const locales = {
-  es: esES,
-};
+const locales = { es: esES };
 
 const localizer = dateFnsLocalizer({
   format,
   parse,
-  startOfWeek: () =>
-    startOfWeek(new Date(), {
-      weekStartsOn: 1,
-    }),
+  startOfWeek: () => startOfWeek(new Date(), { weekStartsOn: 1 }),
   getDay,
   locales,
 });
@@ -44,14 +31,12 @@ const localizer = dateFnsLocalizer({
 ========================================================= */
 
 /**
- * IMPORTANTE:
  * La decodificación frontend NO valida criptográficamente el JWT.
  * Solamente se utiliza para comportamiento de interfaz.
  * La autorización efectiva sigue estando exclusivamente en backend.
  */
 function decodeTokenSafe() {
   const token = getToken?.() || "";
-
   if (!token) return null;
 
   try {
@@ -63,13 +48,9 @@ function decodeTokenSafe() {
 
 function isTokenExpired(decoded) {
   const exp = Number(decoded?.exp ?? 0);
-
-  if (!Number.isFinite(exp) || exp <= 0) {
-    return true;
-  }
+  if (!Number.isFinite(exp) || exp <= 0) return true;
 
   const now = Math.floor(Date.now() / 1000);
-
   return exp <= now;
 }
 
@@ -77,55 +58,32 @@ function getRolFromDecoded(decoded) {
   const raw = decoded?.rol_id ?? decoded?.user?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol ?? 0;
 
   const rol = Number(raw);
-
   return Number.isInteger(rol) && [1, 2, 3].includes(rol) ? rol : 0;
 }
 
 function getRolFromTokenSafe() {
   const decoded = decodeTokenSafe();
-
   if (!decoded) return 0;
-
   return getRolFromDecoded(decoded);
 }
 
 function getAcademiaIdFromToken(decoded) {
   const raw = decoded?.academia_id ?? decoded?.user?.academia_id ?? 0;
-
   const academiaId = Number(raw);
-
   return Number.isInteger(academiaId) && academiaId > 0 ? academiaId : 0;
 }
 
 /**
- * Lee weli_selected_academia.
- * Se utiliza exclusivamente como contexto de academia objetivo
- * del Superadmin. Admin y Staff NO dependen de este valor.
+ * Contrato definitivo WELI:
+ *
+ * weli_selected_academia contiene EXCLUSIVAMENTE
+ * el ID numérico de la academia seleccionada.
+ *
+ * Admin y Staff NO dependen de este almacenamiento.
+ * Para ellos academia_id proviene del JWT firmado.
  */
 function readSelectedAcademiaIdSafe() {
-  const key = ACADEMIA_STORAGE_KEY || "weli_selected_academia";
-
-  try {
-    const raw = localStorage.getItem(key);
-
-    if (!raw) return 0;
-
-    const direct = Number(raw);
-
-    if (Number.isInteger(direct) && direct > 0) {
-      return direct;
-    }
-
-    const parsed = JSON.parse(raw);
-
-    const id = Number(
-      parsed?.id ?? parsed?.academia_id ?? parsed?.academy_id ?? parsed?.academiaId ?? parsed?.value ?? 0
-    );
-
-    return Number.isInteger(id) && id > 0 ? id : 0;
-  } catch {
-    return 0;
-  }
+  return getSelectedAcademiaId();
 }
 
 function getPanelHomeByRol(rol) {
@@ -137,11 +95,13 @@ function hardLogoutToLogin(navigate, rol = 0) {
     clearToken?.();
   } catch {}
 
+  try {
+    clearSelectedAcademia?.();
+  } catch {}
+
   navigate("/login", {
     replace: true,
-    state: {
-      from: getPanelHomeByRol(rol),
-    },
+    state: { from: getPanelHomeByRol(rol) },
   });
 }
 
@@ -158,22 +118,17 @@ const toDateSafe = (value) => {
 
   if (typeof value === "string" && value.includes(" ")) {
     const parsed = parse(value, "yyyy-MM-dd HH:mm:ss", new Date());
-
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
   const date = new Date(value);
-
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
 const toSQLDateTime = (dateObj) => {
-  if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) {
-    return null;
-  }
+  if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return null;
 
   const pad = (number) => String(number).padStart(2, "0");
-
   const yyyy = dateObj.getFullYear();
   const mm = pad(dateObj.getMonth() + 1);
   const dd = pad(dateObj.getDate());
@@ -186,18 +141,12 @@ const toSQLDateTime = (dateObj) => {
 
 const isHoliday = (title = "") => {
   const text = String(title).toLowerCase();
-
   return text.includes("feriado") || text.includes("festivo");
 };
 
 const prettyDT = (date) => {
-  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
-    return "—";
-  }
-
-  return format(date, "dd-MM-yyyy HH:mm", {
-    locale: esES,
-  });
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "—";
+  return format(date, "dd-MM-yyyy HH:mm", { locale: esES });
 };
 
 /* =========================================================
@@ -209,27 +158,13 @@ const getList = async (path, signal) => {
 
   for (const url of variants) {
     try {
-      const response = await api.get(url, {
-        signal,
-      });
-
+      const response = await api.get(url, { signal });
       const data = response?.data;
 
-      if (Array.isArray(data)) {
-        return data;
-      }
-
-      if (Array.isArray(data?.items)) {
-        return data.items;
-      }
-
-      if (Array.isArray(data?.results)) {
-        return data.results;
-      }
-
-      if (Array.isArray(data?.data)) {
-        return data.data;
-      }
+      if (Array.isArray(data)) return data;
+      if (Array.isArray(data?.items)) return data.items;
+      if (Array.isArray(data?.results)) return data.results;
+      if (Array.isArray(data?.data)) return data.data;
 
       return [];
     } catch (error) {
@@ -256,7 +191,6 @@ const getList = async (path, signal) => {
 
 const delWithVariants = async (path) => {
   const variants = path.endsWith("/") ? [path, path.slice(0, -1)] : [path, `${path}/`];
-
   let lastError = null;
 
   for (const url of variants) {
@@ -295,12 +229,10 @@ const EVENT_COLORS = [
 
 const hashString = (value = "") => {
   const str = String(value);
-
   let hash = 0;
 
   for (let i = 0; i < str.length; i += 1) {
     hash = (hash << 5) - hash + str.charCodeAt(i);
-
     hash |= 0;
   }
 
@@ -309,9 +241,7 @@ const hashString = (value = "") => {
 
 const pickEventColor = (event) => {
   const key = event?.id != null ? `id:${event.id}` : `t:${event?.title ?? ""}`;
-
   const index = hashString(key) % EVENT_COLORS.length;
-
   return EVENT_COLORS[index];
 };
 
@@ -321,15 +251,11 @@ const pickEventColor = (event) => {
 
 export default function Agenda() {
   const navigate = useNavigate();
-
   const { darkMode, themeTokens } = useTheme();
 
   const [isLoading, setIsLoading] = useState(true);
-
   const [eventos, setEventos] = useState([]);
-
   const [currentDate, setCurrentDate] = useState(new Date());
-
   const [modalAbierto, setModalAbierto] = useState(false);
 
   const [nuevoEvento, setNuevoEvento] = useState({
@@ -340,25 +266,15 @@ export default function Agenda() {
   });
 
   const [eventoSel, setEventoSel] = useState(null);
-
   const [modalDetalle, setModalDetalle] = useState(false);
-
   const [error, setError] = useState("");
-
   const [mensaje, setMensaje] = useState("");
-
   const [modalCreado, setModalCreado] = useState(false);
-
   const [eventoCreadoData, setEventoCreadoData] = useState(null);
-
   const [modalConfirmDelete, setModalConfirmDelete] = useState(false);
-
   const [eventoDeleteTarget, setEventoDeleteTarget] = useState(null);
-
   const [isDeleting, setIsDeleting] = useState(false);
-
   const [modalEliminado, setModalEliminado] = useState(false);
-
   const [eventoEliminadoData, setEventoEliminadoData] = useState(null);
 
   const todayStart = useMemo(() => startOfDay(new Date()), []);
@@ -367,16 +283,10 @@ export default function Agenda() {
 
   /* =======================================================
      TOKENS DE APARIENCIA
-
-     ThemeContext es la fuente principal.
-     El fallback sólo protege el componente si por algún motivo
-     themeTokens todavía no se encuentra disponible.
   ======================================================= */
 
   const tokens = useMemo(() => {
-    if (themeTokens) {
-      return themeTokens;
-    }
+    if (themeTokens) return themeTokens;
 
     if (darkMode) {
       return {
@@ -431,10 +341,9 @@ export default function Agenda() {
 
   /* =======================================================
      TENANT / ROLE GUARD
-
      Admin 1    → academia JWT
      Staff 2    → academia JWT
-     Superadmin → academia seleccionada
+     Superadmin → academia seleccionada por ID
   ======================================================= */
 
   const ensureScopeOrRedirect = useCallback(() => {
@@ -494,9 +403,7 @@ export default function Agenda() {
       const academiaId = readSelectedAcademiaIdSafe();
 
       if (academiaId <= 0) {
-        navigate("/super-dashboard", {
-          replace: true,
-        });
+        navigate("/super-dashboard", { replace: true });
 
         return {
           ok: false,
@@ -560,23 +467,16 @@ export default function Agenda() {
         const mapped = arr
           .map((event) => {
             const start = toDateSafe(event?.fecha_inicio ?? event?.start);
-
             const end = toDateSafe(event?.fecha_fin ?? event?.end);
 
-            if (!start || !end) {
-              return null;
-            }
+            if (!start || !end) return null;
 
             const normalizedEvent = {
               id: event.id,
-
               title: event?.titulo ?? event?.title ?? `Evento #${event.id}`,
-
               desc: event?.descripcion ?? event?.desc ?? "",
-
               start,
               end,
-
               allDay:
                 event.allDay === true ||
                 (start.getHours() === 0 && end.getHours() === 0 && start.toDateString() !== end.toDateString()),
@@ -592,9 +492,7 @@ export default function Agenda() {
           setEventos(mapped);
         }
       } catch (errorRequest) {
-        if (abort.signal.aborted) {
-          return;
-        }
+        if (abort.signal.aborted) return;
 
         const status = errorRequest?.status ?? errorRequest?.response?.status;
 
@@ -606,7 +504,6 @@ export default function Agenda() {
 
         if (status === 401) {
           hardLogoutToLogin(navigate, rol);
-
           return;
         }
 
@@ -615,16 +512,12 @@ export default function Agenda() {
             const academiaId = readSelectedAcademiaIdSafe();
 
             if (academiaId <= 0) {
-              navigate("/super-dashboard", {
-                replace: true,
-              });
-
+              navigate("/super-dashboard", { replace: true });
               return;
             }
           }
 
           setError(message || "No tienes permisos para acceder a Agenda.");
-
           return;
         }
 
@@ -646,16 +539,13 @@ export default function Agenda() {
   const eventPropGetter = useCallback(
     (event) => {
       const holiday = isHoliday(event?.title);
-
       const base = holiday ? tokens.primary : event?.color || pickEventColor(event);
 
       return {
         style: {
           backgroundColor: base,
           borderRadius: 9999,
-
           color: holiday ? tokens.primaryContrast : "#FFFFFF",
-
           fontSize: "0.78rem",
           padding: "3px 10px",
           width: "100%",
@@ -675,17 +565,6 @@ export default function Agenda() {
     [tokens.primary, tokens.primaryContrast]
   );
 
-  /*
-   * IMPORTANTE:
-   *
-   * react-big-calendar controla internamente las siete columnas.
-   * dayPropGetter solamente aplica apariencia.
-   *
-   * Los días externos siguen existiendo estructuralmente para
-   * mantener correctamente la posición del primer/último día,
-   * pero quedan completamente invisibles.
-   */
-
   const dayPropGetter = useCallback(
     (date) => {
       const isCurrentMonth =
@@ -696,16 +575,11 @@ export default function Agenda() {
       if (!isCurrentMonth) {
         return {
           className: "weli-outside-month",
-
           style: {
             backgroundColor: "transparent",
-
             borderColor: "transparent",
-
             color: tokens.textMuted,
-
             opacity: 0,
-
             pointerEvents: "none",
           },
         };
@@ -713,14 +587,10 @@ export default function Agenda() {
 
       return {
         className: "weli-current-month",
-
         style: {
           backgroundColor: "transparent",
-
           color: tokens.text,
-
           opacity: isPastDay ? 0.55 : 1,
-
           filter: isPastDay ? "grayscale(0.5)" : "none",
         },
       };
@@ -741,9 +611,7 @@ export default function Agenda() {
             className="min-h-10 px-3 rounded-xl border font-bold transition hover:opacity-90 active:scale-[0.98]"
             style={{
               backgroundColor: tokens.surfaceSoft,
-
               borderColor: tokens.borderStrong,
-
               color: tokens.text,
             }}
             onClick={() => props.onNavigate("PREV")}
@@ -756,9 +624,7 @@ export default function Agenda() {
             className="min-h-10 px-4 rounded-xl border font-extrabold transition hover:opacity-90 active:scale-[0.98]"
             style={{
               backgroundColor: tokens.primary,
-
               borderColor: tokens.primary,
-
               color: tokens.primaryContrast,
             }}
             onClick={() => props.onNavigate("TODAY")}
@@ -771,9 +637,7 @@ export default function Agenda() {
             className="min-h-10 px-3 rounded-xl border font-bold transition hover:opacity-90 active:scale-[0.98]"
             style={{
               backgroundColor: tokens.surfaceSoft,
-
               borderColor: tokens.borderStrong,
-
               color: tokens.text,
             }}
             onClick={() => props.onNavigate("NEXT")}
@@ -784,13 +648,9 @@ export default function Agenda() {
 
         <div
           className="text-xl sm:text-2xl font-extrabold uppercase tracking-wide text-center"
-          style={{
-            color: tokens.text,
-          }}
+          style={{ color: tokens.text }}
         >
-          {format(props.date, "MMMM yyyy", {
-            locale: esES,
-          })}
+          {format(props.date, "MMMM yyyy", { locale: esES })}
         </div>
       </div>
     ),
@@ -807,473 +667,278 @@ export default function Agenda() {
 
     return {
       wrapper,
-
       style: {
         backgroundColor: tokens.surface,
-
         borderColor: tokens.border,
-
         color: tokens.text,
       },
 
       styleTag: `
-          /* =================================================
-             BASE
-          ================================================= */
+        .rbc-calendar,
+        .rbc-month-view,
+        .rbc-time-view,
+        .rbc-agenda-view {
+          border: none !important;
+          color: ${tokens.text} !important;
+          background: ${tokens.surface} !important;
+        }
 
-          .rbc-calendar,
-          .rbc-month-view,
-          .rbc-time-view,
-          .rbc-agenda-view {
-            border: none !important;
-            color: ${tokens.text} !important;
-            background: ${tokens.surface} !important;
+        .rbc-month-row,
+        .rbc-header,
+        .rbc-row-content {
+          border: none !important;
+        }
+
+        .rbc-header {
+          background: ${tokens.primary} !important;
+          color: ${tokens.primaryContrast} !important;
+          border: 1px solid ${tokens.primary} !important;
+          border-radius: 10px;
+          font-weight: 800;
+          padding: 7px 0;
+          margin: 2px;
+          letter-spacing: .02em;
+        }
+
+        .rbc-header + .rbc-header {
+          margin-left: 2px;
+        }
+
+        .rbc-row-bg {
+          display: flex !important;
+          flex-direction: row !important;
+          flex-wrap: nowrap !important;
+          width: 100% !important;
+        }
+
+        .rbc-row {
+          flex-wrap: nowrap !important;
+        }
+
+        .rbc-day-bg {
+          flex: 1 1 0% !important;
+          width: auto !important;
+          min-width: 0 !important;
+          box-sizing: border-box !important;
+          margin: 2px !important;
+          border: 1.4px solid ${tokens.border} !important;
+          border-radius: 12px !important;
+          background: ${tokens.surface} !important;
+        }
+
+        .rbc-day-bg.rbc-off-range-bg,
+        .rbc-off-range-bg,
+        .rbc-day-bg.weli-outside-month {
+          background: transparent !important;
+          border-color: transparent !important;
+          box-shadow: none !important;
+          pointer-events: none !important;
+        }
+
+        .weli-outside-month {
+          background: transparent !important;
+          border-color: transparent !important;
+          box-shadow: none !important;
+          color: ${tokens.textMuted} !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+        }
+
+        .rbc-off-range {
+          color: ${tokens.textMuted} !important;
+        }
+
+        .rbc-off-range .rbc-button-link,
+        .rbc-off-range .rbc-date-cell > a,
+        .rbc-off-range a {
+          color: ${tokens.textMuted} !important;
+          visibility: hidden !important;
+          pointer-events: none !important;
+        }
+
+        .rbc-month-row:not(
+          :has(
+            .rbc-row-bg
+            > .rbc-day-bg:not(.rbc-off-range-bg)
+          )
+        ) {
+          display: none !important;
+        }
+
+        .weli-current-month {
+          border-color: ${tokens.border} !important;
+        }
+
+        .rbc-date-cell {
+          position: relative;
+          color: ${tokens.text} !important;
+        }
+
+        .rbc-date-cell > a,
+        .rbc-date-cell .rbc-button-link {
+          color: ${tokens.text} !important;
+          font-weight: 800;
+        }
+
+        .rbc-month-view .rbc-month-row {
+          border-bottom: 1px solid ${tokens.border} !important;
+        }
+
+        .rbc-today {
+          background-color: ${tokens.surface2} !important;
+        }
+
+        .rbc-today .rbc-date-cell > a,
+        .rbc-today .rbc-button-link {
+          color: ${tokens.text} !important;
+        }
+
+        .rbc-month-view .rbc-row-segment {
+          padding: 6px 12px 2px 12px;
+          overflow: visible;
+        }
+
+        .rbc-month-view .rbc-event {
+          width: 100% !important;
+          margin: 4px 0 !important;
+          border-radius: 9999px !important;
+          overflow: hidden !important;
+          box-shadow: 0 1px 0 rgba(0,0,0,.08);
+          border: none !important;
+        }
+
+        .rbc-month-view .rbc-event-content {
+          width: 100% !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          white-space: nowrap !important;
+          text-align: center !important;
+          line-height: 20px;
+          font-weight: 700;
+        }
+
+        .rbc-show-more {
+          color: ${tokens.primary} !important;
+          background: transparent !important;
+          font-weight: 800 !important;
+        }
+
+        .rbc-slot-selection {
+          background: ${tokens.primary} !important;
+          color: ${tokens.primaryContrast} !important;
+        }
+
+        .weli-datepicker,
+        .weli-datepicker .react-datepicker-wrapper,
+        .weli-datepicker .react-datepicker__input-container,
+        .weli-datepicker input {
+          width: 100%;
+        }
+
+        .react-datepicker {
+          background: ${tokens.surface} !important;
+          border-color: ${tokens.border} !important;
+          color: ${tokens.text} !important;
+        }
+
+        .react-datepicker__header {
+          background: ${tokens.surface2} !important;
+          border-bottom-color: ${tokens.border} !important;
+        }
+
+        .react-datepicker__current-month,
+        .react-datepicker-time__header,
+        .react-datepicker-year-header {
+          color: ${tokens.text} !important;
+        }
+
+        .react-datepicker__day-name {
+          color: ${tokens.textMuted} !important;
+        }
+
+        .react-datepicker__day,
+        .react-datepicker__time-name {
+          color: ${tokens.text} !important;
+        }
+
+        .react-datepicker__day--outside-month {
+          color: ${tokens.textMuted} !important;
+        }
+
+        .react-datepicker__day:hover {
+          background: ${tokens.surfaceHover} !important;
+        }
+
+        .react-datepicker__day--selected,
+        .react-datepicker__day--keyboard-selected {
+          background: ${tokens.primary} !important;
+          color: ${tokens.primaryContrast} !important;
+        }
+
+        .react-datepicker__navigation-icon::before {
+          border-color: ${tokens.textMuted} !important;
+        }
+
+        .react-datepicker__time-container {
+          border-left-color: ${tokens.border} !important;
+        }
+
+        .react-datepicker__time,
+        .react-datepicker__time-box,
+        .react-datepicker__time-list {
+          background: ${tokens.surface} !important;
+        }
+
+        .react-datepicker__time-list-item {
+          background: ${tokens.surface} !important;
+          color: ${tokens.text} !important;
+        }
+
+        .react-datepicker__time-list-item:hover {
+          background: ${tokens.surfaceHover} !important;
+        }
+
+        .react-datepicker__time-list-item--selected {
+          background: ${tokens.primary} !important;
+          color: ${tokens.primaryContrast} !important;
+        }
+
+        .weli-agenda-input {
+          background: ${tokens.inputBg} !important;
+          border-color: ${tokens.inputBorder} !important;
+          color: ${tokens.inputText} !important;
+        }
+
+        .weli-agenda-input::placeholder {
+          color: ${tokens.textMuted} !important;
+          opacity: .72;
+        }
+
+        .weli-datepicker input {
+          background: ${tokens.inputBg} !important;
+          border-color: ${tokens.inputBorder} !important;
+          color: ${tokens.inputText} !important;
+        }
+
+        .weli-datepicker input::placeholder {
+          color: ${tokens.textMuted} !important;
+          opacity: .72;
+        }
+
+        @media (max-width: 640px) {
+          .rbc-month-view {
+            min-height: 520px !important;
           }
-
-          .rbc-month-row,
-          .rbc-header,
-          .rbc-row-content {
-            border: none !important;
-          }
-
-          /* =================================================
-             CABECERAS
-          ================================================= */
-
-          .rbc-header {
-            background: ${tokens.primary} !important;
-            color: ${tokens.primaryContrast} !important;
-
-            border: 1px solid ${tokens.primary} !important;
-            border-radius: 10px;
-
-            font-weight: 800;
-            padding: 7px 0;
-            margin: 2px;
-            letter-spacing: .02em;
-          }
-
-          .rbc-header + .rbc-header {
-            margin-left: 2px;
-          }
-
-          /* =================================================
-             GRILLA
-          ================================================= */
-
-          .rbc-row-bg {
-            display: flex !important;
-            flex-direction: row !important;
-            flex-wrap: nowrap !important;
-            width: 100% !important;
-          }
-
-          .rbc-row {
-            flex-wrap: nowrap !important;
-          }
-
-          .rbc-day-bg {
-            flex: 1 1 0% !important;
-
-            width: auto !important;
-            min-width: 0 !important;
-
-            box-sizing: border-box !important;
-
-            margin: 2px !important;
-
-            border:
-              1.4px solid ${tokens.border} !important;
-
-            border-radius:
-              12px !important;
-
-            background:
-              ${tokens.surface} !important;
-          }
-
-          /*
-           * Días pertenecientes a meses externos.
-           *
-           * Se conservan estructuralmente para que el primer
-           * día continúe ubicado bajo el día correcto de la
-           * semana, pero visualmente desaparecen.
-           */
-
-          .rbc-day-bg.rbc-off-range-bg,
-          .rbc-off-range-bg,
-          .rbc-day-bg.weli-outside-month {
-            background:
-              transparent !important;
-
-            border-color:
-              transparent !important;
-
-            box-shadow:
-              none !important;
-
-            pointer-events:
-              none !important;
-          }
-
-          .weli-outside-month {
-            background:
-              transparent !important;
-
-            border-color:
-              transparent !important;
-
-            box-shadow:
-              none !important;
-
-            color:
-              ${tokens.textMuted} !important;
-
-            opacity:
-              0 !important;
-
-            pointer-events:
-              none !important;
-          }
-
-          /*
-           * Los textos externos utilizan textMuted como token
-           * semántico, aunque posteriormente quedan ocultos.
-           */
-
-          .rbc-off-range {
-            color:
-              ${tokens.textMuted} !important;
-          }
-
-          .rbc-off-range .rbc-button-link,
-          .rbc-off-range .rbc-date-cell > a,
-          .rbc-off-range a {
-            color:
-              ${tokens.textMuted} !important;
-
-            visibility:
-              hidden !important;
-
-            pointer-events:
-              none !important;
-          }
-
-          /*
-           * Si una semana completa pertenece fuera del mes
-           * actual, se elimina completamente del layout.
-           *
-           * De esta manera septiembre 2026 utiliza solamente
-           * las cinco semanas necesarias y desaparece la
-           * sexta fila vacía.
-           */
-
-          .rbc-month-row:not(
-            :has(
-              .rbc-row-bg
-              > .rbc-day-bg:not(.rbc-off-range-bg)
-            )
-          ) {
-            display:
-              none !important;
-          }
-
-          /* =================================================
-             CELDAS DEL MES ACTUAL
-          ================================================= */
-
-          .weli-current-month {
-            border-color:
-              ${tokens.border} !important;
-          }
-
-          .rbc-date-cell {
-            position: relative;
-
-            color:
-              ${tokens.text} !important;
-          }
-
-          .rbc-date-cell > a,
-          .rbc-date-cell .rbc-button-link {
-            color:
-              ${tokens.text} !important;
-
-            font-weight:
-              800;
-          }
-
-          .rbc-month-view .rbc-month-row {
-            border-bottom:
-              1px solid ${tokens.border} !important;
-          }
-
-          /* =================================================
-             DÍA ACTUAL
-          ================================================= */
-
-          .rbc-today {
-            background-color:
-              ${tokens.surface2} !important;
-          }
-
-          .rbc-today .rbc-date-cell > a,
-          .rbc-today .rbc-button-link {
-            color:
-              ${tokens.text} !important;
-          }
-
-          /* =================================================
-             EVENTOS
-          ================================================= */
 
           .rbc-month-view .rbc-row-segment {
-            padding:
-              6px 12px 2px 12px;
-
-            overflow:
-              visible;
+            padding: 6px 10px 2px 10px !important;
           }
 
           .rbc-month-view .rbc-event {
-            width:
-              100% !important;
-
-            margin:
-              4px 0 !important;
-
-            border-radius:
-              9999px !important;
-
-            overflow:
-              hidden !important;
-
-            box-shadow:
-              0 1px 0 rgba(0,0,0,.08);
-
-            border:
-              none !important;
+            font-size: .72rem !important;
           }
-
-          .rbc-month-view .rbc-event-content {
-            width:
-              100% !important;
-
-            overflow:
-              hidden !important;
-
-            text-overflow:
-              ellipsis !important;
-
-            white-space:
-              nowrap !important;
-
-            text-align:
-              center !important;
-
-            line-height:
-              20px;
-
-            font-weight:
-              700;
-          }
-
-          .rbc-show-more {
-            color:
-              ${tokens.primary} !important;
-
-            background:
-              transparent !important;
-
-            font-weight:
-              800 !important;
-          }
-
-          /* =================================================
-             SELECCIÓN
-          ================================================= */
-
-          .rbc-slot-selection {
-            background:
-              ${tokens.primary} !important;
-
-            color:
-              ${tokens.primaryContrast} !important;
-          }
-
-          /* =================================================
-             DATEPICKER
-          ================================================= */
-
-          .weli-datepicker,
-          .weli-datepicker .react-datepicker-wrapper,
-          .weli-datepicker .react-datepicker__input-container,
-          .weli-datepicker input {
-            width:
-              100%;
-          }
-
-          .react-datepicker {
-            background:
-              ${tokens.surface} !important;
-
-            border-color:
-              ${tokens.border} !important;
-
-            color:
-              ${tokens.text} !important;
-          }
-
-          .react-datepicker__header {
-            background:
-              ${tokens.surface2} !important;
-
-            border-bottom-color:
-              ${tokens.border} !important;
-          }
-
-          .react-datepicker__current-month,
-          .react-datepicker-time__header,
-          .react-datepicker-year-header {
-            color:
-              ${tokens.text} !important;
-          }
-
-          .react-datepicker__day-name {
-            color:
-              ${tokens.textMuted} !important;
-          }
-
-          .react-datepicker__day,
-          .react-datepicker__time-name {
-            color:
-              ${tokens.text} !important;
-          }
-
-          .react-datepicker__day--outside-month {
-            color:
-              ${tokens.textMuted} !important;
-          }
-
-          .react-datepicker__day:hover {
-            background:
-              ${tokens.surfaceHover} !important;
-          }
-
-          .react-datepicker__day--selected,
-          .react-datepicker__day--keyboard-selected {
-            background:
-              ${tokens.primary} !important;
-
-            color:
-              ${tokens.primaryContrast} !important;
-          }
-
-          .react-datepicker__navigation-icon::before {
-            border-color:
-              ${tokens.textMuted} !important;
-          }
-
-          .react-datepicker__time-container {
-            border-left-color:
-              ${tokens.border} !important;
-          }
-
-          .react-datepicker__time {
-            background:
-              ${tokens.surface} !important;
-          }
-
-          .react-datepicker__time-box,
-          .react-datepicker__time-list {
-            background:
-              ${tokens.surface} !important;
-          }
-
-          .react-datepicker__time-list-item {
-            background:
-              ${tokens.surface} !important;
-
-            color:
-              ${tokens.text} !important;
-          }
-
-          .react-datepicker__time-list-item:hover {
-            background:
-              ${tokens.surfaceHover} !important;
-          }
-
-          .react-datepicker__time-list-item--selected {
-            background:
-              ${tokens.primary} !important;
-
-            color:
-              ${tokens.primaryContrast} !important;
-          }
-
-          /* =================================================
-             INPUTS / PLACEHOLDERS
-          ================================================= */
-
-          .weli-agenda-input {
-            background:
-              ${tokens.inputBg} !important;
-
-            border-color:
-              ${tokens.inputBorder} !important;
-
-            color:
-              ${tokens.inputText} !important;
-          }
-
-          .weli-agenda-input::placeholder {
-            color:
-              ${tokens.textMuted} !important;
-
-            opacity:
-              .72;
-          }
-
-          .weli-datepicker input {
-            background:
-              ${tokens.inputBg} !important;
-
-            border-color:
-              ${tokens.inputBorder} !important;
-
-            color:
-              ${tokens.inputText} !important;
-          }
-
-          .weli-datepicker input::placeholder {
-            color:
-              ${tokens.textMuted} !important;
-
-            opacity:
-              .72;
-          }
-
-          /* =================================================
-             MOBILE
-          ================================================= */
-
-          @media (max-width: 640px) {
-            .rbc-month-view {
-              min-height:
-                520px !important;
-            }
-
-            .rbc-month-view .rbc-row-segment {
-              padding:
-                6px 10px 2px 10px !important;
-            }
-
-            .rbc-month-view .rbc-event {
-              font-size:
-                .72rem !important;
-            }
-          }
-        `,
+        }
+      `,
     };
   }, [tokens]);
 
@@ -1287,21 +952,16 @@ export default function Agenda() {
 
       if (isBefore(startOfDay(clickedDate), todayStart)) {
         setMensaje("");
-
         setError("No puedes agendar eventos en días pasados.");
-
         return;
       }
 
       const isSameMonth =
         clickedDate.getMonth() === currentDate.getMonth() && clickedDate.getFullYear() === currentDate.getFullYear();
 
-      if (!isSameMonth) {
-        return;
-      }
+      if (!isSameMonth) return;
 
       const inicio = new Date(clickedDate);
-
       const finDefault = addMinutes(inicio, 60);
 
       setNuevoEvento({
@@ -1324,27 +984,21 @@ export default function Agenda() {
 
   const guardarEvento = useCallback(async () => {
     const guard = ensureScopeOrRedirect();
-
-    if (!guard.ok) {
-      return;
-    }
+    if (!guard.ok) return;
 
     setMensaje("");
     setError("");
 
     const inicio = new Date(nuevoEvento.fecha_inicio);
-
     const fin = new Date(nuevoEvento.fecha_fin);
 
     if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) {
       setError("Fechas inválidas.");
-
       return;
     }
 
     if (isBefore(startOfDay(inicio), todayStart)) {
       setError("No puedes agendar eventos en días pasados.");
-
       return;
     }
 
@@ -1356,34 +1010,27 @@ export default function Agenda() {
 
     if (finAjustado <= inicio) {
       setError("La fecha/hora de término debe ser mayor a la de inicio.");
-
       return;
     }
 
     const startSQL = toSQLDateTime(inicio);
-
     const endSQL = toSQLDateTime(finAjustado);
 
     if (!startSQL || !endSQL) {
       setError("Error formateando fechas.");
-
       return;
     }
 
     try {
       const payload = {
         titulo: String(nuevoEvento.titulo ?? "").trim(),
-
         descripcion: String(nuevoEvento.descripcion ?? "").trim() || null,
-
         fecha_inicio: startSQL,
-
         fecha_fin: endSQL,
       };
 
       if (!payload.titulo) {
         setError("El título es obligatorio.");
-
         return;
       }
 
@@ -1392,54 +1039,39 @@ export default function Agenda() {
        * NO x-academia-id manual.
        * api.js + backend determinan tenant efectivo.
        */
-
       const response = await api.post("/eventos", payload);
-
       const creado = response?.data?.item ?? response?.data;
 
       if (!creado) {
         setMensaje("Evento creado, pero la respuesta no incluyó el item.");
-
         setModalAbierto(false);
-
         return;
       }
 
       const start = toDateSafe(creado?.fecha_inicio ?? creado?.start);
-
       const end = toDateSafe(creado?.fecha_fin ?? creado?.end);
 
       if (!start || !end) {
         setMensaje("Evento creado. (No se pudo parsear fechas retornadas)");
-
         setModalAbierto(false);
-
         return;
       }
 
       const newEvent = {
         id: creado.id,
-
         title: creado?.titulo ?? creado?.title ?? payload.titulo,
-
         desc: creado?.descripcion ?? creado?.desc ?? payload.descripcion ?? "",
-
         start,
         end,
-
         allDay: start.getHours() === 0 && end.getHours() === 0 && start.toDateString() !== end.toDateString(),
       };
 
       newEvent.color = isHoliday(newEvent.title) ? tokens.primary : pickEventColor(newEvent);
 
       setEventos((previous) => [...previous, newEvent]);
-
       setModalAbierto(false);
-
       setEventoCreadoData(newEvent);
-
       setModalCreado(true);
-
       setMensaje("✅ Evento creado correctamente.");
     } catch (errorRequest) {
       const status = errorRequest?.status ?? errorRequest?.response?.status;
@@ -1454,13 +1086,11 @@ export default function Agenda() {
 
       if (status === 401) {
         hardLogoutToLogin(navigate, rol);
-
         return;
       }
 
       if (status === 403) {
         setError("No tienes permisos para crear eventos.");
-
         return;
       }
 
@@ -1473,28 +1103,19 @@ export default function Agenda() {
   ======================================================= */
 
   const pedirConfirmacionEliminar = useCallback(() => {
-    if (!eventoSel?.id) {
-      return;
-    }
+    if (!eventoSel?.id) return;
 
     setError("");
     setMensaje("");
-
     setEventoDeleteTarget(eventoSel);
-
     setModalConfirmDelete(true);
   }, [eventoSel]);
 
   const confirmarEliminarEvento = useCallback(async () => {
     const guard = ensureScopeOrRedirect();
+    if (!guard.ok) return;
 
-    if (!guard.ok) {
-      return;
-    }
-
-    if (!eventoDeleteTarget?.id || isDeleting) {
-      return;
-    }
+    if (!eventoDeleteTarget?.id || isDeleting) return;
 
     setIsDeleting(true);
     setError("");
@@ -1507,9 +1128,7 @@ export default function Agenda() {
 
       setModalConfirmDelete(false);
       setModalDetalle(false);
-
       setEventoEliminadoData(eventoDeleteTarget);
-
       setModalEliminado(true);
       setEventoDeleteTarget(null);
     } catch (errorRequest) {
@@ -1525,13 +1144,11 @@ export default function Agenda() {
 
       if (status === 401) {
         hardLogoutToLogin(navigate, rol);
-
         return;
       }
 
       if (status === 403) {
         setError("No tienes permisos para eliminar eventos.");
-
         return;
       }
 
@@ -1551,10 +1168,8 @@ export default function Agenda() {
 
   /* =======================================================
      ESTILOS
-
      Dashboard controla el fondo global.
      Agenda permanece transparente.
-     Todas las superficies consumen themeTokens.
   ======================================================= */
 
   const ui = {
@@ -1589,64 +1204,41 @@ export default function Agenda() {
         : "border-emerald-200 bg-emerald-50 text-emerald-800"),
   };
 
-  const pageStyle = {
-    color: tokens.text,
-  };
-
-  const titleStyle = {
-    color: tokens.text,
-  };
-
-  const subtitleStyle = {
-    color: tokens.textMuted,
-  };
+  const pageStyle = { color: tokens.text };
+  const titleStyle = { color: tokens.text };
+  const subtitleStyle = { color: tokens.textMuted };
 
   const modalStyle = {
     maxWidth: 620,
-
     backgroundColor: tokens.surface,
-
     borderColor: tokens.borderStrong,
-
     color: tokens.text,
   };
 
   const inputStyle = {
     backgroundColor: tokens.inputBg,
-
     borderColor: tokens.inputBorder,
-
     color: tokens.inputText,
-
     "--tw-ring-color": `${tokens.focus}33`,
   };
 
-  const labelStyle = {
-    color: tokens.text,
-  };
+  const labelStyle = { color: tokens.text };
 
   const primaryStyle = {
     backgroundColor: tokens.primary,
-
     borderColor: tokens.primary,
-
     color: tokens.primaryContrast,
   };
 
   const ghostStyle = {
     backgroundColor: tokens.surfaceSoft,
-
     borderColor: tokens.borderStrong,
-
     color: tokens.text,
   };
 
   const textAreaBase = ui.input;
-
   const btnPrimary = ui.primary;
-
   const btnGhost = ui.ghost;
-
   const btnDanger = ui.danger;
 
   /* =======================================================
@@ -1668,7 +1260,6 @@ export default function Agenda() {
 
         <div className="space-y-3 mb-4">
           {error && <div className={ui.error}>{error}</div>}
-
           {mensaje && <div className={ui.ok}>{mensaje}</div>}
         </div>
 
@@ -1734,27 +1325,15 @@ export default function Agenda() {
         {modalAbierto && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center px-3 py-6"
-            style={{
-              backgroundColor: tokens.overlay,
-            }}
+            style={{ backgroundColor: tokens.overlay }}
           >
             <div className={ui.modal} style={modalStyle}>
               <div className="mb-4">
-                <h3
-                  className="text-2xl text-center font-extrabold"
-                  style={{
-                    color: tokens.text,
-                  }}
-                >
+                <h3 className="text-2xl text-center font-extrabold" style={{ color: tokens.text }}>
                   Crear evento
                 </h3>
 
-                <p
-                  className="text-center text-sm mt-1"
-                  style={{
-                    color: tokens.textMuted,
-                  }}
-                >
+                <p className="text-center text-sm mt-1" style={{ color: tokens.textMuted }}>
                   Completa los datos del evento y presiona Guardar.
                 </p>
               </div>
@@ -1772,7 +1351,6 @@ export default function Agenda() {
                     onChange={(event) =>
                       setNuevoEvento({
                         ...nuevoEvento,
-
                         titulo: event.target.value,
                       })
                     }
@@ -1792,7 +1370,6 @@ export default function Agenda() {
                     onChange={(event) =>
                       setNuevoEvento({
                         ...nuevoEvento,
-
                         descripcion: event.target.value,
                       })
                     }
@@ -1809,13 +1386,10 @@ export default function Agenda() {
                       <DatePicker
                         selected={new Date(nuevoEvento.fecha_inicio)}
                         onChange={(date) => {
-                          if (!date) {
-                            return;
-                          }
+                          if (!date) return;
 
                           setNuevoEvento({
                             ...nuevoEvento,
-
                             fecha_inicio: date,
                           });
                         }}
@@ -1839,13 +1413,10 @@ export default function Agenda() {
                       <DatePicker
                         selected={new Date(nuevoEvento.fecha_fin)}
                         onChange={(date) => {
-                          if (!date) {
-                            return;
-                          }
+                          if (!date) return;
 
                           setNuevoEvento({
                             ...nuevoEvento,
-
                             fecha_fin: date,
                           });
                         }}
@@ -1887,16 +1458,6 @@ export default function Agenda() {
 
         {/* =================================================
             ESTADOS MANTENIDOS DEL COMPONENTE ORIGINAL
-
-            modalCreado
-            eventoCreadoData
-            modalConfirmDelete
-            eventoDeleteTarget
-            isDeleting
-            modalEliminado
-            eventoEliminadoData
-            pedirConfirmacionEliminar
-            confirmarEliminarEvento
         ================================================= */}
 
         {/*

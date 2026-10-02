@@ -21,7 +21,13 @@ import {
   Trash2,
   WalletCards,
 } from "lucide-react";
-import api, { ACADEMIA_STORAGE_KEY, clearToken, getToken } from "../../services/api";
+import api, {
+  clearSelectedAcademia,
+  clearToken,
+  getSelectedAcademiaId,
+  getToken,
+  setSelectedAcademiaId,
+} from "../../services/api";
 import { logoutAdmin } from "../../services/auth";
 import { useTheme } from "../../context/ThemeContext";
 
@@ -86,6 +92,72 @@ function pickList(payload, keys = []) {
 
 function pickAcademias(payload) {
   return pickList(payload, ["academias"]);
+}
+
+/**
+ * Normaliza el contrato mínimo utilizado por SuperDashboard.
+ *
+ * El backend puede exponer temporalmente el identificador como:
+ *
+ * - id
+ * - academia_id
+ *
+ * Desde aquí hacia abajo el componente trabaja sólo con `id`.
+ */
+function normalizeAcademiaListItem(item) {
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+
+  const id = Number(item?.id ?? item?.academia_id ?? 0);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return null;
+  }
+
+  const estadoIdRaw = Number(item?.estado_id ?? 0);
+
+  const deporteIdRaw = Number(item?.deporte_id ?? 0);
+
+  return {
+    ...item,
+
+    id,
+
+    nombre: normalizeText(item?.nombre ?? item?.nombre_academia ?? ""),
+
+    rut_academia: item?.rut_academia ?? null,
+
+    deporte_id: Number.isInteger(deporteIdRaw) && deporteIdRaw > 0 ? deporteIdRaw : null,
+
+    estado_id: Number.isInteger(estadoIdRaw) && estadoIdRaw > 0 ? estadoIdRaw : null,
+  };
+}
+
+function normalizeAcademiasList(payload) {
+  const raw = pickAcademias(payload);
+
+  /*
+   * Map cumple dos funciones:
+   *
+   * 1. elimina registros inválidos;
+   * 2. impide IDs duplicados en React.
+   */
+  const byId = new Map();
+
+  for (const item of raw ?? []) {
+    const normalized = normalizeAcademiaListItem(item);
+
+    if (!normalized) {
+      console.error("[WELI] Academia descartada por ID inválido:", item);
+
+      continue;
+    }
+
+    byId.set(normalized.id, normalized);
+  }
+
+  return Array.from(byId.values());
 }
 
 function pickDeportes(payload) {
@@ -524,6 +596,7 @@ export default function SuperDashboard() {
       }
     } catch {
       clearToken();
+      clearSelectedAcademia();
       navigate("/login", { replace: true });
     }
   }, [navigate]);
@@ -542,7 +615,9 @@ export default function SuperDashboard() {
           headers: { "Cache-Control": "no-cache" },
         });
 
-        setAcademias(pickAcademias(res?.data ?? {}));
+        const normalizedAcademias = normalizeAcademiasList(res?.data ?? {});
+
+        setAcademias(normalizedAcademias);
       } catch (err) {
         if (signal?.aborted) return;
 
@@ -552,7 +627,9 @@ export default function SuperDashboard() {
 
         if (status === 401) {
           clearToken();
+          clearSelectedAcademia();
           navigate("/login", { replace: true });
+          return;
         } else if (status === 403) {
           setMsgType("error");
           setMsg("Acceso denegado: esta operación requiere rol Superadmin.");
@@ -651,7 +728,7 @@ export default function SuperDashboard() {
 
         if (status === 401) {
           clearToken();
-
+          clearSelectedAcademia();
           navigate("/login", {
             replace: true,
           });
@@ -733,6 +810,7 @@ export default function SuperDashboard() {
 
         if (status === 401) {
           clearToken();
+          clearSelectedAcademia();
           navigate("/login", { replace: true });
           return;
         }
@@ -839,26 +917,26 @@ export default function SuperDashboard() {
    * al backend cuando sea necesaria.
    */
   const clearSelectedAcademiaIfNeeded = (academiaId) => {
-    try {
-      const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
+    const selectedId = getSelectedAcademiaId();
 
-      if (!raw) return;
-
-      const selectedId = Number(raw);
-
-      if (Number.isInteger(selectedId) && selectedId === Number(academiaId)) {
-        localStorage.removeItem(ACADEMIA_STORAGE_KEY);
-
-        window.dispatchEvent(new Event("weli:selectedAcademiaChanged"));
-      }
-    } catch {}
+    if (selectedId > 0 && selectedId === Number(academiaId)) {
+      clearSelectedAcademia();
+    }
   };
 
   const enterAcademia = (academia) => {
     const id = Number(academia?.id ?? 0);
     const estadoId = Number(academia?.estado_id ?? 0);
 
-    if (!Number.isInteger(id) || id <= 0) return;
+    if (!Number.isInteger(id) || id <= 0) {
+      setMsgType("error");
+
+      setMsg("No fue posible identificar correctamente la academia seleccionada.");
+
+      console.error("[WELI] enterAcademia recibió una academia sin ID válido:", academia);
+
+      return;
+    }
 
     if (estadoId !== 1) {
       setMsgType("error");
@@ -866,38 +944,13 @@ export default function SuperDashboard() {
       return;
     }
 
-    try {
-      localStorage.setItem(ACADEMIA_STORAGE_KEY, String(id));
+    const stored = setSelectedAcademiaId(id);
 
-      window.dispatchEvent(new Event("weli:selectedAcademiaChanged"));
-    } catch {}
-
-    window.location.assign("/super-dashboard/admin/dashboard");
-
-    const snapshot = {
-      id,
-      nombre: academia?.nombre ?? null,
-      rut_academia: academia?.rut_academia ?? null,
-      deporte_id: academia?.deporte_id ?? null,
-      deporte_nombre: academia?.deporte_nombre ?? null,
-      direccion: academia?.direccion ?? null,
-      ciudad_comuna_id: academia?.ciudad_comuna_id ?? null,
-      ciudad_id: academia?.ciudad_id ?? null,
-      ciudad_nombre: academia?.ciudad_nombre ?? null,
-      comuna_id: academia?.comuna_id ?? null,
-      comuna_nombre: academia?.comuna_nombre ?? null,
-      region_id: academia?.region_id ?? null,
-      region_nombre: academia?.region_nombre ?? null,
-      email: academia?.email ?? null,
-      estado_id: academia?.estado_id ?? null,
-      estado_nombre: academia?.estado_nombre ?? null,
-      ts: Date.now(),
-    };
-
-    try {
-      localStorage.setItem(ACADEMIA_STORAGE_KEY, JSON.stringify(snapshot));
-      window.dispatchEvent(new Event("weli:selectedAcademiaChanged"));
-    } catch {}
+    if (!stored) {
+      setMsgType("error");
+      setMsg("No fue posible establecer la academia seleccionada.");
+      return;
+    }
 
     window.location.assign("/super-dashboard/admin/dashboard");
   };
@@ -937,7 +990,15 @@ export default function SuperDashboard() {
   const openEditModal = async (academia) => {
     const id = Number(academia?.id ?? 0);
 
-    if (!Number.isInteger(id) || id <= 0) return;
+    if (!Number.isInteger(id) || id <= 0) {
+      setMsgType("error");
+
+      setMsg("No fue posible identificar correctamente la academia a editar.");
+
+      console.error("[WELI] openEditModal recibió una academia sin ID válido:", academia);
+
+      return;
+    }
 
     setMsg("");
     setMsgType("error");
@@ -946,30 +1007,54 @@ export default function SuperDashboard() {
 
     try {
       const academiaRes = await api.get(`${academiasPath}/${id}`, {
-        headers: { "Cache-Control": "no-cache" },
+        headers: {
+          "Cache-Control": "no-cache",
+        },
       });
 
       const item = academiaRes?.data?.item ?? academiaRes?.data?.academia ?? academiaRes?.data;
 
-      if (!item?.id) {
+      /*
+       * Normalizamos también la respuesta individual.
+       *
+       * Si backend devuelve academia_id en vez de id,
+       * el formulario sigue funcionando.
+       */
+      const normalizedItem = normalizeAcademiaListItem({
+        ...item,
+
+        id: item?.id ?? item?.academia_id ?? id,
+      });
+
+      if (!normalizedItem) {
         throw new Error("No fue posible recuperar los datos de la academia.");
       }
 
-      setForm(normalizeAcademiaForEdit(item, catalogoTiposPago));
+      setForm(normalizeAcademiaForEdit(normalizedItem, catalogoTiposPago));
+
       setFormMode("edit");
+
       resetFormUI();
+
       setOpenForm(true);
     } catch (err) {
       const status = Number(err?.status ?? err?.response?.status ?? 0);
+
       const message = err?.data?.message ?? err?.response?.data?.message ?? err?.message ?? "Error cargando academia";
 
       if (status === 401) {
         clearToken();
-        navigate("/login", { replace: true });
+        clearSelectedAcademia();
+
+        navigate("/login", {
+          replace: true,
+        });
+
         return;
       }
 
       setMsgType("error");
+
       setMsg(String(message));
     } finally {
       setLoadingEdit(false);
@@ -1700,6 +1785,7 @@ export default function SuperDashboard() {
 
       if (status === 401) {
         clearToken();
+        clearSelectedAcademia();
         navigate("/login", {
           replace: true,
         });
@@ -1721,7 +1807,15 @@ export default function SuperDashboard() {
     const id = Number(academia?.id ?? 0);
     const actual = Number(academia?.estado_id ?? 0);
 
-    if (!Number.isInteger(id) || id <= 0) return;
+    if (!Number.isInteger(id) || id <= 0) {
+      setMsgType("error");
+
+      setMsg("No fue posible identificar correctamente la academia.");
+
+      console.error("[WELI] toggleAcademiaEstado recibió una academia sin ID válido:", academia);
+
+      return;
+    }
 
     const nuevoEstado = actual === 1 ? 2 : 1;
     const accion = nuevoEstado === 1 ? "reactivar" : "desactivar";
@@ -1755,6 +1849,7 @@ export default function SuperDashboard() {
 
       if (status === 401) {
         clearToken();
+        clearSelectedAcademia();
         navigate("/login", {
           replace: true,
         });
@@ -1776,7 +1871,15 @@ export default function SuperDashboard() {
     const id = Number(academia?.id ?? 0);
     const nombre = String(academia?.nombre ?? `Academia #${id}`);
 
-    if (!Number.isInteger(id) || id <= 0) return;
+    if (!Number.isInteger(id) || id <= 0) {
+      setMsgType("error");
+
+      setMsg("No fue posible identificar correctamente la academia a eliminar.");
+
+      console.error("[WELI] deleteAcademia recibió una academia sin ID válido:", academia);
+
+      return;
+    }
 
     const confirmation = window.prompt(
       `ELIMINACIÓN DEFINITIVA\n\nEsta acción eliminará la academia "${nombre}" y su configuración comercial cuando no existan dependencias que lo impidan.\n\nEscribe ELIMINAR para confirmar:`
@@ -1811,6 +1914,7 @@ export default function SuperDashboard() {
 
       if (status === 401) {
         clearToken();
+        clearSelectedAcademia();
         navigate("/login", {
           replace: true,
         });
@@ -1999,7 +2103,7 @@ export default function SuperDashboard() {
 
                 return (
                   <article
-                    key={String(id)}
+                    key={`academia-${id}`}
                     className={`${card} rounded-2xl p-5 shadow-lg border transition min-w-0 h-full flex flex-col`}
                   >
                     <div className="flex items-start justify-between gap-3">

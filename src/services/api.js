@@ -1,5 +1,4 @@
 // src/services/api.js
-
 import axios from "axios";
 
 /* =========================================================
@@ -14,10 +13,20 @@ const API_DEBUG_KEY = "weli_api_debug";
 
 /* =========================================================
    STORAGE HELPERS
-   El frontend no debe almacenar ciphertext, blind indexes
-   ni claves de cifrado. Este módulo sólo persiste token y
-   contexto operacional de academia.
 ========================================================= */
+
+/**
+ * El frontend no almacena:
+ * - ciphertext;
+ * - blind indexes;
+ * - claves de cifrado;
+ * - snapshots de usuario;
+ * - snapshots de academia.
+ *
+ * Sólo persiste:
+ * - JWT vigente;
+ * - academia_id seleccionada por Superadmin.
+ */
 
 function safeStorageGet(key) {
   try {
@@ -46,19 +55,15 @@ function safeStorageRemove(key) {
    HEADERS HELPERS
 ========================================================= */
 
-/**
- * Elimina un header sin depender del casing.
- *
- * Authorization === authorization
- * x-academia-id === X-Academia-Id
- */
 function removeHeaderIgnoreCase(headers, headerName) {
   if (!headers || !headerName) return;
 
   const target = String(headerName).toLowerCase();
 
   for (const key of Object.keys(headers)) {
-    if (String(key).toLowerCase() === target) delete headers[key];
+    if (String(key).toLowerCase() === target) {
+      delete headers[key];
+    }
   }
 }
 
@@ -82,14 +87,17 @@ function getHeaderIgnoreCase(headers, headerName) {
 
 /* =========================================================
    DEBUG
-   Nunca imprimimos:
-   - Authorization
-   - token
-   - payloads
-   - request body
-   - responses completas
-   - PII
 ========================================================= */
+
+/**
+ * Nunca se imprimen:
+ * - Authorization;
+ * - JWT;
+ * - request body;
+ * - respuestas completas;
+ * - formularios;
+ * - PII.
+ */
 
 const API_DEBUG =
   String(import.meta?.env?.VITE_API_DEBUG ?? "0") === "1" || String(safeStorageGet(API_DEBUG_KEY) ?? "0") === "1";
@@ -105,7 +113,7 @@ const pickBaseUrl = () => {
 
   url = url.trim();
 
-  // Evita incorporar query/hash accidentalmente.
+  /* Elimina query/hash accidentales. */
   url = url.split("#")[0].split("?")[0];
 
   if (!/^https?:\/\//i.test(url)) {
@@ -114,7 +122,7 @@ const pickBaseUrl = () => {
 
   url = url.replace(/\/+$/, "");
 
-  // El frontend siempre opera contra /api.
+  /* El frontend opera siempre bajo /api. */
   if (!/\/api$/i.test(url)) {
     url = `${url}/api`;
   }
@@ -135,9 +143,9 @@ export const API_BASE_URL = pickBaseUrl();
 /**
  * Endpoints públicos.
  *
- * Esta instancia jamás debe enviar:
- * - Authorization
- * - x-academia-id
+ * Nunca deben enviar:
+ * - Authorization;
+ * - x-academia-id.
  */
 export const apiPublic = axios.create({
   baseURL: API_BASE_URL,
@@ -161,7 +169,7 @@ export const apiPrivate = axios.create({
 });
 
 /**
- * Alias histórico utilizado por componentes actuales.
+ * Cliente autenticado principal utilizado por WELI.
  */
 const api = apiPrivate;
 
@@ -170,12 +178,13 @@ const api = apiPrivate;
 ========================================================= */
 
 /**
- * El JWT continúa temporalmente en localStorage para preservar
- * la arquitectura actual.
+ * El JWT permanece actualmente en localStorage para conservar
+ * la arquitectura vigente.
  *
- * Migrarlo a cookie HttpOnly sería una mejora posterior que
- * requiere cambios coordinados backend + frontend.
+ * Una futura migración a cookie HttpOnly requiere cambios
+ * coordinados entre backend y frontend.
  */
+
 export const getToken = () => {
   const token = safeStorageGet(TOKEN_KEY);
 
@@ -218,53 +227,74 @@ export const setToken = (token) => {
 ========================================================= */
 
 /**
- * Exclusivamente para SUPERADMIN.
+ * CONTRATO DEFINITIVO:
  *
- * Admin y Staff nunca deben determinar tenant desde localStorage.
+ * Exclusivamente Superadmin.
  *
- * Este módulo sólo extrae el ID operacional.
- * Aunque exista un snapshot histórico con nombre u otros campos,
- * esos valores jamás se utilizan para autorización ni headers.
+ * localStorage:
+ *
+ * weli_selected_academia = "5"
+ *
+ * No se permiten:
+ * - JSON;
+ * - nombre;
+ * - deporte_id;
+ * - RUT;
+ * - email;
+ * - dirección;
+ * - estado;
+ * - timestamp;
+ * - ningún otro snapshot.
+ *
+ * Admin y Staff nunca obtienen tenant desde localStorage.
  */
-export function clearSelectedAcademia() {
-  safeStorageRemove(ACADEMIA_STORAGE_KEY);
+
+export function getSelectedAcademiaId() {
+  const raw = safeStorageGet(ACADEMIA_STORAGE_KEY);
+
+  if (!raw) return 0;
+
+  /*
+   * Sólo se acepta representación decimal positiva.
+   * Ejemplos válidos:
+   *
+   * "1"
+   * "27"
+   * "300"
+   *
+   * JSON queda rechazado automáticamente.
+   */
+  if (!/^[1-9]\d*$/.test(raw.trim())) {
+    return 0;
+  }
+
+  const academiaId = Number(raw.trim());
+
+  return Number.isSafeInteger(academiaId) && academiaId > 0 ? academiaId : 0;
 }
 
-function readSelectedAcademiaId() {
-  try {
-    const raw = safeStorageGet(ACADEMIA_STORAGE_KEY);
+export function setSelectedAcademiaId(academiaId) {
+  const id = Number(academiaId);
 
-    if (!raw) return 0;
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    clearSelectedAcademia();
+    return false;
+  }
 
-    /*
-     * Compatibilidad con almacenamiento simple:
-     *
-     * "2"
-     */
-    const direct = Number(raw);
+  const stored = safeStorageSet(ACADEMIA_STORAGE_KEY, String(id));
 
-    if (Number.isInteger(direct) && direct > 0) {
-      return direct;
-    }
+  if (stored && typeof window !== "undefined") {
+    window.dispatchEvent(new Event("weli:selectedAcademiaChanged"));
+  }
 
-    /*
-     * Compatibilidad con snapshot histórico:
-     *
-     * {
-     *   id: 2,
-     *   nombre: "...",
-     *   ...
-     * }
-     *
-     * ÚNICAMENTE se utiliza el ID.
-     */
-    const parsed = JSON.parse(raw);
+  return stored;
+}
 
-    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
+export function clearSelectedAcademia() {
+  safeStorageRemove(ACADEMIA_STORAGE_KEY);
 
-    return Number.isInteger(id) && id > 0 ? id : 0;
-  } catch {
-    return 0;
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("weli:selectedAcademiaChanged"));
   }
 }
 
@@ -276,14 +306,15 @@ function readSelectedAcademiaId() {
  * IMPORTANTE:
  *
  * Esto NO valida:
- * - firma
- * - issuer
- * - audience
- * - expiración criptográfica
+ * - firma;
+ * - issuer;
+ * - audience;
+ * - autenticidad.
  *
- * Sólo se utiliza para UI y construcción controlada de headers.
+ * Se utiliza únicamente para comportamiento UI y construcción
+ * controlada del request.
  *
- * La autoridad real permanece en backend:
+ * La autoridad real continúa en backend:
  *
  * jwt.verify()
  *   ↓
@@ -293,17 +324,23 @@ function readSelectedAcademiaId() {
  *   ↓
  * getEffectiveAcademiaId
  */
-function decodeJwtPayload(token) {
+
+export function decodeJwtPayload(token) {
   try {
     const parts = String(token || "").split(".");
 
-    if (parts.length !== 3) return null;
+    if (parts.length !== 3) {
+      return null;
+    }
 
     const b64url = parts[1];
+
     const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
+
     const padded = b64 + "===".slice((b64.length + 3) % 4);
 
     const binary = atob(padded);
+
     const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
 
     const json = new TextDecoder("utf-8").decode(bytes);
@@ -318,23 +355,12 @@ function decodeJwtPayload(token) {
    JWT CLAIM HELPERS
 ========================================================= */
 
-/**
- * Prioriza formato JWT actual.
- * Conserva aliases antiguos durante transición.
- */
-function extractRolFromToken(token) {
+export function extractRolFromToken(token) {
   const payload = decodeJwtPayload(token);
 
   if (!payload) return 0;
 
-  const raw =
-    payload?.rol_id ??
-    payload?.user?.rol_id ??
-    payload?.payload?.rol_id ??
-    payload?.role_id ??
-    payload?.role ??
-    payload?.rol ??
-    0;
+  const raw = payload?.rol_id ?? payload?.user?.rol_id ?? payload?.role_id ?? payload?.role ?? payload?.rol ?? 0;
 
   const rol = Number(raw);
 
@@ -342,18 +368,17 @@ function extractRolFromToken(token) {
 }
 
 /**
- * Compatibilidad/UI.
+ * Utilidad UI.
  *
- * Para Admin/Staff NO se utiliza para construir
+ * Admin/Staff NO utilizan este valor para construir
  * x-academia-id.
  */
-function extractAcademiaIdFromToken(token) {
+export function extractAcademiaIdFromToken(token) {
   const payload = decodeJwtPayload(token);
 
   if (!payload) return 0;
 
-  const raw =
-    payload?.academia_id ?? payload?.user?.academia_id ?? payload?.payload?.academia_id ?? payload?.academy_id ?? 0;
+  const raw = payload?.academia_id ?? payload?.user?.academia_id ?? payload?.academy_id ?? 0;
 
   const academiaId = Number(raw);
 
@@ -375,20 +400,14 @@ function safePathFromAxiosUrl(url = "") {
     if (/^https?:\/\//i.test(raw)) {
       path = new URL(raw).pathname || "/";
     } else {
-      /*
-       * Axios puede recibir:
-       *
-       * /jugadores?estado_id=1
-       * /jugadores?estado_id=1#top
-       *
-       * Para tenant sólo importa pathname.
-       */
       const clean = raw.split("#")[0].split("?")[0];
 
       path = clean.startsWith("/") ? clean : `/${clean}`;
     }
 
-    if (path === "/api") return "/";
+    if (path === "/api") {
+      return "/";
+    }
 
     if (path.startsWith("/api/")) {
       path = path.slice(4);
@@ -404,6 +423,7 @@ function safePathFromAxiosUrl(url = "") {
 
 function joinUrl(baseURL, url) {
   const base = String(baseURL || "").replace(/\/+$/, "");
+
   const path = String(url || "");
 
   if (!path) return base;
@@ -424,107 +444,190 @@ function joinUrl(baseURL, url) {
 ========================================================= */
 
 /**
- * Determina si un endpoint pertenece a contexto de academia.
- *
- * IMPORTANTE:
- *
- * isTenantRoute() NO significa que siempre se enviará
- * x-academia-id.
+ * Determina si un endpoint pertenece a un tenant Academia.
  *
  * SUPERADMIN
- *   → x-academia-id desde academia seleccionada.
+ * → x-academia-id desde getSelectedAcademiaId().
  *
  * ADMIN / STAFF
- *   → NO se envía x-academia-id.
- *   → tenant viene del JWT firmado.
+ * → nunca envían x-academia-id.
+ * → academia_id proviene del JWT validado por backend.
  */
+
 function isTenantRoute(url = "") {
   const path = safePathFromAxiosUrl(url);
 
-  /* -------------------------
-     Portal apoderado
-  ------------------------- */
+  /* =======================================================
+     PORTAL APODERADO
+  ======================================================= */
 
-  if (path.startsWith("/portal-apoderado")) return false;
-  if (path.startsWith("/auth-apoderado")) return false;
+  if (path.startsWith("/portal-apoderado")) {
+    return false;
+  }
 
-  /* -------------------------
-     Auth panel
-  ------------------------- */
+  if (path.startsWith("/auth-apoderado")) {
+    return false;
+  }
 
-  if (path.startsWith("/auth")) return false;
+  /* =======================================================
+     AUTH PANEL
+  ======================================================= */
 
-  /* -------------------------
-     Academias
-  ------------------------- */
+  if (path.startsWith("/auth")) {
+    return false;
+  }
 
-  // Administración global.
+  /* =======================================================
+     ACADEMIAS
+
+     GET /academias
+     ----------------
+     Es administración GLOBAL de Superadmin.
+     No necesita x-academia-id.
+
+     GET /academias/:id
+     --------------------
+     Representa una academia concreta.
+
+     Para Superadmin puede existir un tenant seleccionado,
+     por lo que permitimos que el interceptor adjunte
+     x-academia-id si corresponde.
+
+     El backend continúa siendo la autoridad real.
+  ======================================================= */
+
   if (path === "/academias" || path === "/academias/") {
     return false;
   }
 
-  // Academia específica.
   if (/^\/academias\/\d+\/?$/.test(path)) {
     return true;
   }
 
-  /* -------------------------
-     Recursos tenantizados
-  ------------------------- */
+  /* =======================================================
+     RECURSOS TENANTIZADOS
+  ======================================================= */
 
   const tenantPrefixes = [
-    // Core
+    /* -----------------------------------------------------
+       Tema de academia
+
+       CRÍTICO PARA SUPERADMIN:
+       ThemeContext solicita /academia-tema después de que
+       se selecciona una academia.
+
+       Esto permite que api.js construya:
+
+       x-academia-id: <academia seleccionada>
+    ----------------------------------------------------- */
+
+    "/academia-tema",
+
+    /* -----------------------------------------------------
+       Core
+    ----------------------------------------------------- */
+
     "/jugadores",
 
-    // Finanzas
+    /* -----------------------------------------------------
+       Finanzas
+    ----------------------------------------------------- */
+
     "/pagos-jugador",
     "/pagos_jugador",
+
     "/cargos-jugador",
 
-    // Planes
+    /* -----------------------------------------------------
+       Planes
+    ----------------------------------------------------- */
+
     "/planes",
+
     "/plan-sucursales",
+
     "/plan-tarifas",
+
     "/jugador-planes",
 
-    // Tarifas
+    /* -----------------------------------------------------
+       Tarifas
+    ----------------------------------------------------- */
+
     "/tarifa-sucursales",
 
-    // Promociones
+    /* -----------------------------------------------------
+       Promociones
+    ----------------------------------------------------- */
+
     "/promociones",
+
     "/promocion-planes",
+
     "/promocion-sucursales",
+
     "/promocion-tipos-pago",
 
-    // Estadísticas
+    /* -----------------------------------------------------
+       Estadísticas
+    ----------------------------------------------------- */
+
     "/estadisticas",
 
-    // Convocatorias
+    /* -----------------------------------------------------
+       Convocatorias
+    ----------------------------------------------------- */
+
     "/convocatorias",
 
-    // Agenda / eventos
+    /* -----------------------------------------------------
+       Agenda / Eventos
+    ----------------------------------------------------- */
+
     "/agenda",
+
     "/eventos",
 
-    // Catálogos
+    /* -----------------------------------------------------
+       Catálogos tenantizados
+    ----------------------------------------------------- */
+
     "/categorias",
+
     "/categoria",
+
     "/estado",
+
     "/estados",
+
     "/comunas",
+
     "/establecimientos-educ",
+
     "/prevision-medica",
+
     "/posiciones",
+
     "/sucursales-real",
+
     "/sucursales_real",
+
     "/situacion-pago",
+
     "/situacion_pago",
+
     "/tipo-pago",
+
     "/tipo_pago",
+
     "/medio-pago",
+
     "/medios-pago",
 
-    // Usuarios
+    /* -----------------------------------------------------
+       Usuarios
+    ----------------------------------------------------- */
+
     "/usuarios",
   ];
 
@@ -546,17 +649,18 @@ if (bootToken) {
 ========================================================= */
 
 /**
- * La instancia pública jamás permite:
- *
- * Authorization
- * x-academia-id
+ * apiPublic jamás permite:
+ * - Authorization;
+ * - x-academia-id.
  */
+
 apiPublic.interceptors.request.use((config) => {
   const headers = config.headers ?? {};
 
   const plain = typeof headers?.toJSON === "function" ? headers.toJSON() : { ...headers };
 
   removeHeaderIgnoreCase(plain, "Authorization");
+
   removeHeaderIgnoreCase(plain, ACADEMIA_HEADER);
 
   config.headers = plain;
@@ -576,12 +680,12 @@ apiPrivate.interceptors.request.use((config) => {
   const plain = typeof headers?.toJSON === "function" ? headers.toJSON() : { ...headers };
 
   /* -------------------------------------------------------
-     AUTHORIZATION
-  ------------------------------------------------------- */
+       AUTHORIZATION
+    ------------------------------------------------------- */
 
   /*
-   * Nunca confiamos en Authorization manual de componentes.
-   * Se reconstruye exclusivamente desde TOKEN_KEY.
+   * Nunca confiamos en Authorization agregado manualmente
+   * por un componente.
    */
   removeHeaderIgnoreCase(plain, "Authorization");
 
@@ -590,14 +694,12 @@ apiPrivate.interceptors.request.use((config) => {
   }
 
   /* -------------------------------------------------------
-     ACADEMIA
-  ------------------------------------------------------- */
+       TENANT
+    ------------------------------------------------------- */
 
   /*
-   * Nunca confiamos en x-academia-id manual agregado
-   * por un componente.
-   *
-   * Se elimina y se reconstruye según rol.
+   * Nunca confiamos en x-academia-id agregado manualmente.
+   * Se elimina siempre antes de reconstruir el contexto.
    */
   removeHeaderIgnoreCase(plain, ACADEMIA_HEADER);
 
@@ -609,51 +711,48 @@ apiPrivate.interceptors.request.use((config) => {
   if (token && tenantRoute) {
     rol = extractRolFromToken(token);
 
-    /*
-     * SUPERADMIN:
-     *
-     * únicamente él puede enviar x-academia-id.
-     */
+    /* SUPERADMIN */
     if (rol === 3) {
-      academiaId = readSelectedAcademiaId();
+      academiaId = getSelectedAcademiaId();
 
       if (academiaId > 0) {
         plain[ACADEMIA_HEADER] = String(academiaId);
       }
     }
 
-    /*
-     * ADMIN / STAFF:
-     *
-     * NO enviamos x-academia-id.
-     * El backend obtiene tenant exclusivamente
-     * desde el JWT firmado.
-     */
+    /* ADMIN / STAFF */
     if (rol === 1 || rol === 2) {
       academiaId = extractAcademiaIdFromToken(token);
 
       /*
-       * academiaId sólo sirve para diagnóstico/UI.
+       * Este valor sirve exclusivamente como contexto local.
        *
-       * Nunca hacemos:
+       * NO se envía:
        *
-       * plain[ACADEMIA_HEADER] = academiaId
+       * plain[ACADEMIA_HEADER]
+       *
+       * porque el backend debe obtener academia_id desde
+       * el JWT firmado.
        */
     }
   }
 
   /* -------------------------------------------------------
-     DEBUG SEGURO
-  ------------------------------------------------------- */
+       DEBUG SEGURO
+    ------------------------------------------------------- */
 
   if (API_DEBUG) {
     const full = joinUrl(config?.baseURL, config?.url);
 
     console.log("[WELI API REQ]", (config?.method || "GET").toUpperCase(), full, {
       hasAuth: hasHeaderIgnoreCase(plain, "Authorization"),
+
       tenantRoute,
+
       rol,
+
       effectiveAcademiaHint: academiaId || null,
+
       xAcademia: getHeaderIgnoreCase(plain, ACADEMIA_HEADER) ?? null,
     });
   }
@@ -668,15 +767,7 @@ apiPrivate.interceptors.request.use((config) => {
 ========================================================= */
 
 apiPrivate.interceptors.response.use(
-  /* -------------------------------------------------------
-     RESPUESTA CORRECTA
-  ------------------------------------------------------- */
-
   (response) => response,
-
-  /* -------------------------------------------------------
-     ERROR
-  ------------------------------------------------------- */
 
   (error) => {
     const isCanceled =
@@ -687,21 +778,13 @@ apiPrivate.interceptors.response.use(
     const data = error?.response?.data ?? null;
 
     /* -----------------------------------------------------
-       401 / TOKEN
+       401 / SESIÓN
     ----------------------------------------------------- */
 
     if (status === 401) {
       const message = String(data?.message ?? data?.detail ?? data?.error ?? "").toLowerCase();
 
-      /*
-       * Compatible con:
-       *
-       * authz.ts
-       * auth.ts
-       * auth_apoderado.ts
-       * routers legacy
-       */
-      const shouldClearToken =
+      const shouldClearSession =
         message.includes("invalid_token") ||
         message.includes("invalid token") ||
         message.includes("unauthorized") ||
@@ -715,8 +798,9 @@ apiPrivate.interceptors.response.use(
         message.includes("token sin academia valida") ||
         message.includes("jwt");
 
-      if (shouldClearToken) {
+      if (shouldClearSession) {
         clearToken();
+        clearSelectedAcademia();
       }
     }
 
@@ -738,22 +822,15 @@ apiPrivate.interceptors.response.use(
 
     /**
      * No incluimos:
+     * - error.response completo;
+     * - error.request;
+     * - error.config;
+     * - objetos Axios completos;
+     * - request body.
      *
-     * error.response completo
-     * error.request
-     * error.config
-     * _raw
-     *
-     * porque config puede contener:
-     *
-     * Authorization
-     * request body
-     * formularios
-     * datos personales
-     *
-     * Los componentes reciben únicamente metadata segura
-     * y data devuelta explícitamente por nuestro backend.
+     * config puede contener JWT y datos personales.
      */
+
     const normalized = {
       status,
       method,
@@ -813,9 +890,7 @@ apiPrivate.interceptors.response.use(
 );
 
 /* =========================================================
-   EXPORTS
+   EXPORT DEFAULT
 ========================================================= */
 
 export default api;
-
-export { decodeJwtPayload, extractRolFromToken, extractAcademiaIdFromToken };

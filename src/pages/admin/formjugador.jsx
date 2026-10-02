@@ -14,9 +14,8 @@ import {
   ClipboardList,
   GraduationCap,
 } from "lucide-react";
-
 import { useTheme } from "../../context/ThemeContext";
-import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
+import api, { getToken, clearToken, clearSelectedAcademia, getSelectedAcademiaId } from "../../services/api";
 import IsLoading from "../../components/isLoading";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 import { CONTRATO_TEMPLATE } from "../../services/contratoTemplate";
@@ -197,22 +196,8 @@ const blobToBase64 = (blob) =>
   });
 
 const getAcademiaIdFromStorage = () => {
-  try {
-    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
-
-    if (!raw) return null;
-
-    const direct = Number(raw);
-
-    if (Number.isFinite(direct) && direct > 0) return direct;
-
-    const parsed = JSON.parse(raw);
-    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
-
-    return Number.isFinite(id) && id > 0 ? id : null;
-  } catch {
-    return null;
-  }
+  const academiaId = getSelectedAcademiaId();
+  return academiaId > 0 ? academiaId : null;
 };
 
 const extractRol = (decoded) => {
@@ -236,27 +221,7 @@ const isExpired = (decoded) => {
   return !decoded?.exp || decoded.exp <= now;
 };
 
-const buildHeaders = (rolActual) => {
-  const token = getToken();
-
-  const headers = token
-    ? {
-        Authorization: `Bearer ${token}`,
-      }
-    : {};
-
-  if (rolActual === 3) {
-    const academiaId = getAcademiaIdFromStorage();
-
-    if (academiaId) {
-      headers["x-academia-id"] = String(academiaId);
-    }
-  }
-
-  return headers;
-};
-
-const tryGetList = async (paths, { signal, headers }) => {
+const tryGetList = async (paths, { signal }) => {
   const variants = [];
 
   for (const path of paths) {
@@ -271,7 +236,6 @@ const tryGetList = async (paths, { signal, headers }) => {
     try {
       const response = await api.get(url, {
         signal,
-        headers,
       });
 
       return asList(response);
@@ -294,16 +258,14 @@ const tryGetList = async (paths, { signal, headers }) => {
   throw lastError ?? new Error("GET failed");
 };
 
-const postWithFallback = async (path, body, headers) => {
+const postWithFallback = async (path, body) => {
   const urls = path.endsWith("/") ? [path, path.slice(0, -1)] : [path, `${path}/`];
 
   let lastError = null;
 
   for (const url of urls) {
     try {
-      return await api.post(url, body, {
-        headers,
-      });
+      return await api.post(url, body);
     } catch (error) {
       lastError = error;
 
@@ -479,14 +441,13 @@ export default function FormJugador() {
 
       if ((rol === 1 || rol === 2) && !tokenAcademia) {
         clearToken();
+        clearSelectedAcademia();
         navigate("/login", { replace: true });
         return;
       }
 
       if ((rol === 1 || rol === 2) && storedAcademia && storedAcademia !== tokenAcademia) {
-        try {
-          localStorage.removeItem(ACADEMIA_STORAGE_KEY);
-        } catch {}
+        clearSelectedAcademia();
       }
 
       const selected = getAcademiaIdFromStorage();
@@ -511,17 +472,12 @@ export default function FormJugador() {
     if (rolActual !== 3) return undefined;
 
     const sync = () => setAcademiaTarget(getAcademiaIdFromStorage());
+    const onStorage = () => sync();
 
-    const onStorage = (event) => {
-      if (event?.key === ACADEMIA_STORAGE_KEY) {
-        sync();
-      }
-    };
-
-    let last = String(localStorage.getItem(ACADEMIA_STORAGE_KEY) ?? "");
+    let last = getSelectedAcademiaId();
 
     const timer = setInterval(() => {
-      const now = String(localStorage.getItem(ACADEMIA_STORAGE_KEY) ?? "");
+      const now = getSelectedAcademiaId();
 
       if (now !== last) {
         last = now;
@@ -553,8 +509,6 @@ export default function FormJugador() {
       setError("");
 
       try {
-        const headers = buildHeaders(rolActual);
-
         const [
           academiaResponse,
           posicionesRaw,
@@ -570,57 +524,46 @@ export default function FormJugador() {
         ] = await Promise.all([
           api.get(`/academias/${academiaTarget}`, {
             signal: abort.signal,
-            headers,
           }),
 
           tryGetList(["/posiciones", "/posicion"], {
             signal: abort.signal,
-            headers,
           }),
 
           tryGetList(["/categorias", "/categoria"], {
             signal: abort.signal,
-            headers,
           }),
 
           tryGetList(["/estado", "/estados"], {
             signal: abort.signal,
-            headers,
           }),
 
           tryGetList(["/establecimientos-educ/catalogo"], {
             signal: abort.signal,
-            headers,
           }),
 
           tryGetList(["/prevision-medica"], {
             signal: abort.signal,
-            headers,
           }),
 
           tryGetList(["/sucursales-real", "/sucursales"], {
             signal: abort.signal,
-            headers,
           }),
 
           tryGetList(["/regiones"], {
             signal: abort.signal,
-            headers,
           }),
 
           tryGetList(["/ciudades"], {
             signal: abort.signal,
-            headers,
           }),
 
           tryGetList(["/comunas"], {
             signal: abort.signal,
-            headers,
           }),
 
           tryGetList(["/ciudad-comuna", "/ciudad_comuna"], {
             signal: abort.signal,
-            headers,
           }),
         ]);
 
@@ -781,7 +724,6 @@ export default function FormJugador() {
          */
         const tiposRaw = await tryGetList(["/tipo-pago"], {
           signal: abort.signal,
-          headers,
         });
 
         let catalogoPlanesRaw = [];
@@ -793,7 +735,6 @@ export default function FormJugador() {
         if (rolActual !== 2) {
           catalogoPlanesRaw = await tryGetList(["/planes/catalogo"], {
             signal: abort.signal,
-            headers,
           });
         }
 
@@ -906,6 +847,7 @@ export default function FormJugador() {
 
         if (status === 401) {
           clearToken();
+          clearSelectedAcademia();
           navigate("/login", {
             replace: true,
           });
@@ -1101,7 +1043,7 @@ export default function FormJugador() {
 
     const rut = String(formData.rut_apoderado ?? "").replace(/\D/g, "");
 
-    if (rut.length !== 8) {
+    if (!/^\d{7,8}$/.test(rut)) {
       setBuscandoApoderado(false);
       setApoderadoEncontrado(false);
       setApoderadoLookupMsg("");
@@ -1115,20 +1057,34 @@ export default function FormJugador() {
       setApoderadoLookupMsg("");
 
       try {
-        const headers = buildHeaders(rolActual);
-
         const response = await api.get(`/jugadores/apoderado/rut/${rut}`, {
           signal: controller.signal,
-          headers,
         });
 
         const body = response?.data ?? {};
+
+        if (body?.exists === false) {
+          setApoderadoEncontrado(false);
+
+          setFormData((previous) => ({
+            ...previous,
+            nombre_apoderado: "",
+          }));
+
+          setApoderadoLookupMsg("Apoderado nuevo: ingresa su nombre completo.");
+
+          return;
+        }
+
         const item = body?.item ?? body?.data ?? body;
+
         const nombre = String(item?.nombre_apoderado ?? "").trim();
 
         if (!nombre) {
           setApoderadoEncontrado(false);
+
           setApoderadoLookupMsg("Apoderado nuevo: ingresa su nombre completo.");
+
           return;
         }
 
@@ -1158,6 +1114,7 @@ export default function FormJugador() {
 
         if (status === 401) {
           clearToken();
+          clearSelectedAcademia();
           navigate("/login", {
             replace: true,
           });
@@ -1782,7 +1739,7 @@ export default function FormJugador() {
     };
   }, [buildContratoContext]);
 
-  const enviarFinanzas = useCallback(async ({ jugadorId, headers, context }) => {
+  const enviarFinanzas = useCallback(async ({ jugadorId, context }) => {
     if (!jugadorId) {
       throw new Error("No fue posible determinar el ID del jugador creado.");
     }
@@ -1808,17 +1765,13 @@ export default function FormJugador() {
 
     const fechaInicio = context?.financiero?.fecha_contrato_sql || todaySQL();
 
-    await postWithFallback(
-      FINANZAS_BULK_ENDPOINT,
-      {
-        jugador_id: Number(jugadorId),
-        fecha_inicio: fechaInicio,
-        fecha_fin: null,
-        estado_id: ESTADO_ACTIVO,
-        items,
-      },
-      headers
-    );
+    await postWithFallback(FINANZAS_BULK_ENDPOINT, {
+      jugador_id: Number(jugadorId),
+      fecha_inicio: fechaInicio,
+      fecha_fin: null,
+      estado_id: ESTADO_ACTIVO,
+      items,
+    });
   }, []);
 
   const buildJugadorPayload = useCallback(
@@ -1957,8 +1910,6 @@ export default function FormJugador() {
     setError("");
 
     try {
-      const headers = buildHeaders(rolActual);
-
       if (rolActual === 3 && !getAcademiaIdFromStorage()) {
         throw new Error("⚠️ Superadmin: selecciona una academia antes de crear el jugador.");
       }
@@ -1969,7 +1920,7 @@ export default function FormJugador() {
         contratoBase64,
       });
 
-      const response = await postWithFallback("/jugadores", payload, headers);
+      const response = await postWithFallback("/jugadores", payload);
 
       const responseData = response?.data ?? {};
 
@@ -1986,7 +1937,6 @@ export default function FormJugador() {
 
       await enviarFinanzas({
         jugadorId,
-        headers,
         context,
       });
 
@@ -2013,7 +1963,7 @@ export default function FormJugador() {
 
       if (status === 401) {
         clearToken();
-
+        clearSelectedAcademia();
         navigate("/login", {
           replace: true,
         });

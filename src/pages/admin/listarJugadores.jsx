@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "../../context/ThemeContext";
 
-import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
+import api, { getToken, clearToken, clearSelectedAcademia, getSelectedAcademiaId } from "../../services/api";
 
 import IsLoading from "../../components/isLoading";
 import { jwtDecode } from "jwt-decode";
@@ -105,37 +105,8 @@ const isSuperTreePath = (pathname) => {
  */
 
 const getAcademiaIdFromStorage = () => {
-  try {
-    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
-
-    if (!raw) {
-      return null;
-    }
-
-    /* ===============================================
-       FORMATO DIRECTO
-    =============================================== */
-
-    const direct = Number(raw);
-
-    if (Number.isInteger(direct) && direct > 0) {
-      return direct;
-    }
-
-    /* ===============================================
-       SNAPSHOT JSON
-    =============================================== */
-
-    const parsed = JSON.parse(raw);
-
-    const id = Number(
-      parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? parsed?.academy_id ?? parsed?.academyId ?? 0
-    );
-
-    return Number.isInteger(id) && id > 0 ? id : null;
-  } catch {
-    return null;
-  }
+  const academiaId = getSelectedAcademiaId();
+  return academiaId > 0 ? academiaId : null;
 };
 
 /* =========================================================
@@ -148,25 +119,6 @@ const getAcademiaIdFromStorage = () => {
    x-academia-id únicamente Superadmin.
 ========================================================= */
 
-const buildHeaders = (rol) => {
-  const token = getToken();
-
-  const headers = token
-    ? {
-        Authorization: `Bearer ${token}`,
-      }
-    : {};
-
-  if (rol === 3) {
-    const academiaId = getAcademiaIdFromStorage();
-
-    if (academiaId) {
-      headers["x-academia-id"] = String(academiaId);
-    }
-  }
-
-  return headers;
-};
 
 /* =========================================================
    HELPERS RESPUESTA
@@ -225,7 +177,7 @@ const normalizeListResponse = (res) => {
    - etc.
 ========================================================= */
 
-const tryGetList = async (paths, { signal, headers } = {}) => {
+const tryGetList = async (paths, { signal } = {}) => {
   const list = Array.isArray(paths) ? paths : [paths];
 
   const variants = [];
@@ -246,7 +198,6 @@ const tryGetList = async (paths, { signal, headers } = {}) => {
     try {
       const response = await api.get(url, {
         signal,
-        headers,
       });
 
       return normalizeListResponse(response);
@@ -513,8 +464,6 @@ export default function ListarJugadores() {
 
     const abort = new AbortController();
 
-    const headers = buildHeaders(rolActual);
-
     (async () => {
       setIsLoading(true);
       setError("");
@@ -525,26 +474,18 @@ export default function ListarJugadores() {
         const [rawJugadores, posList, catList, estList] = await Promise.all([
           tryGetList(jugadoresPaths, {
             signal: abort.signal,
-
-            headers,
           }),
 
           tryGetList(["/posiciones", "/posicion"], {
             signal: abort.signal,
-
-            headers,
           }),
 
           tryGetList(["/categorias", "/categoria"], {
             signal: abort.signal,
-
-            headers,
           }),
 
           tryGetList(["/estado", "/estados"], {
             signal: abort.signal,
-
-            headers,
           }),
         ]);
 
@@ -659,7 +600,7 @@ export default function ListarJugadores() {
 
         if (status === 401) {
           clearToken?.();
-
+          clearSelectedAcademia?.();
           navigate("/login", {
             replace: true,
           });

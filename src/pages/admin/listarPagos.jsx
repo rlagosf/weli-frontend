@@ -6,7 +6,7 @@ import { jwtDecode } from "jwt-decode";
 import { AlertTriangle, CheckCircle2, Clock3, CreditCard, Pencil, RefreshCw, Search, Trash2, X } from "lucide-react";
 
 import { useTheme } from "../../context/ThemeContext";
-import api, { ACADEMIA_STORAGE_KEY, clearToken, getToken } from "../../services/api";
+import api, { clearSelectedAcademia, clearToken, getSelectedAcademiaId, getToken } from "../../services/api";
 import { formatRutWithDV } from "../../services/rut";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 import IsLoading from "../../components/isLoading";
@@ -42,45 +42,8 @@ const asList = (raw) => {
 };
 
 const getAcademiaIdFromStorage = () => {
-  try {
-    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
-
-    if (!raw) return null;
-
-    const direct = Number(raw);
-
-    if (Number.isInteger(direct) && direct > 0) {
-      return direct;
-    }
-
-    const parsed = JSON.parse(raw);
-
-    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
-
-    return Number.isInteger(id) && id > 0 ? id : null;
-  } catch {
-    return null;
-  }
-};
-
-const buildHeaders = (rol) => {
-  const token = getToken();
-
-  const headers = token
-    ? {
-        Authorization: `Bearer ${token}`,
-      }
-    : {};
-
-  if (rol === 3) {
-    const academiaId = getAcademiaIdFromStorage();
-
-    if (academiaId) {
-      headers["x-academia-id"] = String(academiaId);
-    }
-  }
-
-  return headers;
+  const academiaId = getSelectedAcademiaId();
+  return academiaId > 0 ? academiaId : null;
 };
 
 const isExpired = (decoded) => {
@@ -207,26 +170,16 @@ const calculateExtraBenefit = (baseRaw, plan) => {
    API
 ========================================================= */
 
-const getApi = async (path, headers, signal) =>
+const getApi = async (path, signal) =>
   api.get(path, {
-    headers,
     signal,
   });
 
-const postApi = async (path, body, headers) =>
-  api.post(path, body, {
-    headers,
-  });
+const postApi = async (path, body) => api.post(path, body);
 
-const putApi = async (path, body, headers) =>
-  api.put(path, body, {
-    headers,
-  });
+const putApi = async (path, body) => api.put(path, body);
 
-const deleteApi = async (path, headers) =>
-  api.delete(path, {
-    headers,
-  });
+const deleteApi = async (path) => api.delete(path);
 
 /* =========================================================
    COMPONENTE
@@ -390,10 +343,8 @@ export default function ListarPagos() {
   useEffect(() => {
     const sync = () => setAcademiaTarget(getAcademiaIdFromStorage());
 
-    const onStorage = (event) => {
-      if (event?.key === ACADEMIA_STORAGE_KEY) {
-        sync();
-      }
+    const onStorage = () => {
+      sync();
     };
 
     const onAcademiaChanged = () => sync();
@@ -500,9 +451,6 @@ export default function ListarPagos() {
     async ({ signal } = {}) => {
       if (!rolActual) return;
       if (rolActual === 3 && !academiaTarget) return;
-
-      const headers = buildHeaders(rolActual);
-
       setError("");
 
       const [
@@ -515,14 +463,14 @@ export default function ListarPagos() {
         categoriasResp,
         tiposPagoResp,
       ] = await Promise.all([
-        getApi("/jugadores", headers, signal),
-        getApi("/jugador-planes?activos=1&limit=500", headers, signal),
-        getApi("/pagos-jugador/estado-cuenta", headers, signal),
-        getApi("/medio-pago", headers, signal),
-        getApi("/situacion-pago", headers, signal),
-        getApi("/planes/catalogo", headers, signal),
-        getApi("/categorias", headers, signal),
-        getApi("/tipo-pago", headers, signal),
+        getApi("/jugadores", signal),
+        getApi("/jugador-planes?activos=1&limit=500", signal),
+        getApi("/pagos-jugador/estado-cuenta", signal),
+        getApi("/medio-pago", signal),
+        getApi("/situacion-pago", signal),
+        getApi("/planes/catalogo", signal),
+        getApi("/categorias", signal),
+        getApi("/tipo-pago", signal),
       ]);
 
       const pagosData = responseData(pagosResp);
@@ -559,7 +507,7 @@ export default function ListarPagos() {
 
         if (status === 401 || status === 403) {
           clearToken();
-
+          clearSelectedAcademia();
           navigate("/login", {
             replace: true,
           });
@@ -1214,9 +1162,7 @@ export default function ListarPagos() {
       return;
     }
 
-    const headers = buildHeaders(rolActual);
-
-    setModalBusy(true);
+     setModalBusy(true);
 
     try {
       const planCatalogoId = editForm.plan_catalogo_id ? Number(editForm.plan_catalogo_id) : null;
@@ -1252,7 +1198,7 @@ export default function ListarPagos() {
           ],
         };
 
-        await postApi("/pagos-jugador", payload, headers);
+        await postApi("/pagos-jugador", payload);
 
         setModalOpen(false);
 
@@ -1271,7 +1217,7 @@ export default function ListarPagos() {
         return;
       }
 
-      await putApi(`/pagos-jugador/${pagoId}`, common, headers);
+      await putApi(`/pagos-jugador/${pagoId}`, common);
 
       setModalOpen(false);
 
@@ -1283,7 +1229,7 @@ export default function ListarPagos() {
 
       if (status === 401 || status === 403) {
         clearToken();
-
+        clearSelectedAcademia();
         navigate("/login", {
           replace: true,
         });
@@ -1307,7 +1253,7 @@ export default function ListarPagos() {
     if (!confirmed) return;
 
     try {
-      await deleteApi(`/pagos-jugador/${pago.id}`, buildHeaders(rolActual));
+      await deleteApi(`/pagos-jugador/${pago.id}`);
 
       await refresh();
     } catch (err) {
@@ -1701,10 +1647,7 @@ export default function ListarPagos() {
                       )}
                     </td>
 
-                    <td
-                      className="px-4 py-2.5 text-center text-base font-extrabold"
-                      style={{ color: tokens.primary }}
-                    >
+                    <td className="px-4 py-2.5 text-center text-base font-extrabold" style={{ color: tokens.primary }}>
                       {toCLP(row.monto_asignado)}
                     </td>
 
@@ -1760,10 +1703,7 @@ export default function ListarPagos() {
 
                 {!pageRows.length && (
                   <tr>
-                    <td
-                      colSpan={7}
-                      className="px-6 py-10 text-center text-[14px]" style={{ color: tokens.textMuted }}
-                    >
+                    <td colSpan={7} className="px-6 py-10 text-center text-[14px]" style={{ color: tokens.textMuted }}>
                       No hay registros para los filtros seleccionados.
                     </td>
                   </tr>
@@ -1787,9 +1727,7 @@ export default function ListarPagos() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h3
-className="text-base sm:text-lg font-extrabold break-words" style={{ color: tokens.text }}
-                    >
+                    <h3 className="text-base sm:text-lg font-extrabold break-words" style={{ color: tokens.text }}>
                       {row.jugador_nombre}
                     </h3>
 
@@ -1818,7 +1756,13 @@ className="text-base sm:text-lg font-extrabold break-words" style={{ color: toke
 
                   <InfoBox darkMode={darkMode} tokens={tokens} label="Beneficio" value={row.plan_nombre} />
 
-                  <InfoBox darkMode={darkMode} tokens={tokens} label="Monto asignado" value={toCLP(row.monto_asignado)} emphasize />
+                  <InfoBox
+                    darkMode={darkMode}
+                    tokens={tokens}
+                    label="Monto asignado"
+                    value={toCLP(row.monto_asignado)}
+                    emphasize
+                  />
                 </div>
 
                 {row.descuento_inicial > 0 && (
@@ -1909,7 +1853,10 @@ className="text-base sm:text-lg font-extrabold break-words" style={{ color: toke
       {/* MODAL */}
 
       {modalOpen && (
-        <div className="fixed inset-0 z-50 p-2 sm:p-5 flex items-end sm:items-center justify-center" style={ui.overlayStyle}>
+        <div
+          className="fixed inset-0 z-50 p-2 sm:p-5 flex items-end sm:items-center justify-center"
+          style={ui.overlayStyle}
+        >
           <div
             className="w-full max-w-3xl max-h-[94vh] overflow-hidden rounded-t-3xl sm:rounded-3xl border shadow-2xl flex flex-col"
             style={ui.modalStyle}
@@ -1997,7 +1944,12 @@ className="text-base sm:text-lg font-extrabold break-words" style={{ color: toke
                     )}
 
                     <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
-                      <InfoBox darkMode={darkMode} tokens={tokens} label="Tarifa original" value={toCLP(selectedConfig.monto_tarifa)} />
+                      <InfoBox
+                        darkMode={darkMode}
+                        tokens={tokens}
+                        label="Tarifa original"
+                        value={toCLP(selectedConfig.monto_tarifa)}
+                      />
 
                       <InfoBox
                         darkMode={darkMode}
@@ -2057,9 +2009,7 @@ className="text-base sm:text-lg font-extrabold break-words" style={{ color: toke
                       ))}
                   </select>
 
-                  <p
-                    className="mt-1.5 text-[12px] sm:text-[13px]" style={{ color: tokens.textMuted }}
-                  >
+                  <p className="mt-1.5 text-[12px] sm:text-[13px]" style={{ color: tokens.textMuted }}>
                     Este beneficio se aplica sobre el monto habitual del jugador y no modifica su configuración
                     original.
                   </p>
@@ -2068,13 +2018,32 @@ className="text-base sm:text-lg font-extrabold break-words" style={{ color: toke
                 {/* PREVIEW */}
 
                 {selectedConfig && (
-                  <div className="rounded-2xl border px-4 sm:px-5 py-4" style={{ backgroundColor: tokens.surface2, borderColor: tokens.border }}>
+                  <div
+                    className="rounded-2xl border px-4 sm:px-5 py-4"
+                    style={{ backgroundColor: tokens.surface2, borderColor: tokens.border }}
+                  >
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <InfoBox darkMode={darkMode} tokens={tokens} label="Base del pago" value={toCLP(selectedConfig.monto_asignado)} />
+                      <InfoBox
+                        darkMode={darkMode}
+                        tokens={tokens}
+                        label="Base del pago"
+                        value={toCLP(selectedConfig.monto_asignado)}
+                      />
 
-                      <InfoBox darkMode={darkMode} tokens={tokens} label="Descuento extra" value={toCLP(preview.descuento)} />
+                      <InfoBox
+                        darkMode={darkMode}
+                        tokens={tokens}
+                        label="Descuento extra"
+                        value={toCLP(preview.descuento)}
+                      />
 
-                      <InfoBox darkMode={darkMode} tokens={tokens} label="Total estimado" value={toCLP(preview.total)} emphasize />
+                      <InfoBox
+                        darkMode={darkMode}
+                        tokens={tokens}
+                        label="Total estimado"
+                        value={toCLP(preview.total)}
+                        emphasize
+                      />
                     </div>
                   </div>
                 )}
@@ -2204,10 +2173,7 @@ className="text-base sm:text-lg font-extrabold break-words" style={{ color: toke
 
       {successOpen && (
         <div className="fixed inset-0 z-[60] px-4 flex items-center justify-center" style={ui.overlayStyle}>
-          <div
-            className="w-full max-w-sm rounded-2xl border p-6 text-center shadow-2xl"
-            style={ui.modalStyle}
-          >
+          <div className="w-full max-w-sm rounded-2xl border p-6 text-center shadow-2xl" style={ui.modalStyle}>
             <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-500" />
 
             <h4 className="mt-3 text-lg font-extrabold">{successMsg}</h4>
@@ -2247,10 +2213,7 @@ function SummaryCard({ darkMode, tokens, label, value, amount, type }) {
           {value}
         </strong>
 
-        <span
-          className="text-[12px] sm:text-[13px] font-extrabold text-right"
-          style={{ color: tokens.textMuted }}
-        >
+        <span className="text-[12px] sm:text-[13px] font-extrabold text-right" style={{ color: tokens.textMuted }}>
           {toCLP(amount)}
         </span>
       </div>
@@ -2267,10 +2230,7 @@ function InfoBox({ tokens, label, value, emphasize = false }) {
         borderColor: tokens.border,
       }}
     >
-      <div
-        className="text-[11px] sm:text-[12px] uppercase tracking-wide font-bold"
-        style={{ color: tokens.textMuted }}
-      >
+      <div className="text-[11px] sm:text-[12px] uppercase tracking-wide font-bold" style={{ color: tokens.textMuted }}>
         {label}
       </div>
 

@@ -2,14 +2,12 @@
 
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
-import { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../services/api";
+import { getToken, clearToken, clearSelectedAcademia, getSelectedAcademiaId } from "../services/api";
 
 const ADMIN_HOME = "/admin";
 const SUPER_HOME = "/super-dashboard";
 const APODERADO_HOME = "/portal-apoderado";
 const APODERADO_CHANGE = "/portal-apoderado/cambiar-clave";
-
-const USER_INFO_KEY = "weli_user_info";
 const PANEL_ROLES = new Set([1, 2, 3]);
 const PANEL_TYPES = new Set(["admin", "user", "staff", "superadmin"]);
 
@@ -55,41 +53,13 @@ function getRol(decoded) {
 }
 
 function getAcademiaId(decoded) {
-  const academiaId = Number(
-    decoded?.academia_id ??
-    decoded?.user?.academia_id ??
-    0
-  );
+  const academiaId = Number(decoded?.academia_id ?? decoded?.user?.academia_id ?? 0);
 
   return Number.isInteger(academiaId) && academiaId > 0 ? academiaId : 0;
 }
 
 function hasSelectedAcademia() {
-  try {
-    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
-    if (!raw) return false;
-
-    /*
-     * Formato simple:
-     * "2"
-     */
-    const direct = Number(raw);
-
-    if (Number.isInteger(direct) && direct > 0) {
-      return true;
-    }
-
-    /*
-     * Formato snapshot:
-     * { id: 2, nombre: "...", ... }
-     */
-    const parsed = JSON.parse(raw);
-    const academiaId = Number(parsed?.id ?? parsed?.academia_id ?? 0);
-
-    return Number.isInteger(academiaId) && academiaId > 0;
-  } catch {
-    return false;
-  }
+  return getSelectedAcademiaId() > 0;
 }
 
 function safeClearSession() {
@@ -98,16 +68,12 @@ function safeClearSession() {
   } catch {}
 
   try {
-    localStorage.removeItem(USER_INFO_KEY);
-    localStorage.removeItem("apoderado_must_change_password");
+    clearSelectedAcademia();
   } catch {}
 
-  /*
-   * Deliberadamente NO eliminamos weli_selected_academia.
-   *
-   * Esa clave representa una selección de tenant del Superadmin,
-   * no una credencial.
-   */
+  try {
+    localStorage.removeItem("apoderado_must_change_password");
+  } catch {}
 }
 
 /* ───────────────────────── Tenant routes ───────────────────────── */
@@ -152,11 +118,7 @@ function isTenantizedPanelPath(pathname) {
     return false;
   }
 
-  const nonTenantAdminRoutes = new Set([
-    ADMIN_HOME,
-    `${ADMIN_HOME}/crear-usuario`,
-    `${ADMIN_HOME}/usuarios`,
-  ]);
+  const nonTenantAdminRoutes = new Set([ADMIN_HOME, `${ADMIN_HOME}/crear-usuario`, `${ADMIN_HOME}/usuarios`]);
 
   return !nonTenantAdminRoutes.has(path);
 }
@@ -171,17 +133,9 @@ export default function ProtectedRoute({ children, roleIn = [], mode = "admin" }
 
   const renderOk = () => children || <Outlet />;
 
-  const toLoginAdmin = (
-    <Navigate to="/login" replace state={{ from: pathname || ADMIN_HOME }} />
-  );
+  const toLoginAdmin = <Navigate to="/login" replace state={{ from: pathname || ADMIN_HOME }} />;
 
-  const toLoginApoderado = (
-    <Navigate
-      to="/login-apoderado"
-      replace
-      state={{ from: pathname || APODERADO_HOME }}
-    />
-  );
+  const toLoginApoderado = <Navigate to="/login-apoderado" replace state={{ from: pathname || APODERADO_HOME }} />;
 
   /* ───────── 1. Token requerido ───────── */
 
@@ -218,8 +172,7 @@ export default function ProtectedRoute({ children, roleIn = [], mode = "admin" }
     let mustChange = false;
 
     try {
-      mustChange =
-        localStorage.getItem("apoderado_must_change_password") === "1";
+      mustChange = localStorage.getItem("apoderado_must_change_password") === "1";
     } catch {}
 
     const isInsidePortal = pathname.startsWith(APODERADO_HOME);
@@ -280,9 +233,7 @@ export default function ProtectedRoute({ children, roleIn = [], mode = "admin" }
 
   /* ───────── Super-dashboard ───────── */
 
-  const wantsSuper =
-    pathname === SUPER_HOME ||
-    pathname.startsWith(`${SUPER_HOME}/`);
+  const wantsSuper = pathname === SUPER_HOME || pathname.startsWith(`${SUPER_HOME}/`);
 
   /*
    * Admin y Staff no pueden entrar al espacio Superadmin.
@@ -295,9 +246,7 @@ export default function ProtectedRoute({ children, roleIn = [], mode = "admin" }
   /* ───────── Tenant Superadmin ───────── */
 
   if (rol === 3) {
-    const needsAcademia =
-      isTenantizedPanelPath(pathname) &&
-      !isNonTenantPath(pathname);
+    const needsAcademia = isTenantizedPanelPath(pathname) && !isNonTenantPath(pathname);
 
     /*
      * Superadmin necesita seleccionar academia antes de
@@ -311,9 +260,7 @@ export default function ProtectedRoute({ children, roleIn = [], mode = "admin" }
   /* ───────── roleIn ───────── */
 
   if (Array.isArray(roleIn) && roleIn.length > 0) {
-    const allowedRoles = roleIn
-      .map(Number)
-      .filter((role) => Number.isInteger(role) && PANEL_ROLES.has(role));
+    const allowedRoles = roleIn.map(Number).filter((role) => Number.isInteger(role) && PANEL_ROLES.has(role));
 
     if (!allowedRoles.includes(rol)) {
       const destination = rol === 3 ? SUPER_HOME : ADMIN_HOME;

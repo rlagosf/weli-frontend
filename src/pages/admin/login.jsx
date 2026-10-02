@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { login as loginService } from "../../services/auth";
-import api, { apiPublic, getToken, setToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
+import api, { apiPublic, getToken, setToken, clearToken, clearSelectedAcademia } from "../../services/api";
 import IsLoading from "../../components/isLoading";
 import logoOficial from "../../statics/logo/logo-oficial.png";
 import logoWeli from "../../statics/logo/logo-weli.png";
@@ -19,14 +19,8 @@ const ALLOWED_PANEL_ROLES = new Set([1, 2, 3]);
 
 /* ───────────────────────── Storage ───────────────────────── */
 
-function safeStorageRemove(key) {
-  try {
-    localStorage.removeItem(key);
-  } catch {}
-}
-
 function clearAcademiaScope() {
-  safeStorageRemove(ACADEMIA_STORAGE_KEY);
+  clearSelectedAcademia();
 }
 
 function hardClearLocal() {

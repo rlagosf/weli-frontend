@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { useTheme } from "../../context/ThemeContext";
-import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
+import api, { getToken, clearToken, clearSelectedAcademia, getSelectedAcademiaId } from "../../services/api";
 import IsLoading from "../../components/isLoading";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 import { Newspaper, Plus, Save, Trash2, X, Image as ImageIcon, RefreshCcw } from "lucide-react";
@@ -58,29 +58,8 @@ const extractRol = (decoded) => {
 
 // Soporta "1" o JSON {"id":1}
 const getAcademiaIdFromStorage = () => {
-  try {
-    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
-    if (!raw) return null;
-
-    const direct = Number(raw);
-    if (Number.isFinite(direct) && direct > 0) return direct;
-
-    const parsed = JSON.parse(raw);
-    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
-    return Number.isFinite(id) && id > 0 ? id : null;
-  } catch {
-    return null;
-  }
-};
-
-const buildHeaders = (rol) => {
-  const token = getToken();
-  const h = token ? { Authorization: `Bearer ${token}` } : {};
-  if (rol === 3) {
-    const a = getAcademiaIdFromStorage();
-    if (a) h["x-academia-id"] = String(a);
-  }
-  return h;
+  const academiaId = getSelectedAcademiaId();
+  return academiaId > 0 ? academiaId : null;
 };
 
 // Requests con fallback (evita backend “loco” por slash)
@@ -318,10 +297,8 @@ export default function RegistroNoticias() {
       if (![1, 2, 3].includes(rol)) throw new Error("no-role");
 
       // si es rol 3, intentamos setear x-academia-id (si tu backend lo requiere)
-      if (rol === 3) {
-        // si no existe, NO expulsamos: solo no enviamos header extra
-        // (si tu backend lo exige sí o sí, aquí podrías forzar error)
-        getAcademiaIdFromStorage();
+      if (rol === 3 && !getAcademiaIdFromStorage()) {
+        throw new Error("missing-academia-target");
       }
 
       setRolActual(rol);
@@ -364,48 +341,40 @@ export default function RegistroNoticias() {
   );
 
   // ✅ thumbs robusto + headers
-  const ensureThumb = useCallback(
-    async (id, opts = {}) => {
-      const force = !!opts.force;
-      if (!id) return null;
+  const ensureThumb = useCallback(async (id, opts = {}) => {
+    const force = !!opts.force;
+    if (!id) return null;
 
-      if (!force && thumbsRef.current[id]) return thumbsRef.current[id];
+    if (!force && thumbsRef.current[id]) return thumbsRef.current[id];
 
-      try {
-        const headers = buildHeaders(rolActual);
-        const { data } = await reqGet(`${BASE_NOTICIAS}/${id}`, { headers });
-        const it = data?.item;
+    try {
+      const { data } = await reqGet(`${BASE_NOTICIAS}/${id}`);
+      const it = data?.item;
 
-        if (it?.imagen_base64 && it?.imagen_mime) {
-          const dataUrl = `data:${it.imagen_mime};base64,${it.imagen_base64}`;
-          setThumbs((p) => ({ ...p, [id]: dataUrl }));
-          return dataUrl;
-        }
-
-        if (force) {
-          setThumbs((p) => {
-            const copy = { ...p };
-            delete copy[id];
-            return copy;
-          });
-        }
-      } catch {
-        // no romper flujo
+      if (it?.imagen_base64 && it?.imagen_mime) {
+        const dataUrl = `data:${it.imagen_mime};base64,${it.imagen_base64}`;
+        setThumbs((p) => ({ ...p, [id]: dataUrl }));
+        return dataUrl;
       }
 
-      return null;
-    },
-    [rolActual]
-  );
+      if (force) {
+        setThumbs((p) => {
+          const copy = { ...p };
+          delete copy[id];
+          return copy;
+        });
+      }
+    } catch {
+      // no romper flujo
+    }
 
-  const loadEstados = useCallback(
-    async (signal) => {
-      const headers = buildHeaders(rolActual);
-      const arr = await getList(BASE_ESTADOS, signal, { headers });
-      if (arr?.length) setEstados(arr);
-    },
-    [rolActual]
-  );
+    return null;
+  }, []);
+
+  const loadEstados = useCallback(async (signal) => {
+    const arr = await getList(BASE_ESTADOS, signal);
+    if (arr?.length) setEstados(arr);
+  }, []);
 
   const loadBoard = useCallback(
     async (signal) => {
@@ -413,10 +382,7 @@ export default function RegistroNoticias() {
       loadBoardInFlightRef.current = true;
 
       try {
-        const headers = buildHeaders(rolActual);
-
         const list = await getList(BASE_NOTICIAS, signal, {
-          headers,
           params: { include_archived: 1, limit: 200, offset: 0 },
         });
 
@@ -454,7 +420,7 @@ export default function RegistroNoticias() {
         loadBoardInFlightRef.current = false;
       }
     },
-    [ensureThumb, isArchivedItem, rolActual]
+    [ensureThumb, isArchivedItem]
   );
 
   useEffect(() => {
@@ -479,6 +445,7 @@ export default function RegistroNoticias() {
         const st = getStatus(e);
         if (st === 401 || st === 403) {
           clearToken();
+          clearSelectedAcademia();
           navigate("/login", { replace: true });
           return;
         }
@@ -518,9 +485,7 @@ export default function RegistroNoticias() {
     if (slot?.item?.id) {
       setOpening(true);
       try {
-        const headers = buildHeaders(rolActual);
-
-        const { data } = await reqGet(`${BASE_NOTICIAS}/${slot.item.id}`, { headers });
+        const { data } = await reqGet(`${BASE_NOTICIAS}/${slot.item.id}`);
         const it = data?.item ?? slot.item;
 
         const archived = isArchivedItem(it);
@@ -571,6 +536,7 @@ export default function RegistroNoticias() {
           const st = getStatus(e);
           if (st === 401 || st === 403) {
             clearToken();
+            clearSelectedAcademia();
             navigate("/login", { replace: true });
             return;
           }
@@ -727,6 +693,7 @@ export default function RegistroNoticias() {
       const st = getStatus(e);
       if (st === 401 || st === 403) {
         clearToken();
+        clearSelectedAcademia();
         navigate("/login", { replace: true });
         return;
       }
@@ -743,9 +710,7 @@ export default function RegistroNoticias() {
     setArchiving(true);
 
     try {
-      const headers = buildHeaders(rolActual);
-
-      await reqDelete(`${BASE_NOTICIAS}/${form.id}`, { headers });
+      await reqDelete(`${BASE_NOTICIAS}/${form.id}`);
       setOk("✅ Noticia archivada (no editable).");
 
       imageDirtyRef.current = false;
@@ -769,6 +734,7 @@ export default function RegistroNoticias() {
         const st = getStatus(e);
         if (st === 401 || st === 403) {
           clearToken();
+          clearSelectedAcademia();
           navigate("/login", { replace: true });
           return;
         }
@@ -791,7 +757,6 @@ export default function RegistroNoticias() {
 
     setSaving(true);
     try {
-      const headers = buildHeaders(rolActual);
       const isCardSlot = form.slotType === "card" && Number.isInteger(form.slotIndex);
 
       const payload = {
@@ -827,7 +792,7 @@ export default function RegistroNoticias() {
       let idToRefresh = form.id;
 
       if (!form.id) {
-        const { data } = await reqPost(BASE_NOTICIAS, payload, { headers });
+        const { data } = await reqPost(BASE_NOTICIAS, payload);
         idToRefresh = data?.id ?? null;
 
         setOk("✅ Noticia creada.");
@@ -847,7 +812,7 @@ export default function RegistroNoticias() {
 
         setOpen(false);
       } else {
-        await reqPatch(`${BASE_NOTICIAS}/${form.id}`, payload, { headers });
+        await reqPatch(`${BASE_NOTICIAS}/${form.id}`, payload);
 
         if (touchedImage) await ensureThumb(form.id, { force: true });
 
@@ -863,6 +828,7 @@ export default function RegistroNoticias() {
         const st = getStatus(e);
         if (st === 401 || st === 403) {
           clearToken();
+          clearSelectedAcademia();
           navigate("/login", { replace: true });
           return;
         }

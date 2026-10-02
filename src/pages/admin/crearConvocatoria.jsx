@@ -10,7 +10,7 @@ import IsLoading from "../../components/isLoading";
 import { useTheme } from "../../context/ThemeContext";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
-import api, { ACADEMIA_STORAGE_KEY, clearToken, getToken } from "../../services/api";
+import api, { clearSelectedAcademia, clearToken, getSelectedAcademiaId, getToken } from "../../services/api";
 
 /* =========================================================
    Configuración visual
@@ -197,25 +197,7 @@ const extractTokenAcademiaId = (decoded) => {
  * como fuente de tenant.
  */
 const getSelectedAcademiaIdForSuperadmin = () => {
-  try {
-    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
-
-    if (!raw) return 0;
-
-    const direct = Number(raw);
-
-    if (Number.isInteger(direct) && direct > 0) {
-      return direct;
-    }
-
-    const parsed = JSON.parse(raw);
-
-    const academiaId = Number(parsed?.id ?? parsed?.academia_id ?? 0);
-
-    return Number.isInteger(academiaId) && academiaId > 0 ? academiaId : 0;
-  } catch {
-    return 0;
-  }
+  return getSelectedAcademiaId();
 };
 
 /**
@@ -229,7 +211,7 @@ const ensureScopeOrRedirect = (navigate) => {
 
   if (!token) {
     clearToken();
-
+    clearSelectedAcademia();
     navigate("/login", {
       replace: true,
     });
@@ -617,7 +599,7 @@ export default function CrearConvocatorias() {
 
         if (status === 401) {
           clearToken();
-
+          clearSelectedAcademia();
           navigate("/login", {
             replace: true,
           });
@@ -935,7 +917,7 @@ export default function CrearConvocatorias() {
 
       if (status === 401) {
         clearToken();
-
+        clearSelectedAcademia();
         navigate("/login", {
           replace: true,
         });
@@ -953,7 +935,10 @@ export default function CrearConvocatorias() {
         requestError?.response?.data?.message ?? requestError?.response?.data?.error ?? requestError?.message;
 
       if (import.meta.env.DEV) {
-        console.error("[WELI CONVOCATORIA]", requestError);
+        console.warn("[WELI CONVOCATORIA]", {
+          status: requestError?.response?.status ?? requestError?.status ?? 0,
+          message: requestError?.response?.data?.message ?? requestError?.message ?? "Error",
+        });
       }
 
       setError(detail ? `❌ Error al guardar convocatorias: ${detail}` : "❌ Error al guardar convocatorias");
@@ -1465,7 +1450,7 @@ export default function CrearConvocatorias() {
 
       if (status === 401) {
         clearToken();
-
+        clearSelectedAcademia();
         navigate("/login", {
           replace: true,
         });
@@ -1483,7 +1468,10 @@ export default function CrearConvocatorias() {
         requestError?.response?.data?.error ?? requestError?.response?.data?.message ?? requestError?.message ?? "";
 
       if (import.meta.env.DEV) {
-        console.error("[WELI CONVOCATORIA PDF]", requestError);
+        console.warn("[WELI CONVOCATORIA PDF]", {
+          status: requestError?.response?.status ?? requestError?.status ?? 0,
+          message: requestError?.response?.data?.message ?? requestError?.message ?? "Error",
+        });
       }
 
       alert(detail ? `❌ Error al generar el PDF: ${detail}` : "❌ Error al generar el PDF");

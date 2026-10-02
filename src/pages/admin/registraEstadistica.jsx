@@ -1,133 +1,197 @@
 // src/pages/admin/ListarEstadisticas.jsx
-
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-
-import api, { getToken, clearToken, ACADEMIA_STORAGE_KEY } from "../../services/api";
-
+import api, { getToken, clearToken, clearSelectedAcademia, getSelectedAcademiaId } from "../../services/api";
 import { useNavigate, useLocation } from "react-router-dom";
-
 import { useTheme } from "../../context/ThemeContext";
 import { Pencil } from "lucide-react";
 import { jwtDecode } from "jwt-decode";
-
 import IsLoading from "../../components/isLoading";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 import { formatRutWithDV } from "../../services/rut";
 
 /* =========================================================
-   SCOPE HELPERS
+   RUTAS
 ========================================================= */
+const SUPER_ADMIN_ROOT = "/super-dashboard/admin/dashboard";
 
-const STORAGE_KEY = "weli_selected_academia";
-
-const readSelectedAcademia = () => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-
-    if (!raw) {
-      return null;
-    }
-
-    const parsed = JSON.parse(raw);
-
-    const id = Number(parsed?.id ?? 0);
-
-    if (!Number.isFinite(id) || id <= 0) {
-      return null;
-    }
-
-    const deporte_id = Number(parsed?.deporte_id ?? 0);
-
-    return {
-      id,
-
-      deporte_id: Number.isFinite(deporte_id) && deporte_id > 0 ? deporte_id : null,
-
-      nombre: parsed?.nombre ?? null,
-    };
-  } catch {
-    return null;
-  }
-};
-
-const isSuperTreePath = (pathname) => String(pathname || "").startsWith("/super-dashboard/admin/dashboard");
+const isSuperTreePath = (pathname) => String(pathname || "").startsWith(SUPER_ADMIN_ROOT);
 
 /* =========================================================
-   AUTH HELPERS
+   SESIÓN / SCOPE
+========================================================= */
+
+/**
+ * Contrato definitivo WELI:
+ *
+ * weli_selected_academia contiene EXCLUSIVAMENTE:
+ *
+ * "1"
+ * "5"
+ * "27"
+ *
+ * Nunca contiene JSON, nombre, deporte, RUT ni otros datos.
+ */
+const readSelectedAcademiaId = () => {
+  return getSelectedAcademiaId();
+};
+
+const clearPanelSession = () => {
+  try {
+    clearToken?.();
+  } catch {}
+
+  try {
+    clearSelectedAcademia?.();
+  } catch {}
+};
+
+/* =========================================================
+   JWT
 ========================================================= */
 
 const isExpired = (decoded) => {
-  const now = Math.floor(Date.now() / 1000);
+  const exp = Number(decoded?.exp ?? 0);
+  if (!Number.isFinite(exp) || exp <= 0) return true;
 
-  return !decoded?.exp || decoded.exp <= now;
+  const now = Math.floor(Date.now() / 1000);
+  return exp <= now;
 };
 
 const extractRol = (decoded) => {
-  const raw = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol;
+  const raw = decoded?.rol_id ?? decoded?.user?.rol_id ?? decoded?.role_id ?? decoded?.role ?? decoded?.rol ?? 0;
 
-  const number = Number(raw);
+  const rol = Number(raw);
 
-  return Number.isFinite(number) ? number : 0;
+  return Number.isInteger(rol) && [1, 2, 3].includes(rol) ? rol : 0;
+};
+
+const extractTokenAcademiaId = (decoded) => {
+  const raw = decoded?.academia_id ?? decoded?.user?.academia_id ?? decoded?.academy_id ?? 0;
+
+  const academiaId = Number(raw);
+
+  return Number.isInteger(academiaId) && academiaId > 0 ? academiaId : 0;
+};
+
+const extractTokenDeporteId = (decoded) => {
+  const raw = decoded?.deporte_id ?? decoded?.user?.deporte_id ?? decoded?.sport_id ?? 0;
+
+  const deporteId = Number(raw);
+
+  return Number.isInteger(deporteId) && deporteId > 0 ? deporteId : 0;
 };
 
 /* =========================================================
-   ACADEMIA SUPERADMIN
-
-   Soporta:
-   "1"
-
-   o:
-   {
-     id: 1
-   }
+   ERROR
 ========================================================= */
 
-const getAcademiaIdFromStorage = () => {
-  try {
-    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
+const getErrStatus = (requestError) => requestError?.status ?? requestError?.response?.status ?? 0;
 
-    if (!raw) {
-      return null;
-    }
+/* =========================================================
+   CONTEXTO ACADEMIA SUPERADMIN
+========================================================= */
 
-    const direct = Number(raw);
+/**
+ * Superadmin persiste sólo academia_id.
+ *
+ * Nombre y deporte se recuperan desde backend y permanecen
+ * únicamente en memoria React.
+ */
+const fetchAcademiaContext = async (academiaId, signal) => {
+  const response = await api.get(`/academias/${encodeURIComponent(String(academiaId))}`, {
+    signal,
+      });
 
-    if (Number.isFinite(direct) && direct > 0) {
-      return direct;
-    }
+  const item = response?.data?.item ?? response?.data?.academia ?? response?.data ?? null;
 
-    const parsed = JSON.parse(raw);
+  const id = Number(item?.id ?? 0);
 
-    const id = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academiaId ?? 0);
-
-    return Number.isFinite(id) && id > 0 ? id : null;
-  } catch {
-    return null;
+  if (!Number.isInteger(id) || id <= 0 || id !== Number(academiaId)) {
+    const error = new Error("ACADEMIA_CONTEXT_INVALID");
+    error.code = "ACADEMIA_CONTEXT_INVALID";
+    throw error;
   }
+
+  const deporteId = Number(item?.deporte_id ?? item?.sport_id ?? 0);
+
+  return {
+    id,
+    deporte_id: Number.isInteger(deporteId) && deporteId > 0 ? deporteId : null,
+    nombre: String(item?.nombre ?? "").trim() || null,
+  };
 };
 
 /* =========================================================
-   HEADERS
+   HELPERS FETCH
 ========================================================= */
 
-const buildHeaders = (rol) => {
-  const token = getToken();
+const normalizeListResponse = (res) => {
+  if (!res || res.status === 204) return [];
 
-  const headers = token
-    ? {
-        Authorization: `Bearer ${token}`,
+  const data = res?.data ?? res;
+
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.results)) return data.results;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.rows)) return data.rows;
+  if (data?.ok && Array.isArray(data.items)) return data.items;
+  if (data?.ok && Array.isArray(data.data)) return data.data;
+
+  return [];
+};
+
+/**
+ * No construimos Authorization ni x-academia-id aquí.
+ *
+ * api.js es la única capa responsable de:
+ * - Authorization;
+ * - contexto tenant Superadmin;
+ * - eliminación de headers manuales no autorizados.
+ */
+const tryGetList = async (paths, { signal } = {}) => {
+  const list = Array.isArray(paths) ? paths : [paths];
+  const variants = [];
+
+  for (const pathRaw of list) {
+    const path = String(pathRaw || "");
+    const base = path.startsWith("/") ? path : `/${path}`;
+
+    variants.push(base, base.endsWith("/") ? base.slice(0, -1) : `${base}/`);
+  }
+
+  const uniqueUrls = [...new Set(variants)];
+  let lastError = null;
+
+  for (const url of uniqueUrls) {
+    try {
+      const response = await api.get(url, { signal });
+      return normalizeListResponse(response);
+    } catch (requestError) {
+      lastError = requestError;
+
+      if (requestError?.name === "CanceledError" || requestError?.code === "ERR_CANCELED") {
+        return [];
       }
-    : {};
 
-  if (rol === 3) {
-    const academiaId = getAcademiaIdFromStorage();
+      const status = getErrStatus(requestError);
 
-    if (academiaId) {
-      headers["x-academia-id"] = String(academiaId);
+      /* Auth/AuthZ no prueba endpoints alternativos. */
+      if (status === 401 || status === 403) {
+        throw requestError;
+      }
+
+      /* Sólo rutas inexistentes justifican fallback. */
+      if (status === 404 || status === 405) {
+        continue;
+      }
+
+      throw requestError;
     }
   }
 
-  return headers;
+  if (lastError) throw lastError;
+
+  return [];
 };
 
 /* =========================================================
@@ -136,28 +200,22 @@ const buildHeaders = (rol) => {
 
 export default function ListarEstadisticas() {
   const { darkMode, themeTokens } = useTheme();
-
   const navigate = useNavigate();
-
   const location = useLocation();
 
   const [jugadoresRaw, setJugadoresRaw] = useState([]);
-
   const [categoriasRaw, setCategoriasRaw] = useState([]);
-
   const [isLoading, setIsLoading] = useState(true);
-
   const [error, setError] = useState("");
-
   const [rol, setRol] = useState(null);
 
   const [scope, setScope] = useState({
     academia_id: null,
-
     deporte_id: null,
-
     academia_nombre: null,
   });
+
+  const academiaRequestRef = useRef(null);
 
   useMobileAutoScrollTop();
 
@@ -166,9 +224,7 @@ export default function ListarEstadisticas() {
   ======================================================= */
 
   const dashboardBase = useMemo(() => {
-    const path = location.pathname || "";
-
-    return path.startsWith("/super-dashboard/admin/dashboard") ? "/super-dashboard/admin/dashboard" : "/admin";
+    return isSuperTreePath(location.pathname) ? SUPER_ADMIN_ROOT : "/admin";
   }, [location.pathname]);
 
   /* =======================================================
@@ -178,9 +234,7 @@ export default function ListarEstadisticas() {
   const breadcrumbBootRef = useRef(false);
 
   useEffect(() => {
-    if (breadcrumbBootRef.current) {
-      return;
-    }
+    if (breadcrumbBootRef.current) return;
 
     const currentPath = location.pathname + location.search;
 
@@ -195,14 +249,11 @@ export default function ListarEstadisticas() {
 
       navigate(currentPath, {
         replace: true,
-
         state: {
           ...(location.state || {}),
-
           breadcrumb: [
             {
               to: currentPath,
-
               label,
             },
           ],
@@ -216,246 +267,302 @@ export default function ListarEstadisticas() {
   }, [location.pathname, location.search]);
 
   /* =======================================================
+     CARGAR CONTEXTO SUPERADMIN
+  ======================================================= */
+
+  const loadSuperadminScope = useCallback(
+    async ({ decoded, signal, redirectIfMissing = true }) => {
+      const academiaId = readSelectedAcademiaId();
+
+      if (!academiaId) {
+        setScope({
+          academia_id: null,
+          deporte_id: null,
+          academia_nombre: null,
+        });
+
+        if (redirectIfMissing) {
+          navigate("/super-dashboard", {
+            replace: true,
+          });
+        }
+
+        return false;
+      }
+
+      try {
+        const academia = await fetchAcademiaContext(academiaId, signal);
+
+        if (signal?.aborted) {
+          return false;
+        }
+
+        const tokenDeporteId = extractTokenDeporteId(decoded);
+
+        const stateDeporteId = Number(location.state?.scope?.deporte_id ?? location.state?.scope?.sport_id ?? 0);
+
+        const deporteId =
+          academia.deporte_id ||
+          tokenDeporteId ||
+          (Number.isInteger(stateDeporteId) && stateDeporteId > 0 ? stateDeporteId : null);
+
+        setScope({
+          academia_id: academia.id,
+          deporte_id: deporteId,
+          academia_nombre: academia.nombre,
+        });
+
+        return true;
+      } catch (requestError) {
+        if (signal?.aborted) {
+          return false;
+        }
+
+        const status = getErrStatus(requestError);
+
+        if (status === 401) {
+          clearPanelSession();
+
+          navigate("/login", {
+            replace: true,
+          });
+
+          return false;
+        }
+
+        if (status === 403 || status === 404 || requestError?.code === "ACADEMIA_CONTEXT_INVALID") {
+          try {
+            clearSelectedAcademia?.();
+          } catch {}
+
+          navigate("/super-dashboard", {
+            replace: true,
+          });
+
+          return false;
+        }
+
+        setError(
+          requestError?.response?.data?.message ??
+            requestError?.data?.message ??
+            requestError?.message ??
+            "No fue posible cargar la academia seleccionada."
+        );
+
+        return false;
+      }
+    },
+    [navigate, location.state]
+  );
+
+  /* =======================================================
      AUTH + SCOPE
   ======================================================= */
 
   useEffect(() => {
-    try {
-      const token = getToken();
+    const abort = new AbortController();
 
-      if (!token) {
-        throw new Error("no-token");
-      }
+    (async () => {
+      try {
+        const token = getToken();
 
-      const decoded = jwtDecode(token);
+        if (!token) {
+          throw new Error("no-token");
+        }
 
-      if (isExpired(decoded)) {
-        throw new Error("expired");
-      }
+        const decoded = jwtDecode(token);
 
-      const parsedRol = extractRol(decoded);
+        if (isExpired(decoded)) {
+          throw new Error("expired");
+        }
 
-      if (![1, 2, 3].includes(parsedRol)) {
-        navigate(dashboardBase, {
-          replace: true,
-        });
+        const parsedRol = extractRol(decoded);
 
-        return;
-      }
-
-      setRol(parsedRol);
-
-      const superTree = isSuperTreePath(location.pathname);
-
-      if (superTree) {
-        const snapshot = readSelectedAcademia();
-
-        if (!snapshot?.id) {
-          navigate("/super-dashboard", {
+        if (![1, 2, 3].includes(parsedRol)) {
+          navigate(dashboardBase, {
             replace: true,
           });
 
           return;
         }
 
-        setScope({
-          academia_id: snapshot.id,
+        const superTree = isSuperTreePath(location.pathname);
 
-          deporte_id: snapshot.deporte_id,
+        /* ===============================================
+           SUPERADMIN
+        =============================================== */
 
-          academia_nombre: snapshot.nombre ?? null,
-        });
-      } else {
-        const academiaId = Number(decoded?.academia_id ?? decoded?.academy_id ?? 0) || null;
+        if (parsedRol === 3) {
+          if (!superTree) {
+            navigate("/super-dashboard", {
+              replace: true,
+            });
 
-        const deporteId = Number(decoded?.deporte_id ?? decoded?.sport_id ?? 0) || null;
+            return;
+          }
+
+          setRol(parsedRol);
+
+          await loadSuperadminScope({
+            decoded,
+            signal: abort.signal,
+          });
+
+          return;
+        }
+
+        /* ===============================================
+           ADMIN / STAFF
+        =============================================== */
+
+        if (superTree) {
+          navigate("/admin", {
+            replace: true,
+          });
+
+          return;
+        }
+
+        const academiaId = extractTokenAcademiaId(decoded);
+
+        if (!academiaId) {
+          throw new Error("missing-academia");
+        }
+
+        const deporteId = extractTokenDeporteId(decoded) || null;
+
+        setRol(parsedRol);
 
         setScope({
           academia_id: academiaId,
-
           deporte_id: deporteId,
-
           academia_nombre: null,
         });
-      }
-
-      /*
-       * Si es rol 3 y falta academia target,
-       * se trata como sesión inválida para este módulo.
-       */
-
-      if (parsedRol === 3) {
-        const academiaId = getAcademiaIdFromStorage();
-
-        if (!academiaId) {
-          throw new Error("missing-academia-target");
+      } catch {
+        if (abort.signal.aborted) {
+          return;
         }
-      }
-    } catch {
-      clearToken();
 
-      navigate("/login", {
-        replace: true,
-      });
-    }
-  }, [navigate, location.pathname, dashboardBase]);
+        clearPanelSession();
+
+        navigate("/login", {
+          replace: true,
+        });
+      }
+    })();
+
+    return () => {
+      abort.abort();
+    };
+  }, [navigate, location.pathname, dashboardBase, loadSuperadminScope]);
 
   /* =======================================================
      LIVE UPDATE SUPERADMIN
+
+     Escucha cambio real de ID.
+     No existe polling de snapshots JSON.
   ======================================================= */
 
   useEffect(() => {
-    let alive = true;
+    if (rol !== 3 || !isSuperTreePath(location.pathname)) {
+      return undefined;
+    }
 
-    const tick = () => {
-      if (!alive) {
-        return;
-      }
+    const refreshScope = async () => {
+      const token = getToken();
 
-      if (!isSuperTreePath(location.pathname)) {
-        return;
-      }
+      if (!token) {
+        clearPanelSession();
 
-      const snapshot = readSelectedAcademia();
-
-      if (snapshot?.id) {
-        setScope((previous) => {
-          const next = {
-            academia_id: snapshot.id,
-
-            deporte_id: snapshot.deporte_id,
-
-            academia_nombre: snapshot.nombre ?? null,
-          };
-
-          const same =
-            previous?.academia_id === next.academia_id &&
-            previous?.deporte_id === next.deporte_id &&
-            previous?.academia_nombre === next.academia_nombre;
-
-          return same ? previous : next;
+        navigate("/login", {
+          replace: true,
         });
+
+        return;
       }
+
+      let decoded;
+
+      try {
+        decoded = jwtDecode(token);
+      } catch {
+        clearPanelSession();
+
+        navigate("/login", {
+          replace: true,
+        });
+
+        return;
+      }
+
+      if (isExpired(decoded) || extractRol(decoded) !== 3) {
+        clearPanelSession();
+
+        navigate("/login", {
+          replace: true,
+        });
+
+        return;
+      }
+
+      try {
+        academiaRequestRef.current?.abort?.();
+      } catch {}
+
+      const controller = new AbortController();
+
+      academiaRequestRef.current = controller;
+
+      await loadSuperadminScope({
+        decoded,
+        signal: controller.signal,
+      });
     };
 
-    tick();
+    const onStorage = () => {
+      void refreshScope();
+        return;
+      }
 
-    const interval = setInterval(tick, 1200);
+      void refreshScope();
+    
 
-    const onStorage = () => tick();
-
-    const onEvent = () => tick();
+    const onEvent = () => {
+      void refreshScope();
+    };
 
     window.addEventListener("storage", onStorage);
 
     window.addEventListener("weli:selectedAcademiaChanged", onEvent);
 
     return () => {
-      alive = false;
-
-      clearInterval(interval);
+      try {
+        academiaRequestRef.current?.abort?.();
+      } catch {}
 
       window.removeEventListener("storage", onStorage);
 
       window.removeEventListener("weli:selectedAcademiaChanged", onEvent);
     };
-  }, [location.pathname]);
-
-  /* =======================================================
-     HELPERS FETCH
-  ======================================================= */
-
-  const normalizeListResponse = (res) => {
-    if (!res || res.status === 204) {
-      return [];
-    }
-
-    const data = res?.data ?? res;
-
-    if (Array.isArray(data)) {
-      return data;
-    }
-
-    if (Array.isArray(data?.results)) {
-      return data.results;
-    }
-
-    if (Array.isArray(data?.items)) {
-      return data.items;
-    }
-
-    if (Array.isArray(data?.rows)) {
-      return data.rows;
-    }
-
-    if (data?.ok && Array.isArray(data.items)) {
-      return data.items;
-    }
-
-    if (data?.ok && Array.isArray(data.data)) {
-      return data.data;
-    }
-
-    return [];
-  };
-
-  const getErrStatus = (requestError) => requestError?.status ?? requestError?.response?.status ?? 0;
-
-  const tryGetList = async (paths, { signal, headers } = {}) => {
-    const list = Array.isArray(paths) ? paths : [paths];
-
-    const variants = [];
-
-    for (const pathRaw of list) {
-      const path = String(pathRaw || "");
-
-      const base = path.startsWith("/") ? path : `/${path}`;
-
-      variants.push(
-        base,
-
-        base.endsWith("/") ? base.slice(0, -1) : `${base}/`
-      );
-    }
-
-    const uniqueUrls = [...new Set(variants)];
-
-    for (const url of uniqueUrls) {
-      try {
-        const response = await api.get(url, {
-          signal,
-          headers,
-        });
-
-        return normalizeListResponse(response);
-      } catch (requestError) {
-        const status = getErrStatus(requestError);
-
-        if (status === 401 || status === 403) {
-          throw requestError;
-        }
-      }
-    }
-
-    return [];
-  };
+  }, [rol, location.pathname, navigate, loadSuperadminScope]);
 
   /* =======================================================
      CARGA DE DATOS
   ======================================================= */
 
   useEffect(() => {
-    if (rol == null) {
+    if (rol == null) return;
+
+    const superTree = isSuperTreePath(location.pathname);
+
+    if (superTree && !scope.academia_id) {
       return;
     }
 
     const abort = new AbortController();
 
-    const headers = buildHeaders(rol);
-
     (async () => {
       setIsLoading(true);
-
       setError("");
 
       try {
@@ -467,13 +574,15 @@ export default function ListarEstadisticas() {
 
         if (academiaId && deporteId) {
           if (rol === 2) {
-            jugadoresPaths.push(`/jugadores/staff?academia_id=${academiaId}&deporte_id=${deporteId}`);
-
-            jugadoresPaths.push(`/jugadores/staff?academia_id=${academiaId}`);
+            jugadoresPaths.push(
+              `/jugadores/staff?academia_id=${academiaId}&deporte_id=${deporteId}`,
+              `/jugadores/staff?academia_id=${academiaId}`
+            );
           } else {
-            jugadoresPaths.push(`/jugadores?academia_id=${academiaId}&deporte_id=${deporteId}`);
-
-            jugadoresPaths.push(`/jugadores?academia_id=${academiaId}`);
+            jugadoresPaths.push(
+              `/jugadores?academia_id=${academiaId}&deporte_id=${deporteId}`,
+              `/jugadores?academia_id=${academiaId}`
+            );
           }
         } else if (academiaId) {
           if (rol === 2) {
@@ -492,14 +601,10 @@ export default function ListarEstadisticas() {
         const [jugadores, categorias] = await Promise.all([
           tryGetList(jugadoresPaths, {
             signal: abort.signal,
-
-            headers,
           }),
 
           tryGetList(["/categorias"], {
             signal: abort.signal,
-
-            headers,
           }),
         ]);
 
@@ -512,6 +617,12 @@ export default function ListarEstadisticas() {
         setJugadoresRaw(jugadoresArr);
 
         setCategoriasRaw(Array.isArray(categorias) ? categorias : []);
+
+        /* ===============================================
+           FALLBACK DE SCOPE DESDE DATOS AUTORIZADOS
+
+           No modifica localStorage.
+        =============================================== */
 
         if ((!scope.academia_id || !scope.deporte_id) && jugadoresArr.length) {
           const jugadorScope = jugadoresArr.find((item) => item && (item.academia_id || item.deporte_id));
@@ -537,8 +648,12 @@ export default function ListarEstadisticas() {
 
         const status = getErrStatus(requestError);
 
-        if (status === 401 || status === 403) {
-          clearToken();
+        /* ===============================================
+           401 - SESIÓN INVÁLIDA
+        =============================================== */
+
+        if (status === 401) {
+          clearPanelSession();
 
           navigate("/login", {
             replace: true,
@@ -547,7 +662,24 @@ export default function ListarEstadisticas() {
           return;
         }
 
-        setError("❌ Error al cargar los jugadores/categorías");
+        /* ===============================================
+           403 - SESIÓN VÁLIDA / SIN PERMISO
+
+           No eliminamos sesión.
+        =============================================== */
+
+        if (status === 403) {
+          setError("No tienes permisos para acceder a los jugadores de esta academia.");
+
+          return;
+        }
+
+        setError(
+          requestError?.response?.data?.message ??
+            requestError?.data?.message ??
+            requestError?.message ??
+            "❌ Error al cargar los jugadores/categorías"
+        );
       } finally {
         if (!abort.signal.aborted) {
           setIsLoading(false);
@@ -664,13 +796,9 @@ export default function ListarEstadisticas() {
 
       return {
         jugador_id,
-
         rut: rutStr,
-
         rutConDV: formatRutWithDV(rutStr),
-
         nombre: toNombre(jugador),
-
         categoriaNombre: toCategoria(jugador),
       };
     });
@@ -724,9 +852,6 @@ export default function ListarEstadisticas() {
 
   /* =======================================================
      TOKENS DE APARIENCIA
-
-     ThemeContext es la fuente visual principal.
-     Dashboard mantiene el fondo general.
   ======================================================= */
 
   const tokens = useMemo(() => {
@@ -737,105 +862,56 @@ export default function ListarEstadisticas() {
     if (darkMode) {
       return {
         surface: "#1F2937",
-
         surfaceSoft: "#172033",
-
         surface2: "#263244",
-
         surfaceHover: "#374151",
-
         primary: "#FFDDA1",
-
         primaryHover: "#FFE5B8",
-
         primaryContrast: "#3F2D18",
-
         secondary: "#B79F69",
-
         secondaryHover: "#C8B27F",
-
         secondaryContrast: "#111827",
-
         text: "#F9FAFB",
-
         textMuted: "#D1D5DB",
-
         icon: "#FFDDA1",
-
         border: "#374151",
-
         borderStrong: "#4B5563",
-
         inputBg: "#111827",
-
         inputText: "#F9FAFB",
-
         inputBorder: "#4B5563",
-
         tableHead: "#172033",
-
         focus: "#FFDDA1",
-
         overlay: "rgba(0,0,0,.65)",
       };
     }
 
     return {
       surface: "#FFFFFF",
-
       surfaceSoft: "#FAF6EE",
-
       surface2: "#F7EAD4",
-
       surfaceHover: "#FFF9F2",
-
       primary: "#AA5013",
-
       primaryHover: "#994812",
-
       primaryContrast: "#FFFFFF",
-
       secondary: "#6D5829",
-
       secondaryHover: "#5E4B23",
-
       secondaryContrast: "#FFFFFF",
-
       text: "#3B2A1E",
-
       textMuted: "#766657",
-
       icon: "#AA5013",
-
       border: "#D8C7AE",
-
       borderStrong: "#BFA684",
-
       inputBg: "#FFFFFF",
-
       inputText: "#3B2A1E",
-
       inputBorder: "#9B7B50",
-
       tableHead: "#F7EAD4",
-
       focus: "#AA5013",
-
       overlay: "rgba(0,0,0,.55)",
     };
   }, [themeTokens, darkMode]);
 
   /* =======================================================
      UI
-
-     Homologado con listarPagos.jsx.
-
-     - Fondo transparente.
-     - Tarjetas usan surface.
-     - Cabecera usa tableHead.
-     - Hover usa surfaceHover.
-     - Acción usa primary.
-     - Textos usan text / textMuted.
   ======================================================= */
 
   const ui = useMemo(() => {
@@ -892,35 +968,28 @@ export default function ListarEstadisticas() {
 
       cardStyle: {
         backgroundColor: tokens.surface,
-
         borderColor: tokens.border,
-
         color: tokens.text,
       },
 
       theadStyle: {
         backgroundColor: tokens.tableHead,
-
         color: tokens.text,
       },
 
       thStyle: {
         borderColor: tokens.border,
-
         color: tokens.text,
       },
 
       tdStyle: {
         borderColor: tokens.border,
-
         color: tokens.text,
       },
 
       actionStyle: {
         backgroundColor: tokens.primary,
-
         borderColor: tokens.primary,
-
         color: tokens.primaryContrast,
       },
 
@@ -1054,9 +1123,7 @@ export default function ListarEstadisticas() {
             <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
               {grupos.map(({ categoria, items }) => (
                 <section key={categoria} className={`${ui.card} p-5 sm:p-6`} style={ui.cardStyle}>
-                  {/* =====================================
-                        CABECERA
-                    ===================================== */}
+                  {/* CABECERA */}
 
                   <header className="mb-4 flex items-baseline justify-between gap-3">
                     <h2 className="text-lg font-extrabold" style={ui.titleStyle}>
@@ -1069,10 +1136,7 @@ export default function ListarEstadisticas() {
                     </span>
                   </header>
 
-                  {/* =====================================
-                        TABLA
-                        SIN SCROLL HORIZONTAL
-                    ===================================== */}
+                  {/* TABLA */}
 
                   <div className="w-full">
                     <table className="w-full text-xs sm:text-sm table-fixed border-separate border-spacing-0">
@@ -1090,7 +1154,6 @@ export default function ListarEstadisticas() {
                             className={`${ui.th} w-20 whitespace-nowrap border-r-0`}
                             style={{
                               ...ui.thStyle,
-
                               borderRightColor: "transparent",
                             }}
                           >
@@ -1103,7 +1166,7 @@ export default function ListarEstadisticas() {
                         {items.map((jugador) => {
                           const isSuperTree = isSuperTreePath(location.pathname);
 
-                          const basePath = isSuperTree ? "/super-dashboard/admin/dashboard" : "/admin";
+                          const basePath = isSuperTree ? SUPER_ADMIN_ROOT : "/admin";
 
                           const to = `${basePath}/registrar-estadisticas/detalle-estadistica`;
 
@@ -1125,7 +1188,6 @@ export default function ListarEstadisticas() {
                                 className={`${ui.td} w-24 border-r-0`}
                                 style={{
                                   ...ui.tdStyle,
-
                                   borderRightColor: "transparent",
                                 }}
                               >
@@ -1140,6 +1202,11 @@ export default function ListarEstadisticas() {
 
                                         jugador_id: jugador.jugador_id ?? null,
 
+                                        /*
+                                         * Este scope viaja sólo
+                                         * en memoria de React
+                                         * Router. No se persiste.
+                                         */
                                         scope: {
                                           ...scope,
                                         },

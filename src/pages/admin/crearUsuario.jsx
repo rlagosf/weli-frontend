@@ -6,7 +6,7 @@ import { jwtDecode } from "jwt-decode";
 
 import { useTheme } from "../../context/ThemeContext";
 
-import api, { ACADEMIA_STORAGE_KEY, clearToken, getToken } from "../../services/api";
+import api, { clearSelectedAcademia, clearToken, getSelectedAcademiaId, getToken } from "../../services/api";
 
 import IsLoading from "../../components/isLoading";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
@@ -100,39 +100,7 @@ function extractTokenAcademiaId(decoded) {
  */
 
 function getSelectedAcademiaIdForSuperadmin() {
-  try {
-    const raw = localStorage.getItem(ACADEMIA_STORAGE_KEY);
-
-    if (!raw) {
-      return 0;
-    }
-
-    /* ─────────────────────────────────────────
-       Compatibilidad:
-       "12"
-    ───────────────────────────────────────── */
-
-    const direct = Number(raw);
-
-    if (Number.isInteger(direct) && direct > 0) {
-      return direct;
-    }
-
-    /* ─────────────────────────────────────────
-       Compatibilidad:
-       {
-         id: 12
-       }
-    ───────────────────────────────────────── */
-
-    const parsed = JSON.parse(raw);
-
-    const academiaId = Number(parsed?.id ?? parsed?.academia_id ?? parsed?.academy_id ?? parsed?.academiaId ?? 0);
-
-    return Number.isInteger(academiaId) && academiaId > 0 ? academiaId : 0;
-  } catch {
-    return 0;
-  }
+  return getSelectedAcademiaId();
 }
 
 /* =========================================================
@@ -748,7 +716,7 @@ export default function CrearUsuario() {
 
         if (status === 401) {
           clearToken();
-
+          clearSelectedAcademia();
           navigate("/login", {
             replace: true,
           });
@@ -773,7 +741,10 @@ export default function CrearUsuario() {
         setError(detail ? `❌ No se pudieron cargar los roles: ${detail}` : "❌ No se pudieron cargar los roles.");
 
         if (import.meta.env.DEV) {
-          console.error("[WELI ROLES]", requestError);
+          console.warn("[WELI ROLES]", {
+            status: requestError?.response?.status ?? requestError?.status ?? 0,
+            message: requestError?.response?.data?.message ?? requestError?.message ?? "Error",
+          });
         }
       } finally {
         if (!abortController.signal.aborted) {
@@ -1023,7 +994,7 @@ export default function CrearUsuario() {
 
         if (status === 401) {
           clearToken();
-
+          clearSelectedAcademia();
           navigate("/login", {
             replace: true,
           });
@@ -1046,7 +1017,10 @@ export default function CrearUsuario() {
         const backendMessage = pickBackendMessage(requestError);
 
         if (import.meta.env.DEV) {
-          console.error("[WELI USUARIO]", requestError);
+          console.warn("[WELI USUARIO]", {
+            status: requestError?.response?.status ?? requestError?.status ?? 0,
+            message: requestError?.response?.data?.message ?? requestError?.message ?? "Error",
+          });
         }
 
         setError(backendMessage || "❌ Error al registrar usuario");
