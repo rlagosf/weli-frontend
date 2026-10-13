@@ -579,6 +579,7 @@ function isTenantRoute(url = "") {
     ----------------------------------------------------- */
 
     "/convocatorias",
+    "/convocatorias-historico",
 
     /* -----------------------------------------------------
        Agenda / Eventos
